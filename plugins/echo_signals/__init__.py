@@ -89,8 +89,20 @@ def register(ctx) -> None:
       1. Replace tools.skill_usage.bump_use with Echo's wrapping version.
       2. Register session-lifecycle hooks (set/clear context + session_ended signal).
       3. Register Layer A signal-collection hooks (user_turn, tool_call).
+      4. Install the configured embedding encoder onto preference_rag.
     """
     install_bump_use_hook()
+
+    # Install the active embedding provider. If ECHO_EMBEDDING_PROVIDER=
+    # openai + an API key is present, we route encode() through OpenAI
+    # embeddings; otherwise the stdlib hashing default stays.
+    try:
+        from .embeddings import install_active_encoder
+
+        chosen = install_active_encoder()
+        logger.info("Echo embedding encoder: %s", chosen)
+    except Exception as exc:
+        logger.debug("Echo embedding install failed: %s", exc, exc_info=True)
     ctx.register_hook("on_session_start", _on_session_start)
     ctx.register_hook("on_session_end", _on_session_end)
     # Two pre_llm_call handlers:
