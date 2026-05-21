@@ -127,6 +127,30 @@ def on_pre_llm_call(
     except Exception as exc:
         logger.debug("Echo on_pre_llm_call(user_turn) failed: %s", exc, exc_info=True)
 
+    # ── M1 — synchronous save-intent regex scan ───────────────────────
+    # Detects "save this as a skill" style phrases in the user message.
+    # Fires a Layer B signal (m1_save_intent); list_candidates() later
+    # ranks invocations partly on whether this fired.
+    try:
+        from . import m1_trigger
+        from .db import get_echo_conn as _conn
+
+        if isinstance(user_message, (str, dict, list)):
+            from . import nl_classifier as _nlc
+            user_text_for_intent = _nlc.extract_user_text(user_message) or ""
+        else:
+            user_text_for_intent = ""
+
+        if user_text_for_intent and m1_trigger.detect_save_intent(user_text_for_intent):
+            row = _conn().execute(
+                "SELECT skill_id FROM echo_skill_invocation WHERE invocation_id = ?",
+                (invocation_id,),
+            ).fetchone()
+            if row is not None:
+                m1_trigger.record_save_intent_signal(invocation_id, row["skill_id"])
+    except Exception as exc:
+        logger.debug("Echo on_pre_llm_call(m1_save_intent) failed: %s", exc, exc_info=True)
+
     # ── Layer B — async NL classify ───────────────────────────────────
     # Pin skill_id NOW so a later bump_use flipping the contextvar can't
     # misattribute the eventual callback.

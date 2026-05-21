@@ -275,6 +275,37 @@ def list_pending_scopes(limit: int = Query(50, ge=1, le=200)):
     return {"pending": _rows_to_dicts(rows)}
 
 
+@router.get("/candidates")
+def list_skill_candidates(
+    limit: int = Query(20, ge=1, le=100),
+    min_score: int = Query(30, ge=0, le=200),
+):
+    """M1 — invocations Echo nominates as skill-worthy.
+
+    Score breakdown comes back per-row so the dashboard can show the
+    user *why* a given invocation was flagged. The actual decision to
+    create a skill (calling Hermes' skill_manage) stays with the user;
+    Echo is the nominator, not the decider.
+    """
+    from plugins.echo_signals.m1_trigger import list_candidates
+
+    candidates = list_candidates(limit=limit, min_score=min_score)
+    return {
+        "candidates": [
+            {
+                "invocation_id": c.invocation_id,
+                "skill_id": c.skill_id,
+                "score": c.score,
+                "reasons": c.reasons,
+                "user_turns": c.user_turns,
+                "tool_calls": c.tool_calls,
+                "has_save_intent": c.has_save_intent,
+            }
+            for c in candidates
+        ],
+    }
+
+
 @router.post("/scope")
 def set_scope(payload: ScopePayload):
     """User picks broad or narrow for a previously-pending skill.
