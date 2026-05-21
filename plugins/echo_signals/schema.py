@@ -29,7 +29,11 @@ import sqlite3
 # ``schema_version`` — bumping this does NOT touch Hermes versioning.
 # Increment when adding tables or columns. Migrations are declarative
 # (CREATE TABLE / ADD COLUMN IF NOT EXISTS) — no version-gated chain.
-ECHO_SCHEMA_VERSION = 1
+#
+# v1 → v2: added echo_turn_cache for M5 preference RAG. The table is
+#          ephemeral per session, only used to pair "what did the user
+#          ask" with "what did the agent answer" at thumbs-up time.
+ECHO_SCHEMA_VERSION = 2
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +174,18 @@ CREATE INDEX IF NOT EXISTS idx_echo_preference_skill
 CREATE INDEX IF NOT EXISTS idx_echo_preference_score
     ON echo_preference_example(composite_score ASC)
     WHERE composite_score IS NOT NULL;
+
+-- v2: M5 turn cache. One row per session, overwritten on every
+-- post_llm_call. Used by the dashboard /feedback endpoint to pair the
+-- user's thumbs-up with the actual {user_message, assistant_response}
+-- that prompted it, since the API itself only sees skill_id + rating.
+CREATE TABLE IF NOT EXISTS echo_turn_cache (
+    session_id          TEXT    PRIMARY KEY,
+    skill_id            TEXT,
+    user_message        TEXT    NOT NULL,
+    assistant_response  TEXT    NOT NULL,
+    updated_at          REAL    NOT NULL
+);
 """
 
 
@@ -182,6 +198,7 @@ ECHO_TABLES = (
     "echo_signal_event",
     "echo_skill_scope",
     "echo_preference_example",
+    "echo_turn_cache",
 )
 
 
