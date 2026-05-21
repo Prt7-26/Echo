@@ -129,7 +129,12 @@ Hermes is three user-facing surfaces (CLI, TUI, multi-platform Gateway) all funn
   - **Window focus** — `tauri::WindowEvent::Focused` emits `window_focus` / `window_blur` events on the same endpoint.
   - Backend addition: `POST /api/plugins/echo_signals/clipboard-signal` ([plugins/echo_signals/dashboard/plugin_api.py](plugins/echo_signals/dashboard/plugin_api.py)) records to `echo_signal_event` (Layer A) attributed to the most recent invocation. Body capped at 8 KB; `value_text` truncated to 200 chars; full clipboard contents are never stored. 7 new endpoint tests.
   - Rust project under [tauri-shell/](tauri-shell/) — Cargo.toml + tauri.conf.json + main.rs/lib.rs/clipboard.rs + bootstrap index.html. Build instructions in [tauri-shell/README.md](tauri-shell/README.md). Build/run not exercised in CI (no Rust toolchain in the conda test env); user runs `npm run dev` / `npm run build` on their own machine.
-- ⬜ **Step 18+**: Open work — proposal §4 evaluation suite (datasets, simulated personas, baselines, metrics), real-runtime UI walkthrough (defer until report-writing time per maintainer's preference), final app icon for tauri-shell, dashboard widget showing clipboard signal stream.
+- ✅ **Step 18 (polish pass)**: Three small finishing touches.
+  - **Periodic GC**: [plugins/echo_signals/maintenance.py](plugins/echo_signals/maintenance.py) — `maybe_run_gc()` piggybacks on `on_session_start`; once per process per 24h it fire-and-forgets a daemon thread that prunes `echo_user_request_log` (past M1 lookback) and `echo_turn_cache` (orphaned sessions > 7 days). Idempotent on restart; no Hermes cron coupling.
+  - **`GET /status` endpoint + dashboard StatusStrip widget**: schema version, active encoder (neural vs hashing — reflects sticky-fallback live), and per-table row counts (collapsible "table breakdown" details). Polls on dashboard refresh.
+  - **SkillTimeline badges**: bundle's `SIGNAL_BADGES` map grew from 5 entries to 12, covering desktop-shell signals (`clipboard_copy/paste`, `window_focus/blur` cyan/zinc), Layer B NL classifier (`nl_positive/negative` emerald/rose dimmer than explicit), and M1 nominations (`m1_save_intent`, `m1_semantic_recurrence` amber).
+  14 new tests; 376 Echo + 69 Hermes regression all pass.
+- ⬜ **Step 19+**: Open work — proposal §4 evaluation suite (datasets, simulated personas, baselines, metrics), real-runtime UI walkthrough (defer until report-writing time per maintainer's preference), final app icon for tauri-shell.
 
 (Update this list when steps move state — the file is committed and serves as a living changelog for the project.)
 

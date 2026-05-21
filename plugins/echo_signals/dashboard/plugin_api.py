@@ -44,6 +44,47 @@ def _rows_to_dicts(rows) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# 0. Status / diagnostics
+# ---------------------------------------------------------------------------
+
+
+@router.get("/status")
+def status():
+    """One-shot diagnostic snapshot for the dashboard status strip.
+
+    Reports the schema version, which embedding encoder is active, and
+    the row count of every echo_* table. Cheap (COUNT is index-served
+    by SQLite for these tables); intended to be safe to poll.
+    """
+    from plugins.echo_signals.schema import ECHO_SCHEMA_VERSION, ECHO_TABLES
+
+    try:
+        from plugins.echo_signals.embeddings import is_neural_active
+        encoder = "neural" if is_neural_active() else "hashing"
+    except Exception:
+        encoder = "hashing"
+
+    conn = echo_db.get_echo_conn()
+    counts: dict[str, int] = {}
+    for table in ECHO_TABLES:
+        # Skip the version table — it always has one row, not interesting.
+        if table == "echo_schema_version":
+            continue
+        try:
+            counts[table] = int(conn.execute(
+                f"SELECT COUNT(*) AS n FROM {table}"
+            ).fetchone()["n"])
+        except Exception:
+            counts[table] = -1
+
+    return {
+        "schema_version": ECHO_SCHEMA_VERSION,
+        "encoder": encoder,
+        "table_row_counts": counts,
+    }
+
+
+# ---------------------------------------------------------------------------
 # 1. Skill confidence ranking
 # ---------------------------------------------------------------------------
 

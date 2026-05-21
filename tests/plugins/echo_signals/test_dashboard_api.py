@@ -449,6 +449,58 @@ def _seed_invocation_with_skill(conn, skill_id: str = "test-skill"):
     return cur.lastrowid
 
 
+# ---------------------------------------------------------------------------
+# GET /status — diagnostic snapshot
+# ---------------------------------------------------------------------------
+
+
+class TestStatus:
+    def test_empty_db_returns_zeros(self, client):
+        r = client.get("/api/plugins/echo_signals/status")
+        assert r.status_code == 200
+        data = r.json()
+        # Schema present, encoder reported, every table named.
+        assert data["schema_version"] >= 1
+        assert data["encoder"] in ("neural", "hashing")
+        counts = data["table_row_counts"]
+        for table in (
+            "echo_skill_confidence", "echo_skill_baseline",
+            "echo_skill_invocation", "echo_signal_event",
+            "echo_skill_scope", "echo_preference_example",
+            "echo_turn_cache", "echo_user_request_log",
+        ):
+            assert table in counts
+            assert counts[table] == 0
+
+    def test_counts_reflect_inserts(self, client):
+        conn = echo_db.get_echo_conn()
+        import time as _t
+        now = _t.time()
+        conn.execute(
+            "INSERT INTO echo_skill_confidence "
+            "(skill_id, created_at, updated_at) VALUES ('alpha', ?, ?)",
+            (now, now),
+        )
+        conn.execute(
+            "INSERT INTO echo_skill_confidence "
+            "(skill_id, created_at, updated_at) VALUES ('beta', ?, ?)",
+            (now, now),
+        )
+        conn.commit()
+
+        data = client.get("/api/plugins/echo_signals/status").json()
+        assert data["table_row_counts"]["echo_skill_confidence"] == 2
+
+    def test_neural_encoder_reported_when_configured(self, client, monkeypatch):
+        monkeypatch.setenv("ECHO_EMBEDDING_PROVIDER", "openai")
+        monkeypatch.setenv("ECHO_EMBEDDING_API_KEY", "x")
+        from plugins.echo_signals import embeddings as emb
+        emb._reset_for_tests()  # so is_neural_active() re-reads env
+
+        data = client.get("/api/plugins/echo_signals/status").json()
+        assert data["encoder"] == "neural"
+
+
 class TestClipboardSignal:
     def test_records_when_invocation_exists(self, client):
         conn = echo_db.get_echo_conn()

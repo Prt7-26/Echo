@@ -319,11 +319,24 @@
   // ---------------------------------------------------------------------
 
   const SIGNAL_BADGES = {
+    // Layer A — pure behavior
     user_turn: { color: "bg-blue-900/40 text-blue-300 border-blue-700/50", label: "user turn" },
     tool_call: { color: "bg-violet-900/40 text-violet-300 border-violet-700/50", label: "tool call" },
     session_ended: { color: "bg-zinc-800 text-zinc-400 border-zinc-700", label: "session ended" },
+    // Desktop-shell signals (Step 17)
+    clipboard_copy: { color: "bg-cyan-900/40 text-cyan-300 border-cyan-700/50", label: "📋 clipboard copy" },
+    clipboard_paste: { color: "bg-cyan-900/40 text-cyan-300 border-cyan-700/50", label: "📋 clipboard paste" },
+    window_focus: { color: "bg-zinc-800 text-zinc-400 border-zinc-700", label: "window focus" },
+    window_blur: { color: "bg-zinc-800 text-zinc-500 border-zinc-700", label: "window blur" },
+    // Layer B — explicit
     explicit_positive: { color: "bg-emerald-900/40 text-emerald-300 border-emerald-700/50", label: "👍 positive" },
     explicit_negative: { color: "bg-rose-900/40 text-rose-300 border-rose-700/50", label: "👎 negative" },
+    // Layer B — NL classifier (Step 7)
+    nl_positive: { color: "bg-emerald-900/30 text-emerald-300 border-emerald-700/40", label: "NL positive" },
+    nl_negative: { color: "bg-rose-900/30 text-rose-300 border-rose-700/40", label: "NL negative" },
+    // M1 nomination signals (Step 13 + 15)
+    m1_save_intent: { color: "bg-amber-900/40 text-amber-300 border-amber-700/50", label: "save intent" },
+    m1_semantic_recurrence: { color: "bg-amber-900/30 text-amber-300 border-amber-700/40", label: "task recurrence" },
   };
 
   function SkillTimeline({ skillId, onClose }) {
@@ -608,6 +621,56 @@
   }
 
   // ---------------------------------------------------------------------
+  // Status strip — schema version, encoder, table row counts
+  // ---------------------------------------------------------------------
+
+  function StatusStrip({ refreshKey }) {
+    const [status, setStatus] = useState(null);
+
+    useEffect(() => {
+      apiGet("/status")
+        .then(setStatus)
+        .catch(() => setStatus(null));
+    }, [refreshKey]);
+
+    if (!status) return null;
+
+    const counts = status.table_row_counts || {};
+    const total = Object.values(counts).reduce(
+      (acc, v) => acc + (typeof v === "number" && v > 0 ? v : 0),
+      0,
+    );
+
+    return h("div", {
+      className:
+        "flex flex-wrap items-center gap-3 px-3 py-1.5 text-xs " +
+        "text-zinc-500 border border-zinc-800 rounded bg-zinc-950/40",
+    },
+      h("span", null,
+        "encoder: ",
+        h("span", {
+          className: status.encoder === "neural"
+            ? "text-emerald-400" : "text-zinc-300",
+        }, status.encoder),
+      ),
+      h("span", null, "schema v" + status.schema_version),
+      h("span", null, total + " total rows"),
+      h("details", { className: "ml-auto" },
+        h("summary", { className: "cursor-pointer hover:text-zinc-300" }, "table breakdown"),
+        h("div", { className: "mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 tabular-nums" },
+          Object.entries(counts).map(([t, n]) => h("div", {
+            key: t,
+            className: "flex justify-between gap-3",
+          },
+            h("span", { className: "text-zinc-600 font-mono" }, t),
+            h("span", null, n),
+          )),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
   // Page composition
   // ---------------------------------------------------------------------
 
@@ -630,6 +693,8 @@
           onClick: refresh,
         }, "Refresh"),
       ),
+      // Status strip — diagnostic info
+      h(StatusStrip, { refreshKey }),
       // Two-column responsive layout for the top row
       h("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-4" },
         h(SkillRanking, {

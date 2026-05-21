@@ -50,8 +50,18 @@ logger = logging.getLogger(__name__)
 
 
 def _on_session_start(session_id=None, platform=None, **_kwargs):
-    """Record the active session so bump_use's wrapper can attribute correctly."""
+    """Record the active session so bump_use's wrapper can attribute correctly.
+
+    Also piggyback Echo's periodic GC check here — at most one daemon
+    thread per 24h. The check is microseconds; the actual cleanup runs
+    out-of-band so it can't slow session startup.
+    """
     set_session_context(session_id, platform)
+    try:
+        from .maintenance import maybe_run_gc
+        maybe_run_gc()
+    except Exception as exc:
+        logger.debug("Echo maybe_run_gc failed: %s", exc, exc_info=True)
 
 
 def _on_session_end(**kwargs):
