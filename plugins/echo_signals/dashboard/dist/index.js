@@ -475,16 +475,80 @@
   const LONG_PRESS_MS = 500;
   const POLL_INTERVAL_MS = 5000;
 
+  // -------------------------------------------------------------------
+  // ScopeQuestion — appears in the chat:bottom slot when a new skill
+  // needs scope_level confirmation. Takes precedence over ThumbsBar so
+  // the user resolves the more time-sensitive question first.
+  // -------------------------------------------------------------------
+
+  function ScopeQuestion({ skill, onAnswered }) {
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState(null);
+
+    const submit = useCallback((level) => {
+      if (submitting) return;
+      setSubmitting(true);
+      setError(null);
+      apiPost("/scope", { skill_id: skill.skill_id, scope_level: level })
+        .then(() => onAnswered && onAnswered(skill.skill_id))
+        .catch((e) => {
+          setError(e.message || String(e));
+          setSubmitting(false);
+        });
+    }, [skill, submitting, onAnswered]);
+
+    return h("div", {
+      className:
+        "flex flex-wrap items-center gap-3 px-3 py-2 text-xs " +
+        "border-t border-amber-900/40 bg-amber-950/20",
+    },
+      h("span", { className: "text-amber-300 font-medium" }, "Echo · scope?"),
+      h("span", { className: "text-zinc-400" },
+        "Just created ",
+        h("span", { className: "font-mono text-zinc-200" }, skill.skill_id),
+        ". When you do something similar next time, should I:",
+      ),
+      h("button", {
+        className: cn(
+          "px-2 py-1 rounded border border-zinc-700",
+          "hover:border-amber-500 hover:bg-amber-950/40",
+          submitting && "opacity-50 pointer-events-none",
+        ),
+        title: "Reuse this approach across similar tasks",
+        onClick: () => submit("broad"),
+        disabled: submitting,
+      }, "A · reuse the whole approach"),
+      h("button", {
+        className: cn(
+          "px-2 py-1 rounded border border-zinc-700",
+          "hover:border-amber-500 hover:bg-amber-950/40",
+          submitting && "opacity-50 pointer-events-none",
+        ),
+        title: "Borrow the methodology only; redo specifics each time",
+        onClick: () => submit("narrow"),
+        disabled: submitting,
+      }, "B · only the general idea"),
+      error
+        ? h("span", { className: "text-rose-400 ml-2" }, error)
+        : null,
+    );
+  }
+
   function ThumbsBar() {
     const [recent, setRecent] = useState(null);
+    const [pendingScope, setPendingScope] = useState(null);
     const [error, setError] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [lastSubmit, setLastSubmit] = useState(null);
     // detailMode is the long-press expansion — {rating, reason} draft.
     const [detailMode, setDetailMode] = useState(null);
+    // Local ack list of skills the user already answered scope for this
+    // session — prevents the question from flashing back if the API
+    // poll races the local write.
+    const [scopeAnswered, setScopeAnswered] = useState(new Set());
 
-    // Poll the most recent invocation. Light enough (one row) that 5s
-    // polling has no measurable cost.
+    // Poll both endpoints. ScopeQuestion takes precedence in the render
+    // when pendingScope is non-null.
     useEffect(() => {
       let cancelled = false;
       function tick() {
@@ -498,11 +562,39 @@
             if (cancelled) return;
             setError(e.message || String(e));
           });
+        apiGet("/scope/pending?limit=1")
+          .then((d) => {
+            if (cancelled) return;
+            const first = (d.pending || []).find(
+              (p) => !scopeAnswered.has(p.skill_id),
+            );
+            setPendingScope(first || null);
+          })
+          .catch(() => { /* non-fatal — scope polling is opportunistic */ });
       }
       tick();
       const id = setInterval(tick, POLL_INTERVAL_MS);
       return () => { cancelled = true; clearInterval(id); };
+    }, [scopeAnswered]);
+
+    // When the user resolves a scope question, dismiss it locally so the
+    // poll doesn't re-show it before the backend update propagates.
+    const onScopeAnswered = useCallback((skill_id) => {
+      setScopeAnswered((prev) => {
+        const next = new Set(prev);
+        next.add(skill_id);
+        return next;
+      });
+      setPendingScope(null);
     }, []);
+
+    // PRIORITY: pending scope wins over thumbs.
+    if (pendingScope) {
+      return h(ScopeQuestion, {
+        skill: pendingScope,
+        onAnswered: onScopeAnswered,
+      });
+    }
 
     const submit = useCallback((rating, reason) => {
       if (!recent || !recent.skill_id || submitting) return;

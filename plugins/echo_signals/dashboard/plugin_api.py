@@ -192,6 +192,11 @@ class FeedbackPayload(BaseModel):
     )
 
 
+class ScopePayload(BaseModel):
+    skill_id: str = Field(..., min_length=1)
+    scope_level: str = Field(..., pattern="^(broad|narrow)$")
+
+
 @router.post("/feedback")
 def submit_feedback(payload: FeedbackPayload):
     """Receive Layer B explicit thumbs-up/down from the dashboard.
@@ -222,3 +227,64 @@ def submit_feedback(payload: FeedbackPayload):
     if not result.applied:
         response["reason"] = result.reason
     return response
+
+
+# ---------------------------------------------------------------------------
+# 6. M2 — pending scope queue + scope confirmation
+# ---------------------------------------------------------------------------
+
+
+@router.get("/scope/pending")
+def list_pending_scopes(limit: int = Query(50, ge=1, le=200)):
+    """Skills whose scope_level is still 'unknown' — needing user input.
+
+    Most recent first so the dashboard shows the freshly-created skill
+    at the top of the queue. The frontend polls this for the
+    ThumbsBar's "pending scope confirmation" mode (Step 10).
+    """
+    conn = echo_db.get_echo_conn()
+    rows = conn.execute(
+        "SELECT skill_id, scope_level, created_at, updated_at "
+        "FROM echo_skill_scope "
+        "WHERE scope_level = 'unknown' "
+        "ORDER BY created_at DESC "
+        "LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return {"pending": _rows_to_dicts(rows)}
+
+
+@router.post("/scope")
+def set_scope(payload: ScopePayload):
+    """User picks broad or narrow for a previously-pending skill.
+
+    Idempotent / overwrite: writing again replaces the previous choice.
+    Echo doesn't try to detect malicious flip-flopping — that's
+    a user-trust concern, not a data-integrity one.
+    """
+    conn = echo_db.get_echo_conn()
+    now = __import__("time").time()
+    cur = conn.execute(
+        "UPDATE echo_skill_scope "
+        "SET scope_level = ?, user_confirmed_at = ?, updated_at = ? "
+        "WHERE skill_id = ?",
+        (payload.scope_level, now, now, payload.skill_id),
+    )
+    conn.commit()
+    if cur.rowcount == 0:
+        # No scope row existed yet — create one in the chosen state.
+        # This is the path for "user pre-tagged a skill before Echo
+        # saw it created", which can happen if scope_dialog's hook
+        # missed an old skill.
+        conn.execute(
+            "INSERT INTO echo_skill_scope "
+            "(skill_id, scope_level, user_confirmed_at, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (payload.skill_id, payload.scope_level, now, now, now),
+        )
+        conn.commit()
+
+    return {
+        "skill_id": payload.skill_id,
+        "scope_level": payload.scope_level,
+    }

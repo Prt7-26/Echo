@@ -27,6 +27,7 @@ from .session_context import (
     clear_session_context,
     set_session_context,
 )
+from .scope_dialog import on_post_tool_call as on_post_tool_call_scope
 from .signals import (
     on_post_tool_call,
     on_pre_llm_call,
@@ -89,5 +90,10 @@ def register(ctx) -> None:
     ctx.register_hook("on_session_start", _on_session_start)
     ctx.register_hook("on_session_end", _on_session_end)
     ctx.register_hook("pre_llm_call", on_pre_llm_call)
+    # Two separate post_tool_call handlers — one for Layer A signal
+    # recording (signals.on_post_tool_call) and one for M2 scope-row
+    # bookkeeping (scope_dialog.on_post_tool_call_scope). Hermes calls
+    # them both per fire.
     ctx.register_hook("post_tool_call", on_post_tool_call)
+    ctx.register_hook("post_tool_call", on_post_tool_call_scope)
     logger.info("Echo signals plugin registered (schema v%d)", ECHO_SCHEMA_VERSION)
