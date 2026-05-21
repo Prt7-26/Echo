@@ -26,6 +26,15 @@ _platform: contextvars.ContextVar[str] = contextvars.ContextVar(
     "echo_platform", default="unknown"
 )
 
+# Last-skill-wins invocation tracking. Set by usage_hook after a fresh
+# echo_skill_invocation row is INSERT-ed. Read by every Layer A signal
+# collector so events are attributed to the active skill. None means
+# "no Echo-tracked skill is active for this session" — signal collectors
+# treat that as a no-op rather than fabricating an invocation.
+_current_invocation_id: contextvars.ContextVar[Optional[int]] = contextvars.ContextVar(
+    "echo_current_invocation_id", default=None
+)
+
 
 def set_session_context(session_id: Optional[str], platform: Optional[str]) -> None:
     """Record the active session for downstream signal-collection hooks.
@@ -41,9 +50,10 @@ def set_session_context(session_id: Optional[str], platform: Optional[str]) -> N
 
 
 def clear_session_context() -> None:
-    """Reset to defaults at session end."""
+    """Reset to defaults at session end. Also clears current invocation."""
     _session_id.set(None)
     _platform.set("unknown")
+    _current_invocation_id.set(None)
 
 
 def get_session_id() -> Optional[str]:
@@ -52,3 +62,23 @@ def get_session_id() -> Optional[str]:
 
 def get_platform() -> str:
     return _platform.get()
+
+
+# ---------------------------------------------------------------------------
+# Current invocation (last-skill-wins)
+# ---------------------------------------------------------------------------
+
+
+def set_current_invocation_id(invocation_id: int) -> None:
+    """Mark a freshly-created echo_skill_invocation row as the active one.
+
+    Called by usage_hook._record_invocation after the INSERT. Subsequent
+    Layer A signal collectors will attribute their events to this id
+    until either (a) clear_session_context() runs at session end, or
+    (b) another skill load overwrites it.
+    """
+    _current_invocation_id.set(invocation_id)
+
+
+def get_current_invocation_id() -> Optional[int]:
+    return _current_invocation_id.get()

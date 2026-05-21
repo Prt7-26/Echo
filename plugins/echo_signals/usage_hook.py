@@ -23,7 +23,11 @@ import time
 from typing import Callable, Optional
 
 from .db import get_echo_conn
-from .session_context import get_platform, get_session_id
+from .session_context import (
+    get_platform,
+    get_session_id,
+    set_current_invocation_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +42,9 @@ def _record_invocation(skill_name: str) -> None:
     Confidence row uses INSERT OR IGNORE so first-sight of a skill creates
     a default-confidence anchor without clobbering existing state. The
     invocation row always inserts (each call is a distinct event).
+
+    After the INSERT we write the new invocation_id to the contextvar
+    used by Layer A signal collectors — last-skill-wins attribution.
     """
     if not skill_name:
         return  # Defensive — Hermes shouldn't call bump_use(""), but if it does, skip.
@@ -59,13 +66,19 @@ def _record_invocation(skill_name: str) -> None:
         "WHERE skill_id = ?",
         (now, skill_name),
     )
-    conn.execute(
+    cursor = conn.execute(
         "INSERT INTO echo_skill_invocation "
         "(skill_id, session_id, platform, started_at) "
         "VALUES (?, ?, ?, ?)",
         (skill_name, session_id, platform, now),
     )
     conn.commit()
+
+    # lastrowid is the AUTOINCREMENT-assigned invocation_id. Cache it for
+    # downstream signal collectors. Last-skill-wins by construction:
+    # later bump_use calls overwrite this contextvar.
+    if cursor.lastrowid is not None:
+        set_current_invocation_id(cursor.lastrowid)
 
 
 def _wrapped_bump_use(skill_name: str) -> None:
