@@ -93,18 +93,31 @@ def record_signal(
 # ---------------------------------------------------------------------------
 
 
-def on_pre_llm_call(*, turn_type: str = "", **_kwargs: Any) -> None:
-    """Record a user_turn event when the user triggers a fresh LLM call.
+def on_pre_llm_call(
+    *,
+    turn_type: str = "",
+    user_message: Any = None,
+    **_kwargs: Any,
+) -> None:
+    """Two-layer record on each fresh user turn.
+
+      Layer A — append a `user_turn` event (raw signal; aggregated to
+                modification_round_count via COUNT(*)).
+      Layer B — fire-and-forget NL sentiment classify on user_message;
+                callback updates confidence with nl_positive /
+                nl_negative when the label is non-neutral.
 
     Hermes fires pre_llm_call multiple times per turn (context injection,
-    actual API request). Only turn_type='user' represents a fresh user
-    utterance -- the others are internal plumbing we don't want to count.
+    actual API request). Only turn_type='user' is a fresh user
+    utterance — assistant/tool fires are ignored.
     """
     if turn_type != "user":
         return
     invocation_id = get_current_invocation_id()
     if invocation_id is None:
         return
+
+    # ── Layer A — sync record ─────────────────────────────────────────
     try:
         record_signal(
             invocation_id=invocation_id,
@@ -113,6 +126,64 @@ def on_pre_llm_call(*, turn_type: str = "", **_kwargs: Any) -> None:
         )
     except Exception as exc:
         logger.debug("Echo on_pre_llm_call(user_turn) failed: %s", exc, exc_info=True)
+
+    # ── Layer B — async NL classify ───────────────────────────────────
+    # Pin skill_id NOW so a later bump_use flipping the contextvar can't
+    # misattribute the eventual callback.
+    try:
+        from . import nl_classifier
+        from .db import get_echo_conn
+
+        text = nl_classifier.extract_user_text(user_message)
+        if not text:
+            return
+
+        conn = get_echo_conn()
+        row = conn.execute(
+            "SELECT skill_id FROM echo_skill_invocation WHERE invocation_id = ?",
+            (invocation_id,),
+        ).fetchone()
+        if row is None:
+            return
+        skill_id = row["skill_id"]
+
+        def _on_label(label):
+            from . import confidence as conf_mod
+            from .db import get_echo_conn as _conn
+
+            if label == "positive":
+                event = "nl_positive"
+            elif label == "negative":
+                event = "nl_negative"
+            else:
+                return  # neutral — silence, the sacred invariant
+
+            try:
+                conf_mod.update_confidence(skill_id, event)
+                conn2 = _conn()
+                ts = time.time()
+                conn2.execute(
+                    "INSERT INTO echo_signal_event "
+                    "(invocation_id, skill_id, layer, signal_type, value_text, ts) "
+                    "VALUES (?, ?, 'B', ?, ?, ?)",
+                    (invocation_id, skill_id, event, label, ts),
+                )
+                conn2.execute(
+                    "UPDATE echo_skill_confidence "
+                    "SET n_signals = n_signals + 1, updated_at = ? "
+                    "WHERE skill_id = ?",
+                    (ts, skill_id),
+                )
+                conn2.commit()
+            except Exception as exc:
+                logger.debug(
+                    "Echo nl_classifier confidence update failed for %s/%s: %s",
+                    skill_id, event, exc, exc_info=True,
+                )
+
+        nl_classifier.classify_async(text, _on_label)
+    except Exception as exc:
+        logger.debug("Echo on_pre_llm_call(nl_classify) failed: %s", exc, exc_info=True)
 
 
 def on_post_tool_call(*, tool_name: str = "", **_kwargs: Any) -> None:
