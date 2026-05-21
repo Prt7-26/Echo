@@ -1,6 +1,7 @@
 MIT License
 
-Copyright (c) 2026 Prt7-26
+Copyright (c) 2025 Nous Research
+Copyright (c) 2026 Prt7-26 (modifications and derivative work)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +20,9 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+This project is a derivative work based on Hermes Agent by Nous Research
+(https://github.com/NousResearch/hermes-agent), originally released under the
+MIT License.
