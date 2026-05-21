@@ -33,7 +33,12 @@ import sqlite3
 # v1 → v2: added echo_turn_cache for M5 preference RAG. The table is
 #          ephemeral per session, only used to pair "what did the user
 #          ask" with "what did the agent answer" at thumbs-up time.
-ECHO_SCHEMA_VERSION = 2
+# v2 → v3: added echo_user_request_log for M1 semantic recurrence
+#          detection. Persists every user turn's text + hashing
+#          embedding so M1 can detect "is the user repeating a request
+#          they made days ago?" without requiring a neural embedding
+#          provider.
+ECHO_SCHEMA_VERSION = 3
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +191,24 @@ CREATE TABLE IF NOT EXISTS echo_turn_cache (
     assistant_response  TEXT    NOT NULL,
     updated_at          REAL    NOT NULL
 );
+
+-- v3: M1 user-request log for semantic recurrence detection. Append-
+-- only stream of user messages with their hashing embeddings; M1's
+-- detect_semantic_recurrence cosine-compares the current message
+-- against the lookback window. Older rows are garbage-collected by
+-- m1_trigger.gc_old_requests().
+CREATE TABLE IF NOT EXISTS echo_user_request_log (
+    request_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    invocation_id   INTEGER,
+    skill_id        TEXT,
+    session_id      TEXT,
+    user_message    TEXT    NOT NULL,
+    embedding       BLOB    NOT NULL,
+    ts              REAL    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_echo_user_request_ts
+    ON echo_user_request_log(ts DESC);
 """
 
 
@@ -199,6 +222,7 @@ ECHO_TABLES = (
     "echo_skill_scope",
     "echo_preference_example",
     "echo_turn_cache",
+    "echo_user_request_log",
 )
 
 

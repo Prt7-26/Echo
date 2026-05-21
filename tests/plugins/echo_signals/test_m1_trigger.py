@@ -351,6 +351,185 @@ class TestCandidatesAPI:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# M1 condition 4 — semantic recurrence
+# ---------------------------------------------------------------------------
+
+
+def _seed_request_log(user_message: str, *, ts: float | None = None,
+                      invocation_id: int | None = None,
+                      skill_id: str | None = None,
+                      session_id: str | None = None):
+    """Insert a row into echo_user_request_log mirroring log_user_request."""
+    from plugins.echo_signals.preference_rag import encode, vec_to_blob
+
+    if ts is None:
+        ts = time.time()
+    vec = encode(user_message)
+    blob = vec_to_blob(vec)
+    conn = echo_db.get_echo_conn()
+    conn.execute(
+        "INSERT INTO echo_user_request_log "
+        "(invocation_id, skill_id, session_id, user_message, embedding, ts) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (invocation_id, skill_id, session_id, user_message, blob, ts),
+    )
+    conn.commit()
+
+
+class TestLogUserRequest:
+    def test_writes_row(self, isolated_db):
+        m1.log_user_request(
+            invocation_id=1, skill_id="alpha", session_id="s1",
+            user_message="write me a marketing email",
+        )
+        conn = echo_db.get_echo_conn()
+        row = conn.execute(
+            "SELECT invocation_id, skill_id, user_message, embedding "
+            "FROM echo_user_request_log"
+        ).fetchone()
+        assert row["invocation_id"] == 1
+        assert row["skill_id"] == "alpha"
+        assert row["user_message"] == "write me a marketing email"
+        # 256-dim float32 = 1024-byte BLOB
+        assert len(row["embedding"]) == 1024
+
+    def test_empty_message_skipped(self, isolated_db):
+        echo_db.get_echo_conn()
+        m1.log_user_request(
+            invocation_id=1, skill_id="alpha", session_id="s1",
+            user_message="",
+        )
+        n = echo_db.get_echo_conn().execute(
+            "SELECT COUNT(*) AS n FROM echo_user_request_log"
+        ).fetchone()["n"]
+        assert n == 0
+
+
+class TestDetectSemanticRecurrence:
+    def test_empty_db_returns_no_hit(self, isolated_db):
+        echo_db.get_echo_conn()
+        hit, sim = m1.detect_semantic_recurrence("write a marketing email")
+        assert hit is False
+        assert sim == 0.0
+
+    def test_lexical_match_above_threshold(self, isolated_db):
+        # Seed an older log row (well outside the 60s self-window).
+        old_ts = time.time() - 7200  # 2 hours ago
+        _seed_request_log(
+            "write a marketing email for our product launch",
+            ts=old_ts,
+        )
+        hit, sim = m1.detect_semantic_recurrence(
+            "write me a marketing email for the launch",
+        )
+        assert hit is True
+        assert sim >= m1.RECURRENCE_THRESHOLD
+
+    def test_unrelated_message_no_hit(self, isolated_db):
+        _seed_request_log(
+            "write a marketing email",
+            ts=time.time() - 7200,
+        )
+        hit, _sim = m1.detect_semantic_recurrence(
+            "debug this python stacktrace",
+        )
+        assert hit is False
+
+    def test_self_window_excludes_recent_matches(self, isolated_db):
+        # Seed within the self-window — should NOT count.
+        _seed_request_log(
+            "write a marketing email",
+            ts=time.time() - 10,  # 10s ago, inside the 60s window
+        )
+        hit, _sim = m1.detect_semantic_recurrence(
+            "write me a marketing email",
+        )
+        assert hit is False
+
+    def test_lookback_excludes_old_matches(self, isolated_db):
+        # Seed 60 days ago (outside default lookback of 30).
+        _seed_request_log(
+            "write a marketing email",
+            ts=time.time() - 60 * 86400,
+        )
+        hit, _sim = m1.detect_semantic_recurrence(
+            "write me a marketing email",
+        )
+        assert hit is False
+
+    def test_current_invocation_excluded(self, isolated_db):
+        # Seed within window but with invocation_id=42; if we query with
+        # current_invocation_id=42 it should be excluded.
+        _seed_request_log(
+            "write a marketing email",
+            ts=time.time() - 7200,
+            invocation_id=42,
+        )
+        hit, _sim = m1.detect_semantic_recurrence(
+            "write me a marketing email",
+            current_invocation_id=42,
+        )
+        assert hit is False
+
+    def test_empty_query_no_hit(self, isolated_db):
+        _seed_request_log("anything", ts=time.time() - 7200)
+        assert m1.detect_semantic_recurrence("") == (False, 0.0)
+        assert m1.detect_semantic_recurrence("   ") == (False, 0.0)
+
+
+class TestRecordSemanticRecurrenceSignal:
+    def test_appends_event_row(self, isolated_db):
+        _seed_skill("alpha")
+        inv = _seed_invocation("alpha")
+        m1.record_semantic_recurrence_signal(inv, "alpha", similarity=0.82)
+
+        conn = echo_db.get_echo_conn()
+        row = conn.execute(
+            "SELECT layer, signal_type, value_real "
+            "FROM echo_signal_event WHERE skill_id='alpha'"
+        ).fetchone()
+        assert row["layer"] == "B"
+        assert row["signal_type"] == "m1_semantic_recurrence"
+        assert row["value_real"] == pytest.approx(0.82)
+
+
+class TestGCOldRequests:
+    def test_deletes_only_old_rows(self, isolated_db):
+        echo_db.get_echo_conn()
+        _seed_request_log("recent", ts=time.time() - 86400)              # 1 day
+        _seed_request_log("old", ts=time.time() - 90 * 86400)            # 90 days
+        _seed_request_log("very_old", ts=time.time() - 365 * 86400)      # 1 year
+        # Default retention is 60 days (lookback_days × 2 = 30 × 2 = 60)
+        deleted = m1.gc_old_requests()
+        assert deleted == 2
+        remaining = echo_db.get_echo_conn().execute(
+            "SELECT user_message FROM echo_user_request_log"
+        ).fetchall()
+        assert [r["user_message"] for r in remaining] == ["recent"]
+
+
+class TestRecurrenceCandidate:
+    def test_recurrence_alone_qualifies(self, isolated_db):
+        _seed_skill("alpha")
+        inv = _seed_invocation("alpha")
+        _seed_signal(inv, "alpha", "m1_semantic_recurrence", layer="B")
+        out = m1.list_candidates()
+        assert len(out) == 1
+        c = out[0]
+        assert c.has_recurrence is True
+        assert c.score == m1.WEIGHT_RECURRENCE  # 50
+
+    def test_recurrence_sums_with_other_conditions(self, isolated_db):
+        _seed_skill("alpha")
+        inv = _seed_invocation("alpha")
+        _seed_signal(inv, "alpha", "m1_semantic_recurrence", layer="B")
+        _seed_signal(inv, "alpha", "m1_save_intent", layer="B")
+        out = m1.list_candidates()
+        # 100 + 50 = 150
+        assert out[0].score == m1.WEIGHT_SAVE_INTENT + m1.WEIGHT_RECURRENCE
+
+
 class TestSignalIntegration:
     def test_save_intent_phrase_routes_through_pre_llm_call(self, isolated_db):
         """sig.on_pre_llm_call should detect the phrase, write the row,
@@ -382,6 +561,46 @@ class TestSignalIntegration:
             out = m1.list_candidates()
             assert len(out) == 1
             assert out[0].has_save_intent
+        finally:
+            uh.uninstall_bump_use_hook()
+            sc.clear_session_context()
+
+    def test_recurrence_routes_through_pre_llm_call(self, isolated_db):
+        """The full flow: an old log row exists, a similar message arrives
+        via on_pre_llm_call, recurrence signal lands on the invocation."""
+        from plugins.echo_signals import session_context as sc
+        from plugins.echo_signals import signals as sig
+        from plugins.echo_signals import usage_hook as uh
+
+        # Seed a log entry from "the past" (outside the 60s self-window).
+        _seed_request_log(
+            "write me a marketing email for our launch",
+            ts=time.time() - 7200,
+        )
+
+        uh.install_bump_use_hook()
+        try:
+            sc.set_session_context("s2", "cli")
+            import tools.skill_usage as _su
+            _su.bump_use("alpha")
+            inv = sc.get_current_invocation_id()
+
+            sig.on_pre_llm_call(
+                turn_type="user",
+                user_message="write a marketing email for our launch",
+            )
+
+            conn = echo_db.get_echo_conn()
+            row = conn.execute(
+                "SELECT signal_type FROM echo_signal_event "
+                "WHERE skill_id='alpha' AND signal_type='m1_semantic_recurrence'"
+            ).fetchone()
+            assert row is not None
+            # And the current turn was also logged for future comparisons.
+            n_logged = conn.execute(
+                "SELECT COUNT(*) AS n FROM echo_user_request_log"
+            ).fetchone()["n"]
+            assert n_logged == 2  # seeded + current
         finally:
             uh.uninstall_bump_use_hook()
             sc.clear_session_context()

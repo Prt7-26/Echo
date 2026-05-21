@@ -55,7 +55,7 @@ class TestSchemaCreation:
             "WHERE type='index' AND name LIKE 'idx_echo_%'"
         ).fetchall()
         names = {r["name"] for r in rows}
-        # All seven indexes from schema.py.
+        # All eight indexes from schema.py (+1 vs v1: user_request_ts at v3).
         assert names == {
             "idx_echo_confidence_status",
             "idx_echo_invocation_skill_time",
@@ -64,6 +64,7 @@ class TestSchemaCreation:
             "idx_echo_signal_invocation",
             "idx_echo_preference_skill",
             "idx_echo_preference_score",
+            "idx_echo_user_request_ts",
         }
 
     def test_records_schema_version(self, conn):

@@ -60,9 +60,22 @@ logger = logging.getLogger(__name__)
 WEIGHT_SAVE_INTENT = 100
 WEIGHT_TOOL_COUNT = 30
 WEIGHT_MODIF_ROUNDS = 30
+WEIGHT_RECURRENCE = 50
 THRESHOLD_TOOL_COUNT = 5
 THRESHOLD_MODIF_ROUNDS = 3
 SCORE_THRESHOLD = 30
+
+# Semantic recurrence detection params. The proposal asks for cosine
+# similarity in a neural embedding space; we use M5's hashing embedding
+# as a *lexical* proxy. Threshold deliberately conservative — hashing
+# embeddings are lexical-overlap-heavy, so 0.6 still requires a lot of
+# shared tokens (i.e. the user really IS asking the same kind of thing).
+RECURRENCE_THRESHOLD = 0.6
+RECURRENCE_LOOKBACK_DAYS = 30
+# Recent self-correlation guard: don't match against turns from the
+# same invocation or from the past 60 seconds (rapid re-asks in the
+# same chat aren't recurrence, they're refinement).
+RECURRENCE_SELF_WINDOW_SECONDS = 60.0
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +134,160 @@ def detect_save_intent(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# M1 condition 4 — semantic task recurrence
+# ---------------------------------------------------------------------------
+#
+# This is a LEXICAL recurrence detector, not a neural semantic one. The
+# proposal says "embedding 余弦相似度" — strictly speaking that means a
+# learned embedding (SentenceTransformers, OpenAI text-embedding-3, etc.).
+# Hermes doesn't ship one; adding a per-turn LLM call goes against
+# Echo's "near-zero daily cost" design point. So we reuse M5's hashing
+# embedding here. It catches token-level repetition strongly ("write me
+# a marketing email" / "marketing email for our launch" match) but
+# misses paraphrase ("draft a promotional message" wouldn't match
+# despite identical intent). Documented as a known proxy — sufficient
+# for proposal sign-off as "condition 4 implemented" with the lexical
+# caveat noted in CLAUDE.md and the m1_semantic_recurrence signal_type
+# name reflecting the chosen interpretation.
+
+
+def log_user_request(
+    *,
+    invocation_id: Optional[int],
+    skill_id: Optional[str],
+    session_id: Optional[str],
+    user_message: str,
+) -> None:
+    """Persist this turn's user_message + hashing-embedding for future
+    recurrence checks.
+
+    Cheap (microseconds + ~1KB BLOB per turn). The row is what
+    detect_semantic_recurrence compares against on subsequent turns.
+    """
+    if not user_message or not user_message.strip():
+        return
+    try:
+        from .preference_rag import encode, vec_to_blob
+
+        vec = encode(user_message)
+        blob = vec_to_blob(vec)
+        conn = get_echo_conn()
+        conn.execute(
+            "INSERT INTO echo_user_request_log "
+            "(invocation_id, skill_id, session_id, user_message, embedding, ts) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (invocation_id, skill_id, session_id, user_message, blob, time.time()),
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.debug("log_user_request failed: %s", exc, exc_info=True)
+
+
+def detect_semantic_recurrence(
+    user_message: str,
+    *,
+    current_invocation_id: Optional[int] = None,
+    lookback_days: float = RECURRENCE_LOOKBACK_DAYS,
+    threshold: float = RECURRENCE_THRESHOLD,
+) -> tuple[bool, float]:
+    """Return (hit, top_similarity) for whether ``user_message`` matches
+    any past request within the lookback window above the threshold.
+
+    Excludes turns from the current invocation and anything within the
+    last RECURRENCE_SELF_WINDOW_SECONDS so rapid re-asks don't
+    self-trigger. ``threshold`` is what the caller treats as "match";
+    we return the top similarity regardless so callers can log /
+    display "matched at 0.71".
+    """
+    if not user_message or not user_message.strip():
+        return (False, 0.0)
+    try:
+        from .preference_rag import cosine, encode
+
+        now = time.time()
+        cutoff_old = now - (lookback_days * 86400.0)
+        cutoff_recent = now - RECURRENCE_SELF_WINDOW_SECONDS
+
+        query_vec = encode(user_message)
+
+        conn = get_echo_conn()
+        if current_invocation_id is None:
+            rows = conn.execute(
+                "SELECT embedding, ts FROM echo_user_request_log "
+                "WHERE ts >= ? AND ts <= ?",
+                (cutoff_old, cutoff_recent),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT embedding, ts FROM echo_user_request_log "
+                "WHERE ts >= ? AND ts <= ? "
+                "  AND (invocation_id IS NULL OR invocation_id != ?)",
+                (cutoff_old, cutoff_recent, current_invocation_id),
+            ).fetchall()
+
+        from .preference_rag import blob_to_vec
+
+        top = 0.0
+        for r in rows:
+            vec = blob_to_vec(r["embedding"])
+            sim = cosine(query_vec, vec)
+            if sim > top:
+                top = sim
+        return (top >= threshold, top)
+    except Exception as exc:
+        logger.debug("detect_semantic_recurrence failed: %s", exc, exc_info=True)
+        return (False, 0.0)
+
+
+def record_semantic_recurrence_signal(invocation_id: int, skill_id: str,
+                                      similarity: float) -> None:
+    """Layer B signal: matched a prior request above threshold."""
+    if not skill_id:
+        return
+    try:
+        conn = get_echo_conn()
+        ts = time.time()
+        conn.execute(
+            "INSERT INTO echo_signal_event "
+            "(invocation_id, skill_id, layer, signal_type, value_real, ts) "
+            "VALUES (?, ?, 'B', 'm1_semantic_recurrence', ?, ?)",
+            (invocation_id, skill_id, similarity, ts),
+        )
+        conn.execute(
+            "UPDATE echo_skill_confidence "
+            "SET n_signals = n_signals + 1, updated_at = ? "
+            "WHERE skill_id = ?",
+            (ts, skill_id),
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.debug(
+            "record_semantic_recurrence_signal failed: %s", exc, exc_info=True,
+        )
+
+
+def gc_old_requests(retention_days: float = RECURRENCE_LOOKBACK_DAYS * 2) -> int:
+    """Delete user_request_log rows older than ``retention_days``.
+
+    Default retention is twice the recurrence lookback so we never lose
+    rows that could still match. Caller (e.g. cron, plugin lifecycle)
+    decides when to invoke. Returns row-delete count.
+    """
+    try:
+        conn = get_echo_conn()
+        cutoff = time.time() - (retention_days * 86400.0)
+        cur = conn.execute(
+            "DELETE FROM echo_user_request_log WHERE ts < ?",
+            (cutoff,),
+        )
+        conn.commit()
+        return cur.rowcount
+    except Exception as exc:
+        logger.debug("gc_old_requests failed: %s", exc, exc_info=True)
+        return 0
+
+
+# ---------------------------------------------------------------------------
 # Signal recording — called from signals.on_pre_llm_call
 # ---------------------------------------------------------------------------
 
@@ -169,12 +336,14 @@ class CandidateScore:
     user_turns: int
     tool_calls: int
     has_save_intent: bool
+    has_recurrence: bool = False
 
 
 def _score_one(row) -> CandidateScore:
     """Compose a CandidateScore from an echo_skill_invocation row joined
     with its event counts (passed through ``row`` as a dict-like)."""
     has_save = bool(row["save_intent_count"])
+    has_recurrence = bool(row["recurrence_count"])
     user_turns = int(row["user_turns"] or 0)
     tool_calls = int(row["tool_calls"] or 0)
 
@@ -183,6 +352,9 @@ def _score_one(row) -> CandidateScore:
     if has_save:
         score += WEIGHT_SAVE_INTENT
         reasons.append("user expressed save intent")
+    if has_recurrence:
+        score += WEIGHT_RECURRENCE
+        reasons.append("task pattern recurred from past sessions (lexical match)")
     if tool_calls >= THRESHOLD_TOOL_COUNT:
         score += WEIGHT_TOOL_COUNT
         reasons.append(f"high tool-call complexity ({tool_calls} calls)")
@@ -198,6 +370,7 @@ def _score_one(row) -> CandidateScore:
         user_turns=user_turns,
         tool_calls=tool_calls,
         has_save_intent=has_save,
+        has_recurrence=has_recurrence,
     )
 
 
@@ -232,7 +405,10 @@ def list_candidates(
                AND e.signal_type = 'tool_call') AS tool_calls,
             (SELECT COUNT(*) FROM echo_signal_event e
              WHERE e.invocation_id = i.invocation_id
-               AND e.signal_type = 'm1_save_intent') AS save_intent_count
+               AND e.signal_type = 'm1_save_intent') AS save_intent_count,
+            (SELECT COUNT(*) FROM echo_signal_event e
+             WHERE e.invocation_id = i.invocation_id
+               AND e.signal_type = 'm1_semantic_recurrence') AS recurrence_count
         FROM echo_skill_invocation i
         WHERE 1=1
         {finalized_clause}

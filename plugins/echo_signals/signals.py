@@ -127,10 +127,12 @@ def on_pre_llm_call(
     except Exception as exc:
         logger.debug("Echo on_pre_llm_call(user_turn) failed: %s", exc, exc_info=True)
 
-    # ── M1 — synchronous save-intent regex scan ───────────────────────
-    # Detects "save this as a skill" style phrases in the user message.
-    # Fires a Layer B signal (m1_save_intent); list_candidates() later
-    # ranks invocations partly on whether this fired.
+    # ── M1 — synchronous save-intent + recurrence detection ──────────
+    # save_intent: regex scan over the user message for "save this as a
+    # skill" style phrases.
+    # semantic_recurrence: hashing-embedding cosine match against the
+    # user_request_log over the last RECURRENCE_LOOKBACK_DAYS days.
+    # Both fire Layer B signals that list_candidates() picks up.
     try:
         from . import m1_trigger
         from .db import get_echo_conn as _conn
@@ -141,15 +143,39 @@ def on_pre_llm_call(
         else:
             user_text_for_intent = ""
 
-        if user_text_for_intent and m1_trigger.detect_save_intent(user_text_for_intent):
-            row = _conn().execute(
-                "SELECT skill_id FROM echo_skill_invocation WHERE invocation_id = ?",
-                (invocation_id,),
-            ).fetchone()
-            if row is not None:
-                m1_trigger.record_save_intent_signal(invocation_id, row["skill_id"])
+        row = _conn().execute(
+            "SELECT skill_id, session_id FROM echo_skill_invocation "
+            "WHERE invocation_id = ?",
+            (invocation_id,),
+        ).fetchone()
+        skill_id_now = row["skill_id"] if row is not None else None
+        session_id_now = row["session_id"] if row is not None else None
+
+        if user_text_for_intent:
+            # First: check recurrence against the PRIOR log (before
+            # inserting this turn — otherwise it self-matches).
+            hit, sim = m1_trigger.detect_semantic_recurrence(
+                user_text_for_intent,
+                current_invocation_id=invocation_id,
+            )
+            if hit and skill_id_now:
+                m1_trigger.record_semantic_recurrence_signal(
+                    invocation_id, skill_id_now, sim,
+                )
+
+            # Then: log this turn for future comparisons.
+            m1_trigger.log_user_request(
+                invocation_id=invocation_id,
+                skill_id=skill_id_now,
+                session_id=session_id_now,
+                user_message=user_text_for_intent,
+            )
+
+            # Save-intent (still a synchronous regex).
+            if m1_trigger.detect_save_intent(user_text_for_intent) and skill_id_now:
+                m1_trigger.record_save_intent_signal(invocation_id, skill_id_now)
     except Exception as exc:
-        logger.debug("Echo on_pre_llm_call(m1_save_intent) failed: %s", exc, exc_info=True)
+        logger.debug("Echo on_pre_llm_call(m1) failed: %s", exc, exc_info=True)
 
     # ── Layer B — async NL classify ───────────────────────────────────
     # Pin skill_id NOW so a later bump_use flipping the contextvar can't
