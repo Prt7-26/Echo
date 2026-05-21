@@ -74,8 +74,8 @@ Hermes is three user-facing surfaces (CLI, TUI, multi-platform Gateway) all funn
 ## Phase 1 status (update this section as steps complete)
 
 - ✅ **Step 1**: SQLite schema — [plugins/echo_signals/schema.py](plugins/echo_signals/schema.py), 15 unit tests, zero regressions on Hermes plugin discovery tests.
-- ⬜ **Step 2**: Wire `register(ctx)` to actual hooks; lazy-init schema against Hermes' live SessionDB.
-- ⬜ **Step 3**: First real signal collection (`modification_round_count`, `tool_exit_code`) writing to `echo_signal_event`.
+- ✅ **Step 2**: Plugin wired into Hermes lifecycle. Monkey-patch over `tools.skill_usage.bump_use` writes `echo_skill_invocation` rows attributed to the active session (carried via contextvars from `on_session_start` hook). Lazy DB connection in [plugins/echo_signals/db.py](plugins/echo_signals/db.py) — schema is created on first hook fire, not at plugin load. 38 Echo tests + 69 Hermes plugin discovery tests, all passing.
+- ⬜ **Step 3**: First real Layer A signal collection (`modification_round_count`, `tool_exit_code`) via `pre_llm_call` / `post_llm_call` / `post_tool_call` hooks, written to `echo_signal_event`.
 - ⬜ **Step 4**: Confidence-update logic (M4) reading the signal stream.
 - ⬜ **Step 5**: Web Dashboard plugin under `web/src/plugins/echo/`.
 - ⬜ **Step 6**: Tauri shell wrapping the Dashboard, exposing clipboard + window-focus IPC.
