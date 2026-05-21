@@ -50,13 +50,29 @@ def _on_session_start(session_id=None, platform=None, **_kwargs):
 
 
 def _on_session_end(**kwargs):
-    """Order matters: record the signal THEN clear context.
+    """Order matters at session end:
 
-    on_session_end_signal reads get_current_invocation_id() to attribute
-    the session_ended event, so clear_session_context() must run after
-    it -- otherwise the signal lands without a target.
+      1. Record the session_ended signal (uses current invocation_id).
+      2. Finalize the current invocation — computes Layer A metrics,
+         updates baselines, may emit drift events into the confidence
+         engine. This must happen BEFORE the contextvar is cleared so
+         the in-progress invocation is what gets finalized.
+      3. Clear the contextvar so the next session starts clean.
     """
     on_session_end_signal(**kwargs)
+
+    from .session_context import get_current_invocation_id
+    current = get_current_invocation_id()
+    if current is not None:
+        try:
+            from .baseline import finalize_invocation
+            finalize_invocation(current)
+        except Exception as exc:
+            logger.debug(
+                "finalize_invocation(%s) failed on session end: %s",
+                current, exc, exc_info=True,
+            )
+
     clear_session_context()
 
 

@@ -24,6 +24,7 @@ from typing import Callable, Optional
 
 from .db import get_echo_conn
 from .session_context import (
+    get_current_invocation_id,
     get_platform,
     get_session_id,
     set_current_invocation_id,
@@ -45,9 +46,27 @@ def _record_invocation(skill_name: str) -> None:
 
     After the INSERT we write the new invocation_id to the contextvar
     used by Layer A signal collectors — last-skill-wins attribution.
+
+    If there is already a current invocation when bump_use fires (i.e.
+    the user is switching from one skill to another within the same
+    session), we finalize the prior invocation FIRST so its Layer A
+    metrics are computed against the right time window and any drift
+    events for it land before the new contextvar overwrite.
     """
     if not skill_name:
         return  # Defensive — Hermes shouldn't call bump_use(""), but if it does, skip.
+
+    # Skill switch: finalize the prior invocation, if any.
+    prior_invocation_id = get_current_invocation_id()
+    if prior_invocation_id is not None:
+        try:
+            from .baseline import finalize_invocation
+            finalize_invocation(prior_invocation_id)
+        except Exception as exc:
+            logger.debug(
+                "finalize_invocation(%s) failed on skill switch: %s",
+                prior_invocation_id, exc, exc_info=True,
+            )
 
     conn = get_echo_conn()
     now = time.time()
