@@ -478,3 +478,165 @@ def _trunc(s: str, n: int) -> str:
         return ""
     s = s.strip()
     return s if len(s) <= n else (s[: n - 1] + "…")
+
+
+# ---------------------------------------------------------------------------
+# Hook handlers — the M5 wire-up
+# ---------------------------------------------------------------------------
+
+
+def _normalize_user_message(user_message) -> str:
+    """Reuse nl_classifier's normalizer; returns empty string on unknown shape."""
+    from .nl_classifier import extract_user_text
+
+    return extract_user_text(user_message) or ""
+
+
+def on_post_llm_call_cache(
+    *,
+    session_id: str = "",
+    user_message=None,
+    assistant_response: str = "",
+    **_kwargs,
+) -> None:
+    """Cache the (user, agent) pair for this turn.
+
+    The dashboard /feedback endpoint receives only {skill_id, rating} so
+    it can't, on its own, populate the preference store with the actual
+    text that prompted the thumbs-up. This cache bridges the gap.
+    Stored per-session, overwritten every turn — only the *most recent*
+    turn is ever interesting to feedback.
+
+    No-op when fields are missing — skipping a cache write is better
+    than persisting a partial pair that confuses retrieval later.
+    """
+    if not session_id or not assistant_response:
+        return
+    user_text = _normalize_user_message(user_message)
+    if not user_text:
+        return
+
+    # Pin to the active skill if we have one. last-skill-wins applies:
+    # whichever skill the contextvar points at right now is the one a
+    # subsequent thumbs-up most naturally attributes to.
+    from .session_context import get_current_invocation_id
+
+    invocation_id = get_current_invocation_id()
+    skill_id: Optional[str] = None
+    if invocation_id is not None:
+        try:
+            conn = get_echo_conn()
+            row = conn.execute(
+                "SELECT skill_id FROM echo_skill_invocation "
+                "WHERE invocation_id = ?",
+                (invocation_id,),
+            ).fetchone()
+            if row is not None:
+                skill_id = row["skill_id"]
+        except Exception as exc:
+            logger.debug("turn-cache skill lookup failed: %s", exc, exc_info=True)
+
+    try:
+        conn = get_echo_conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO echo_turn_cache "
+            "(session_id, skill_id, user_message, assistant_response, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (session_id, skill_id, user_text, assistant_response, time.time()),
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.debug("on_post_llm_call_cache write failed: %s", exc, exc_info=True)
+
+
+def _build_confidence_weights() -> dict[str, float]:
+    """Map skill_id → confidence for skills NOT already retired.
+
+    Retired skills shouldn't seed retrieval at all; we filter them out
+    by giving them weight 0 implicitly (they don't appear in the map →
+    retrieve_topk's `if skill_id in confidence_weights` check skips
+    them implicitly because the default multiplier is 1.0, but their
+    examples *are* in the candidate pool. To truly exclude retired
+    skills' examples we'd need a SQL-level WHERE — keep simple for now
+    and rely on confidence weighting to push them down.).
+
+    Returns empty dict on DB error so retrieval still works in
+    confidence-blind mode.
+    """
+    try:
+        conn = get_echo_conn()
+        rows = conn.execute(
+            "SELECT skill_id, confidence FROM echo_skill_confidence "
+            "WHERE status != 'retired'"
+        ).fetchall()
+        return {r["skill_id"]: float(r["confidence"]) for r in rows}
+    except Exception as exc:
+        logger.debug("_build_confidence_weights failed: %s", exc, exc_info=True)
+        return {}
+
+
+def on_pre_llm_call_inject(
+    *,
+    user_message=None,
+    **_kwargs,
+) -> Optional[dict]:
+    """Retrieve top-k preference examples for this user message + return
+    them as ``{"context": <markdown_block>}`` for Hermes to append.
+
+    Hermes' pre_llm_call handlers are documented to accept either a
+    string return value or a dict with a ``context`` key, both of which
+    get appended to the user message (not the system prompt → cache
+    safe). Returning None / empty dict means "nothing to inject".
+
+    Errors are caught and downgraded to "no injection" so a broken
+    retrieval path can't break the agent loop.
+    """
+    user_text = _normalize_user_message(user_message)
+    if not user_text:
+        return None
+
+    try:
+        weights = _build_confidence_weights()
+        examples = retrieve_topk(
+            user_text,
+            k=TOP_K_DEFAULT,
+            confidence_weights=weights or None,
+        )
+        if not examples:
+            return None
+        block = format_for_injection(examples)
+        return {"context": block} if block else None
+    except Exception as exc:
+        logger.debug("on_pre_llm_call_inject failed: %s", exc, exc_info=True)
+        return None
+
+
+def store_from_turn_cache_by_skill(skill_id: str, rating: int = 5) -> int:
+    """Look up the most recent cached turn for a skill and persist as a
+    preference example. Used by the /feedback dashboard endpoint when
+    the user thumbs-up.
+
+    Returns the new example_id, or 0 if no cache row was found.
+    """
+    if not skill_id:
+        return 0
+    try:
+        conn = get_echo_conn()
+        row = conn.execute(
+            "SELECT user_message, assistant_response "
+            "FROM echo_turn_cache "
+            "WHERE skill_id = ? "
+            "ORDER BY updated_at DESC LIMIT 1",
+            (skill_id,),
+        ).fetchone()
+        if row is None:
+            return 0
+        return store_preference(
+            task_request=row["user_message"],
+            agent_output=row["assistant_response"],
+            rating=rating,
+            skill_id=skill_id,
+        )
+    except Exception as exc:
+        logger.debug("store_from_turn_cache_by_skill failed: %s", exc, exc_info=True)
+        return 0

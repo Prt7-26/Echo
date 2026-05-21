@@ -215,6 +215,25 @@ def submit_feedback(payload: FeedbackPayload):
     event = "explicit_positive" if payload.rating == 1 else "explicit_negative"
     result = apply_signal_event(payload.skill_id, event)
 
+    # M5: thumbs-up + applied → also persist the most recent cached
+    # turn for this skill into the preference library. Rating 5 when
+    # the user added a long-press reason, 4 otherwise — the explicit
+    # reason is treated as stronger endorsement.
+    preference_example_id: Optional[int] = None
+    if payload.rating == 1 and result.applied:
+        try:
+            from plugins.echo_signals.preference_rag import (
+                store_from_turn_cache_by_skill,
+            )
+            preference_rating = 5 if payload.reason else 4
+            eid = store_from_turn_cache_by_skill(
+                payload.skill_id, rating=preference_rating,
+            )
+            preference_example_id = eid if eid > 0 else None
+        except Exception:
+            # Preference store failures must not break the feedback flow.
+            preference_example_id = None
+
     response = {
         "applied": result.applied,
         "skill_id": result.skill_id,
@@ -226,6 +245,8 @@ def submit_feedback(payload: FeedbackPayload):
     }
     if not result.applied:
         response["reason"] = result.reason
+    if preference_example_id is not None:
+        response["preference_example_id"] = preference_example_id
     return response
 
 

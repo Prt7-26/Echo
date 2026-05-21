@@ -150,11 +150,12 @@ try:
         getattr(_su.bump_use, "_echo_wrapped", False) is True,
     )
     expect(
-        "ctx received all 4 hooks",
+        "ctx received all 5 hook channels",
         set(ctx.hooks.keys()) == {
             "on_session_start",
             "on_session_end",
             "pre_llm_call",
+            "post_llm_call",
             "post_tool_call",
         },
         detail=f"got: {sorted(ctx.hooks.keys())}",

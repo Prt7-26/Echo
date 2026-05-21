@@ -27,6 +27,10 @@ from .session_context import (
     clear_session_context,
     set_session_context,
 )
+from .preference_rag import (
+    on_post_llm_call_cache,
+    on_pre_llm_call_inject,
+)
 from .scope_dialog import on_post_tool_call as on_post_tool_call_scope
 from .signals import (
     on_post_tool_call,
@@ -89,7 +93,21 @@ def register(ctx) -> None:
     install_bump_use_hook()
     ctx.register_hook("on_session_start", _on_session_start)
     ctx.register_hook("on_session_end", _on_session_end)
+    # Two pre_llm_call handlers:
+    #   signals.on_pre_llm_call:   Layer A user_turn signal + Layer B
+    #                              NL classify (sentiment → confidence)
+    #   preference_rag.on_pre_llm_call_inject:
+    #                              M5 RAG — retrieve top-k preference
+    #                              examples and inject as few-shots.
+    #                              Returns {"context": ...} which Hermes
+    #                              appends to the user message
+    #                              (cache-safe — system prompt unchanged).
     ctx.register_hook("pre_llm_call", on_pre_llm_call)
+    ctx.register_hook("pre_llm_call", on_pre_llm_call_inject)
+    # post_llm_call: cache the (user_message, assistant_response) pair so
+    # the dashboard /feedback endpoint can pair a thumbs-up with the
+    # actual turn that prompted it.
+    ctx.register_hook("post_llm_call", on_post_llm_call_cache)
     # Two separate post_tool_call handlers — one for Layer A signal
     # recording (signals.on_post_tool_call) and one for M2 scope-row
     # bookkeeping (scope_dialog.on_post_tool_call_scope). Hermes calls
