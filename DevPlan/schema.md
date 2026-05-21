@@ -1,12 +1,13 @@
 # Echo SQLite Schema 设计
 
-> 五个新表，作为 Module 4（置信度衰减引擎）和 Module 5（偏好库）的存储后端。
-> 全部驻留在 Hermes 现有的 SQLite 数据库（`get_hermes_home() / "sessions.db"`），
-> 不另起 DB——保持事务一致性、复用 [hermes_state.py](../hermes_state.py) 的 retry/WAL 机制。
+> 六张新表 + 一张版本表，作为 Module 4（置信度衰减）和 Module 5（偏好库）的存储后端。
+> 全部驻留在 Hermes 现有的 SQLite 数据库 `get_hermes_home() / "state.db"`
+> （见 [hermes_state.py:34](../hermes_state.py#L34) 的 `DEFAULT_DB_PATH`），
+> Echo 开自己的 sqlite3 connection 到该文件，操作仅限 `echo_*` 命名空间。
 
 ## 设计原则
 
-1. **skill_id 用 string 不用 int**：Hermes 内部用 `skill_identifier`（相对 path 或 slug），见 [agent/skill_commands.py:53](../agent/skill_commands.py#L53)。直接复用，避免再做一层映射。
+1. **skill_id 用 string 不用 int**：存的是 SKILL.md 的 `name:` 字段——和 Hermes 自己的 [tools/skill_usage.py](../tools/skill_usage.py) 的 keying 一致（`bump_use(skill_name)`、Curator 都用它）。是个稳定标识符（文件夹重命名不会改）。
 2. **时间戳用 INTEGER unix epoch（秒）**：与 Hermes 现有 `started_at`、`timestamp` 列保持一致（见 [hermes_state.py:190](../hermes_state.py#L190)）。
 3. **JSON 值用 TEXT 列存 JSON 字符串**：SQLite 没有原生 JSON 类型，但有 JSON1 函数。
 4. **embedding 用 BLOB**：直接存 float32 二进制（向量维度由 auxiliary embedding 模型决定，统一存 1536 或 768）。读出来在 Python 算余弦相似度——M5 偏好库容量上限几千条，不需要 vector index。

@@ -1,15 +1,22 @@
 """SQLite schema for Echo skill-lifecycle management.
 
-Six tables that live alongside Hermes core tables in the same sessions.db.
-Design rationale: see DevPlan/schema.md.
+Six tables that live alongside Hermes core tables in the same state.db
+(``get_hermes_home() / "state.db"``, see hermes_state.DEFAULT_DB_PATH).
 
 Why same DB (not a separate file): we need foreign-key consistency with
 ``sessions(id)`` and we want WAL/retry behavior identical to Hermes core
-writes — both come for free when we share the file.
+writes — both come for free when we share the file. Echo opens its own
+connection (see db.py) and operates only on the ``echo_*`` namespace, so
+the two systems are physically colocated but logically independent.
 
-Timestamps are stored as REAL (unix epoch, fractional seconds) to match
-Hermes core conventions (e.g. ``sessions.started_at REAL NOT NULL``).
-This makes JOINs against core tables type-clean.
+Identifier convention: ``skill_id`` columns store the SKILL.md ``name:``
+field, which is also what Hermes' tools.skill_usage uses as its key.
+Picking the same identifier means Echo and Hermes Curator agree about
+what counts as "the same skill" across file renames or moves.
+
+Timestamps are REAL (unix epoch, fractional seconds) to match Hermes
+core conventions (e.g. ``sessions.started_at REAL NOT NULL``). JOINs
+against core tables are type-clean.
 
 Idempotent: ``ensure_echo_schema()`` is safe to call multiple times.
 """
