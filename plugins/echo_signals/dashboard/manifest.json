@@ -1,0 +1,14 @@
+{
+  "name": "echo_signals",
+  "label": "Echo",
+  "description": "User-signal-driven skill lifecycle management — see which skills the user finds useful, which are dropping in confidence, and the raw signal stream feeding it.",
+  "icon": "Activity",
+  "version": "0.1.0",
+  "tab": {
+    "path": "/echo",
+    "position": "after:skills"
+  },
+  "slots": ["chat:bottom"],
+  "entry": "dist/index.js",
+  "api": "plugin_api.py"
+}

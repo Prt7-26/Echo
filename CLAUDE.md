@@ -83,7 +83,12 @@ Hermes is three user-facing surfaces (CLI, TUI, multi-platform Gateway) all funn
 - ✅ **Step 4**: M4 confidence-update engine landed as a pure logic layer in [plugins/echo_signals/confidence.py](plugins/echo_signals/confidence.py). Implements all five proposal rules (explicit/NL positive, explicit/NL negative, drift-detected, silence) and the active→pending_review→retired state machine. **NOT wired into the signal-collection path yet** — current raw signals describe activity, not quality, so calling `update_confidence()` from `signals.py` would conflate the two. Wiring waits until Layer B (NL feedback classifier) and Layer A drift detection exist. 81 Echo tests + 69 Hermes regression, all passing.
 - ✅ **End-to-end verification**: [scripts/verify_echo.py](scripts/verify_echo.py) runs the plugin against real Hermes runtime objects (PluginManager scan, real `SessionDB`, real `tools.skill_usage` monkey-patch) — 21/21 checks pass. Discovered and fixed two issues: (1) missing `plugin.yaml` manifest (Hermes' discovery requires it); (2) manifest `name:` field was `echo-signals` but Python module is `echo_signals` — Hermes' flat-plugin `key` derivation uses the manifest `name`, so the key shown by `hermes plugins list` would have been inconsistent with the import path. Both fixed.
 - ⬜ **Step 4**: Confidence-update logic (M4) reading the signal stream.
-- ⬜ **Step 5**: Web Dashboard plugin under `web/src/plugins/echo/`.
+- 🔄 **Step 5**: Web Dashboard plugin. Split into sub-steps:
+  - ✅ **5a**: Backend dashboard API — [plugins/echo_signals/dashboard/manifest.json](plugins/echo_signals/dashboard/manifest.json) + [plugins/echo_signals/dashboard/plugin_api.py](plugins/echo_signals/dashboard/plugin_api.py). Five REST endpoints (`GET /skills`, `GET /skills/{id}/timeline`, `GET /status-distribution`, `GET /invocations/recent`, `POST /feedback`) auto-mounted by Hermes' `_mount_plugin_api_routes()` at `/api/plugins/echo_signals/*`. 22 endpoint tests. **Requires `fastapi` + `httpx` in the test env** (Hermes `[all]` extras — install with `pip install fastapi httpx` if missing).
+  - ⬜ **5b**: Frontend plugin bundle skeleton (hello-world IIFE under `dashboard/dist/index.js`).
+  - ⬜ **5c**: Implement 4 widgets on Echo top-level page (confidence ranking, timeline, status pie, recent invocations).
+  - ⬜ **5d**: ChatPage `chat:bottom` slot — current-invocation thumbs widget (two-tier: tap-to-rate, long-press for detailed mode).
+  - ⬜ **5e**: End-to-end verification (browser smoke test).
 - ⬜ **Step 6**: Tauri shell wrapping the Dashboard, exposing clipboard + window-focus IPC.
 
 (Update this list when steps move state — the file is committed and serves as a living changelog for the project.)
