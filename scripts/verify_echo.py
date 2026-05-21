@@ -365,6 +365,90 @@ try:
     )
 
     # ─────────────────────────────────────────────────────────────────────
+    section("7. Dashboard plugin manifest is well-formed and discoverable")
+    # ─────────────────────────────────────────────────────────────────────
+
+    import json
+
+    dashboard_manifest_path = (
+        REPO_ROOT / "plugins" / "echo_signals" / "dashboard" / "manifest.json"
+    )
+    bundle_path = (
+        REPO_ROOT / "plugins" / "echo_signals" / "dashboard" / "dist" / "index.js"
+    )
+    plugin_api_path = (
+        REPO_ROOT / "plugins" / "echo_signals" / "dashboard" / "plugin_api.py"
+    )
+
+    expect("dashboard/manifest.json exists", dashboard_manifest_path.is_file())
+    expect("dashboard/dist/index.js bundle exists", bundle_path.is_file())
+    expect("dashboard/plugin_api.py exists", plugin_api_path.is_file())
+
+    dm = json.loads(dashboard_manifest_path.read_text(encoding="utf-8"))
+    expect(
+        "manifest name matches plugin module name",
+        dm.get("name") == "echo_signals",
+        detail=f"got: {dm.get('name')}",
+    )
+    expect(
+        "manifest declares /echo tab path",
+        dm.get("tab", {}).get("path") == "/echo",
+    )
+    expect(
+        "manifest declares chat:bottom slot",
+        "chat:bottom" in dm.get("slots", []),
+        detail=f"slots: {dm.get('slots')}",
+    )
+    expect(
+        "manifest entry points to dist/index.js",
+        dm.get("entry") == "dist/index.js",
+    )
+
+    # Hermes' own dashboard-plugin scanner must see us.
+    from hermes_cli import web_server as _ws
+
+    dashboard_plugins = _ws._discover_dashboard_plugins()  # type: ignore[attr-defined]
+    echo_dash = next(
+        (p for p in dashboard_plugins if p.get("name") == "echo_signals"),
+        None,
+    )
+    expect(
+        "Hermes _discover_dashboard_plugins() finds echo_signals",
+        echo_dash is not None,
+        detail=f"discovered: {[p.get('name') for p in dashboard_plugins]}",
+    )
+
+    # Bundle has correct structural markers (no JSX, registers correctly).
+    bundle_src = bundle_path.read_text(encoding="utf-8")
+    expect(
+        "bundle calls __HERMES_PLUGINS__.register",
+        "__HERMES_PLUGINS__.register" in bundle_src,
+    )
+    expect(
+        "bundle calls registerSlot for chat:bottom",
+        'registerSlot("echo_signals", "chat:bottom"' in bundle_src,
+    )
+    expect(
+        "bundle references the API base /api/plugins/echo_signals",
+        "/api/plugins/echo_signals" in bundle_src,
+    )
+
+    # plugin_api.py is mountable — let _mount_plugin_api_routes find us.
+    # We test the same path that hermes web_server uses at startup.
+    from importlib import import_module
+
+    mod = import_module("plugins.echo_signals.dashboard.plugin_api")
+    expect(
+        "plugin_api module exposes a `router` attribute",
+        hasattr(mod, "router") and mod.router is not None,
+    )
+    expect(
+        "plugin_api router has at least the 5 endpoints",
+        len(mod.router.routes) >= 5,
+        detail=f"routes: {len(mod.router.routes)}",
+    )
+
+    # ─────────────────────────────────────────────────────────────────────
     print(f"\n\033[1m── Summary ──\033[0m")
     if total_passed == total_checks:
         print(f"  \033[32m{total_passed}/{total_checks} checks passed\033[0m\n")
