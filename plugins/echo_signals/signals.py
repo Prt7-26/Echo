@@ -148,7 +148,7 @@ def on_pre_llm_call(
         skill_id = row["skill_id"]
 
         def _on_label(label):
-            from . import confidence as conf_mod
+            from .confidence_actions import apply_signal_event
             from .db import get_echo_conn as _conn
 
             if label == "positive":
@@ -159,7 +159,7 @@ def on_pre_llm_call(
                 return  # neutral — silence, the sacred invariant
 
             try:
-                conf_mod.update_confidence(skill_id, event)
+                apply_signal_event(skill_id, event)
                 conn2 = _conn()
                 ts = time.time()
                 conn2.execute(

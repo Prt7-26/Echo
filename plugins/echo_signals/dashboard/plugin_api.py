@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 
 from plugins.echo_signals import confidence as conf_mod
 from plugins.echo_signals import db as echo_db
+from plugins.echo_signals.confidence_actions import apply_signal_event
 
 router = APIRouter()
 
@@ -207,7 +208,7 @@ def submit_feedback(payload: FeedbackPayload):
             status_code=400, detail="rating must be +1 or -1",
         )
     event = "explicit_positive" if payload.rating == 1 else "explicit_negative"
-    result = conf_mod.update_confidence(payload.skill_id, event)
+    result = apply_signal_event(payload.skill_id, event)
 
     response = {
         "applied": result.applied,

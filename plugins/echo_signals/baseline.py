@@ -302,13 +302,15 @@ def finalize_invocation(invocation_id: int) -> list[DriftEvent]:
     )
     conn.commit()
 
-    # Apply drift events to the confidence engine. Late-imported to
-    # avoid an import cycle if confidence ever needs to call back here.
+    # Apply drift events to the confidence engine via the side-effectful
+    # wrapper so a state-transition into pending_review starts the Layer
+    # C judge. Late-imported to avoid import cycles.
     if drifts:
-        from . import confidence as conf_mod
+        from .confidence_actions import apply_signal_event
+
         for drift in drifts:
             try:
-                conf_mod.update_confidence(
+                apply_signal_event(
                     drift.skill_id,
                     "drift_detected",
                     severity=drift.severity,

@@ -37,6 +37,8 @@ def isolated_db(tmp_path, monkeypatch):
     echo_db.reset_for_tests()
 
 
+
+
 def _seed_confidence(skill_id: str, confidence: float = 0.5):
     conn = echo_db.get_echo_conn()
     now = time.time()

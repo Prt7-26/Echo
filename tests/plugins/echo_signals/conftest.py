@@ -1,0 +1,46 @@
+"""Shared fixtures for Echo signal tests.
+
+Default behavior: replace ``judge.start_judge_async`` with a no-op so
+any test that incidentally pushes a skill into ``pending_review``
+(drift detection, NL classifier, dashboard feedback) doesn't spawn a
+real daemon thread attempting an LLM call. This keeps tests
+deterministic and prevents thread-leak-induced suite-teardown hangs
+(see pyproject.toml's pytest-timeout note for the underlying issue).
+
+Opt-out: tests that exercise the judge lifecycle proper add the
+``real_judge`` fixture to their signature; the stub is then bypassed
+for that test. ``test_judge.py::TestStartJudgeAsync`` uses this.
+"""
+
+from __future__ import annotations
+
+import threading
+
+import pytest
+
+
+@pytest.fixture
+def real_judge():
+    """Marker fixture — request this to bypass the autouse stub below.
+
+    Empty body; the stub fixture detects the request via the
+    ``request.fixturenames`` set.
+    """
+    return None
+
+
+@pytest.fixture(autouse=True)
+def _stub_judge_async(monkeypatch, request):
+    """Stub ``judge.start_judge_async`` unless the test requested
+    ``real_judge``."""
+    if "real_judge" in request.fixturenames:
+        yield
+        return
+
+    from plugins.echo_signals import judge as jdg
+
+    def _noop(*_a, **_kw):
+        return threading.Thread(target=lambda: None)
+
+    monkeypatch.setattr(jdg, "start_judge_async", _noop)
+    yield
