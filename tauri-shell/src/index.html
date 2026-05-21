@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Echo Shell — bootstrap</title>
+    <style>
+        body { font-family: sans-serif; background: #0f1115; color: #e6e8ee; padding: 2em; }
+        code { background: #161922; padding: 2px 6px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Echo</h1>
+    <p>This window should redirect to the Hermes Echo dashboard at
+       <code>http://127.0.0.1:9119/echo</code>.</p>
+    <p>If you see this page persistently, the dashboard is not running.
+       Start it with:</p>
+    <pre><code>hermes plugins enable echo_signals
+hermes dashboard</code></pre>
+    <p>Then re-open Echo.</p>
+    <script>
+        // Tauri loads this file as a bootstrap fallback when the
+        // configured `windows[0].url` is unreachable. We redirect once
+        // the dashboard responds.
+        async function waitForDashboard() {
+            while (true) {
+                try {
+                    const r = await fetch("http://127.0.0.1:9119/", {
+                        cache: "no-store",
+                        mode: "no-cors",
+                    });
+                    window.location.replace("http://127.0.0.1:9119/echo");
+                    return;
+                } catch {
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+            }
+        }
+        waitForDashboard();
+    </script>
+</body>
+</html>

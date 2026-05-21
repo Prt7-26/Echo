@@ -197,6 +197,23 @@ class ScopePayload(BaseModel):
     scope_level: str = Field(..., pattern="^(broad|narrow)$")
 
 
+class ClipboardSignalPayload(BaseModel):
+    """Echo desktop shell reports clipboard / window-focus events.
+
+    event_type:
+      'clipboard_copy'   — text was copied to OS clipboard
+      'clipboard_paste'  — text was pasted out (less commonly reported)
+      'window_focus'     — Tauri window gained focus
+      'window_blur'      — Tauri window lost focus
+    """
+
+    event_type: str = Field(
+        ..., pattern="^(clipboard_copy|clipboard_paste|window_focus|window_blur)$",
+    )
+    text: Optional[str] = Field(None, max_length=8192)
+    text_length: Optional[int] = Field(None, ge=0)
+
+
 @router.post("/feedback")
 def submit_feedback(payload: FeedbackPayload):
     """Receive Layer B explicit thumbs-up/down from the dashboard.
@@ -315,6 +332,68 @@ def delete_preference(example_id: int):
     )
     conn.commit()
     return {"deleted": cur.rowcount > 0, "example_id": example_id}
+
+
+# ---------------------------------------------------------------------------
+# 8. Tauri desktop-shell signals (clipboard + window focus)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/clipboard-signal")
+def submit_clipboard_signal(payload: ClipboardSignalPayload):
+    """Receive a clipboard / window-focus event from the Echo desktop shell.
+
+    Stored as a Layer A signal attributed to the most recent invocation
+    (cheap "last-skill-wins" pairing — the shell doesn't know which
+    invocation is active, so the backend picks the most recent one).
+    If no invocation exists yet, the signal is silently dropped (no
+    point retaining context-less events).
+
+    Text body is bounded at 8 KB; we store only the length in value_int
+    by default, plus the first 200 chars in value_text for analytics
+    on what was copied. Full text is NOT persisted by design — Echo
+    intentionally avoids becoming a clipboard log.
+    """
+    conn = echo_db.get_echo_conn()
+    inv_row = conn.execute(
+        "SELECT invocation_id, skill_id FROM echo_skill_invocation "
+        "ORDER BY started_at DESC LIMIT 1",
+    ).fetchone()
+    if inv_row is None:
+        return {"recorded": False, "reason": "no_active_invocation"}
+
+    text_value = (payload.text or "")[:200] if payload.text else None
+    text_len = payload.text_length
+    if text_len is None and payload.text is not None:
+        text_len = len(payload.text)
+
+    import time as _time
+
+    conn.execute(
+        "INSERT INTO echo_signal_event "
+        "(invocation_id, skill_id, layer, signal_type, value_int, value_text, ts) "
+        "VALUES (?, ?, 'A', ?, ?, ?, ?)",
+        (
+            inv_row["invocation_id"],
+            inv_row["skill_id"],
+            payload.event_type,
+            text_len,
+            text_value,
+            _time.time(),
+        ),
+    )
+    conn.execute(
+        "UPDATE echo_skill_confidence "
+        "SET n_signals = n_signals + 1, updated_at = ? "
+        "WHERE skill_id = ?",
+        (_time.time(), inv_row["skill_id"]),
+    )
+    conn.commit()
+    return {
+        "recorded": True,
+        "invocation_id": inv_row["invocation_id"],
+        "skill_id": inv_row["skill_id"],
+    }
 
 
 @router.get("/scope/pending")

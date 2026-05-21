@@ -423,3 +423,142 @@ class TestDeletePreference:
         r = client.delete("/api/plugins/echo_signals/preferences/99999")
         assert r.status_code == 200
         assert r.json() == {"deleted": False, "example_id": 99999}
+
+
+# ---------------------------------------------------------------------------
+# POST /clipboard-signal (Tauri desktop shell)
+# ---------------------------------------------------------------------------
+
+
+def _seed_invocation_with_skill(conn, skill_id: str = "test-skill"):
+    """Seed an invocation + its confidence anchor so clipboard signals attach."""
+    import time as _time
+
+    now = _time.time()
+    conn.execute(
+        "INSERT OR IGNORE INTO echo_skill_confidence "
+        "(skill_id, created_at, updated_at) VALUES (?, ?, ?)",
+        (skill_id, now, now),
+    )
+    cur = conn.execute(
+        "INSERT INTO echo_skill_invocation "
+        "(skill_id, session_id, platform, started_at) VALUES (?, ?, ?, ?)",
+        (skill_id, "s-clip", "desktop", now),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+class TestClipboardSignal:
+    def test_records_when_invocation_exists(self, client):
+        conn = echo_db.get_echo_conn()
+        inv_id = _seed_invocation_with_skill(conn)
+
+        r = client.post(
+            "/api/plugins/echo_signals/clipboard-signal",
+            json={
+                "event_type": "clipboard_copy",
+                "text": "Hello world",
+                "text_length": 11,
+            },
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["recorded"] is True
+        assert data["invocation_id"] == inv_id
+        assert data["skill_id"] == "test-skill"
+
+        row = conn.execute(
+            "SELECT signal_type, value_int, value_text, layer "
+            "FROM echo_signal_event WHERE skill_id = 'test-skill'"
+        ).fetchone()
+        assert row["signal_type"] == "clipboard_copy"
+        assert row["value_int"] == 11
+        assert row["value_text"] == "Hello world"
+        assert row["layer"] == "A"
+
+    def test_text_truncated_to_200_chars(self, client):
+        conn = echo_db.get_echo_conn()
+        _seed_invocation_with_skill(conn)
+
+        long_text = "x" * 500
+        r = client.post(
+            "/api/plugins/echo_signals/clipboard-signal",
+            json={"event_type": "clipboard_copy", "text": long_text},
+        )
+        assert r.status_code == 200
+
+        row = conn.execute(
+            "SELECT value_text, value_int FROM echo_signal_event "
+            "WHERE signal_type = 'clipboard_copy'"
+        ).fetchone()
+        assert len(row["value_text"]) == 200  # value_text capped
+        assert row["value_int"] == 500       # length preserved
+
+    def test_no_invocation_drops_silently(self, client):
+        echo_db.get_echo_conn()  # bootstrap tables
+        r = client.post(
+            "/api/plugins/echo_signals/clipboard-signal",
+            json={"event_type": "clipboard_copy", "text": "x"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["recorded"] is False
+        assert data["reason"] == "no_active_invocation"
+
+    def test_window_focus_events_accepted(self, client):
+        conn = echo_db.get_echo_conn()
+        _seed_invocation_with_skill(conn)
+        for et in ("window_focus", "window_blur"):
+            r = client.post(
+                "/api/plugins/echo_signals/clipboard-signal",
+                json={"event_type": et},
+            )
+            assert r.status_code == 200
+            assert r.json()["recorded"] is True
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM echo_signal_event "
+            "WHERE signal_type IN ('window_focus', 'window_blur')"
+        ).fetchone()["n"]
+        assert n == 2
+
+    def test_invalid_event_type_rejected(self, client):
+        r = client.post(
+            "/api/plugins/echo_signals/clipboard-signal",
+            json={"event_type": "garbage"},
+        )
+        assert r.status_code == 422
+
+    def test_oversized_text_rejected(self, client):
+        r = client.post(
+            "/api/plugins/echo_signals/clipboard-signal",
+            json={"event_type": "clipboard_copy", "text": "x" * 9000},
+        )
+        assert r.status_code == 422  # max_length=8192
+
+    def test_attributes_to_most_recent_invocation(self, client):
+        """When two invocations exist, the signal attaches to the newer one."""
+        conn = echo_db.get_echo_conn()
+        import time as _time
+
+        old_now = _time.time() - 1000
+        conn.execute(
+            "INSERT OR IGNORE INTO echo_skill_confidence "
+            "(skill_id, created_at, updated_at) VALUES ('old', ?, ?)",
+            (old_now, old_now),
+        )
+        conn.execute(
+            "INSERT INTO echo_skill_invocation "
+            "(skill_id, session_id, platform, started_at) "
+            "VALUES ('old', 'sold', 'cli', ?)",
+            (old_now,),
+        )
+        inv_new = _seed_invocation_with_skill(conn, "new")
+        conn.commit()
+
+        r = client.post(
+            "/api/plugins/echo_signals/clipboard-signal",
+            json={"event_type": "clipboard_copy", "text": "x"},
+        )
+        assert r.json()["invocation_id"] == inv_new
+        assert r.json()["skill_id"] == "new"

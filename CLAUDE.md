@@ -27,12 +27,14 @@ The repository already contains substantial design documentation. Read before gu
 | **Hermes architecture visual overview** (15 sections, browser-readable) | [docs/hermes-architecture.html](docs/hermes-architecture.html) |
 | **Cross-session memory about user/project** | `~/.claude/projects/-Users-mac-code-Echo/memory/` |
 
-## Echo's code lives in three places (everything else is Hermes upstream)
+## Echo's code lives in five places (everything else is Hermes upstream)
 
 - `plugins/echo_signals/` — the plugin proper (schema, hooks, signal collection)
 - `DevPlan/` — design docs, the proposal, schema specs
 - `tests/plugins/echo_signals/` — unit tests
 - `docs/hermes-architecture.html` — onboarding aid
+- `tauri-shell/` — Rust/Tauri desktop wrapper around the dashboard (Step 17)
+- `scripts/verify_echo.py` — end-to-end smoke check
 
 A clean `git diff upstream/main` should show only files under these paths plus `.gitignore`, `LICENSE`, and `CLAUDE.md`. If you find yourself wanting to edit a Hermes core file, **stop and ask** — see the hard constraints below.
 
@@ -122,6 +124,12 @@ Hermes is three user-facing surfaces (CLI, TUI, multi-platform Gateway) all funn
   - LRU cache (2048 entries) dedupes repeat queries within a process.
   - **Sticky kill-switch**: first failure logs once + permanently falls back to hashing for the remainder of the process. Stops outages from spamming retries on every user turn.
   - `clear_embedding_corpus()` wipes `echo_preference_example` + `echo_user_request_log` for safe provider switching (`cosine()` already returns 0 on dim mismatch so stale rows silently never match — clearing just frees space). `register(ctx)` calls `install_active_encoder()` automatically. 22 new tests. M1 condition 4 and M5 retrieval now lift from lexical proxy to true neural semantic when configured.
+- ✅ **Step 17 (Tauri desktop shell)**: Native wrapper around the Hermes Echo dashboard. Two new signal sources the browser sandbox cannot capture:
+  - **OS clipboard** — polled every 2 s via `tauri-plugin-clipboard-manager`; on change, POSTs `clipboard_copy` to a new dashboard endpoint with length + 200-char preview (raw text never persisted server-side).
+  - **Window focus** — `tauri::WindowEvent::Focused` emits `window_focus` / `window_blur` events on the same endpoint.
+  - Backend addition: `POST /api/plugins/echo_signals/clipboard-signal` ([plugins/echo_signals/dashboard/plugin_api.py](plugins/echo_signals/dashboard/plugin_api.py)) records to `echo_signal_event` (Layer A) attributed to the most recent invocation. Body capped at 8 KB; `value_text` truncated to 200 chars; full clipboard contents are never stored. 7 new endpoint tests.
+  - Rust project under [tauri-shell/](tauri-shell/) — Cargo.toml + tauri.conf.json + main.rs/lib.rs/clipboard.rs + bootstrap index.html. Build instructions in [tauri-shell/README.md](tauri-shell/README.md). Build/run not exercised in CI (no Rust toolchain in the conda test env); user runs `npm run dev` / `npm run build` on their own machine.
+- ⬜ **Step 18+**: Open work — proposal §4 evaluation suite (datasets, simulated personas, baselines, metrics), real-runtime UI walkthrough (defer until report-writing time per maintainer's preference), final app icon for tauri-shell, dashboard widget showing clipboard signal stream.
 
 (Update this list when steps move state — the file is committed and serves as a living changelog for the project.)
 
