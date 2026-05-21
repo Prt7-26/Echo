@@ -67,6 +67,22 @@ python3 -m pytest tests/plugins/echo_signals/ \
 
 Echo schema tests are deliberately fast (in-memory SQLite, <2s total) so they can be run on every change.
 
+## Launching the agent
+
+Use the `./echo` launcher at the repo root — one entry point for every Hermes + Echo flavor. Run `./echo --help` for the full list.
+
+| Command | What it does |
+|---|---|
+| `./echo chat [args]` | Hermes CLI chat (Echo collects signals in background). Extra args forwarded (`--resume`, `--continue`, etc.). |
+| `./echo tui [args]` | Hermes full-screen TUI. |
+| `./echo dash [args]` | Hermes Web Dashboard (foreground). Browser auto-opens to `/echo`. |
+| `./echo tauri` | Tauri desktop shell. Auto-starts the dashboard in the background if not already up. Needs Rust toolchain + node. |
+| `./echo full` | Dashboard in background + Tauri shell in foreground; stops the background dashboard on exit. |
+| `./echo verify` | Runs `pytest tests/plugins/echo_signals/` + `scripts/verify_echo.py`. The same health check used during development. |
+| `./echo status` / `./echo stop` | Inspect / stop the background dashboard. |
+
+Env vars: `ECHO_DASH_HOST` (default `127.0.0.1`), `ECHO_DASH_PORT` (default `9119`). Background dashboard logs to `$TMPDIR/echo-dashboard.log`, PID in `$TMPDIR/echo-dashboard.pid`.
+
 ## Architecture in one minute
 
 Hermes is three user-facing surfaces (CLI, TUI, multi-platform Gateway) all funneling through `AIAgent.run_conversation()` in `run_agent.py`. State lives in a single SQLite DB at `get_hermes_home() / "sessions.db"`. Skills are folder-based with `SKILL.md` frontmatter; the `≥5 tool call` skill-creation trigger is **guidance to the curator, not enforced in code**. Extension is via plugins that expose `def register(ctx)` and call `ctx.register_hook(...)`. See [docs/hermes-architecture.html](docs/hermes-architecture.html) for the diagram.

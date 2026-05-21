@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# Echo launcher — start Hermes + Echo plugin in the flavor you want.
+#
+# Usage:  ./echo <command> [args...]
+# Run    ./echo --help    for the full list.
+
+set -euo pipefail
+
+REPO_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$REPO_ROOT"
+
+DASH_HOST="${ECHO_DASH_HOST:-127.0.0.1}"
+DASH_PORT="${ECHO_DASH_PORT:-9119}"
+PID_DIR="${TMPDIR:-/tmp}"
+DASH_PID_FILE="${PID_DIR%/}/echo-dashboard.pid"
+DASH_LOG_FILE="${PID_DIR%/}/echo-dashboard.log"
+
+c_dim()  { printf '\033[2m%s\033[0m\n' "$*"; }
+c_ok()   { printf '\033[32m%s\033[0m\n' "$*"; }
+c_warn() { printf '\033[33m%s\033[0m\n' "$*" >&2; }
+c_err()  { printf '\033[31m%s\033[0m\n' "$*" >&2; }
+
+usage() {
+  cat <<'EOF'
+Echo launcher — one entry point for every Hermes + Echo flavor.
+
+USAGE
+  ./echo <command> [args...]
+
+COMMANDS
+  chat [args]    Hermes CLI chat (Echo collects signals in background).
+                 Extra args are forwarded, e.g. ./echo chat --resume <id>.
+  tui [args]     Hermes full-screen TUI.
+  dash [args]    Hermes Web Dashboard (foreground).  Browser opens to /echo.
+                 Extra args forwarded to `hermes dashboard`.
+  tauri          Tauri desktop shell.  Auto-starts the dashboard in the
+                 background if it isn't already up.
+  full           Dashboard in background + Tauri shell in foreground.
+                 Stops the background dashboard on exit.
+  verify         Run Echo unit tests + scripts/verify_echo.py smoke check.
+  status         Show whether the background dashboard is up.
+  stop           Stop the background dashboard started by ./echo.
+  -h, --help     Show this help.
+
+ENV VARS
+  ECHO_DASH_HOST   Dashboard host  (default 127.0.0.1)
+  ECHO_DASH_PORT   Dashboard port  (default 9119)
+
+EXAMPLES
+  ./echo chat                       # quick chat session
+  ./echo dash                       # open the dashboard
+  ./echo full                       # dashboard + tauri together
+  ECHO_DASH_PORT=9200 ./echo dash   # use a different port
+  ./echo verify                     # confirm Echo is healthy
+EOF
+}
+
+dash_is_up() {
+  curl -sf "http://${DASH_HOST}:${DASH_PORT}/api/plugins/echo_signals/status" \
+       >/dev/null 2>&1
+}
+
+start_dashboard_bg() {
+  if dash_is_up; then
+    c_dim "Dashboard already up at http://${DASH_HOST}:${DASH_PORT}"
+    return 0
+  fi
+  if ! command -v hermes >/dev/null 2>&1; then
+    c_err "hermes CLI not on PATH — make sure Hermes is installed (pip install -e '.[all,dev]')"
+    return 1
+  fi
+  echo "Starting dashboard in background on ${DASH_HOST}:${DASH_PORT} ..."
+  nohup hermes dashboard --host "$DASH_HOST" --port "$DASH_PORT" --no-open \
+        >"$DASH_LOG_FILE" 2>&1 &
+  echo $! > "$DASH_PID_FILE"
+  for _ in $(seq 1 30); do
+    if dash_is_up; then
+      c_ok "Dashboard ready (pid $(cat "$DASH_PID_FILE"), log: $DASH_LOG_FILE)"
+      return 0
+    fi
+    sleep 1
+  done
+  c_err "Dashboard didn't come up in 30s — check $DASH_LOG_FILE"
+  return 1
+}
+
+stop_dashboard_bg() {
+  if [[ -f "$DASH_PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$DASH_PID_FILE")"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      echo "Stopping background dashboard (pid $pid) ..."
+      kill "$pid" 2>/dev/null || true
+      # Give it a moment, then SIGKILL if still alive.
+      for _ in 1 2 3; do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 1
+      done
+      kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+    fi
+    rm -f "$DASH_PID_FILE"
+  else
+    c_dim "No background dashboard PID file."
+  fi
+}
+
+ensure_tauri_deps() {
+  if [[ ! -d tauri-shell/node_modules ]]; then
+    echo "Installing tauri-shell node deps (first run) ..."
+    ( cd tauri-shell && npm install )
+  fi
+  if ! command -v cargo >/dev/null 2>&1; then
+    c_warn "cargo not on PATH — Tauri needs a Rust toolchain (https://rustup.rs)."
+  fi
+}
+
+cmd="${1:-}"
+[[ $# -gt 0 ]] && shift
+
+case "$cmd" in
+  chat)
+    exec hermes chat "$@"
+    ;;
+  tui)
+    exec hermes --tui "$@"
+    ;;
+  dash|dashboard)
+    exec hermes dashboard --host "$DASH_HOST" --port "$DASH_PORT" "$@"
+    ;;
+  tauri)
+    start_dashboard_bg
+    ensure_tauri_deps
+    cd tauri-shell
+    exec npm run dev
+    ;;
+  full)
+    trap stop_dashboard_bg EXIT INT TERM
+    start_dashboard_bg
+    ensure_tauri_deps
+    ( cd tauri-shell && npm run dev )
+    ;;
+  verify)
+    python3 -m pytest tests/plugins/echo_signals/ -o addopts="" -q
+    echo
+    python3 scripts/verify_echo.py
+    ;;
+  status)
+    if dash_is_up; then
+      c_ok "Dashboard: UP   http://${DASH_HOST}:${DASH_PORT}"
+    else
+      c_dim "Dashboard: down (http://${DASH_HOST}:${DASH_PORT})"
+    fi
+    if [[ -f "$DASH_PID_FILE" ]]; then
+      pid="$(cat "$DASH_PID_FILE")"
+      if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+        echo "Background pid: $pid  (log: $DASH_LOG_FILE)"
+      else
+        c_warn "Stale PID file at $DASH_PID_FILE (process $pid is gone)"
+      fi
+    fi
+    ;;
+  stop)
+    stop_dashboard_bg
+    ;;
+  -h|--help|help|"")
+    usage
+    ;;
+  *)
+    c_err "Unknown command: $cmd"
+    echo
+    usage
+    exit 2
+    ;;
+esac
