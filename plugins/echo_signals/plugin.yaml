@@ -1,0 +1,9 @@
+name: echo_signals
+version: "0.1.0"
+description: "Echo — user-signal-driven skill lifecycle management. Monkey-patches bump_use to capture skill invocations; hooks pre_llm_call/post_tool_call/on_session_end to record Layer A behavior signals into echo_* tables in state.db."
+author: "Lingchao Nie (Westlake University)"
+hooks:
+  - on_session_start
+  - on_session_end
+  - pre_llm_call
+  - post_tool_call
