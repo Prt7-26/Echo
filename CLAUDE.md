@@ -107,7 +107,11 @@ Hermes is three user-facing surfaces (CLI, TUI, multi-platform Gateway) all funn
   - **Skipped**: "task similarity recurrence over N days" — needs cross-session semantic embedding, which Hermes does not ship. Echo's hashing embedding (M5) is too coarse for clustering; documented as a known limitation.
 
   Scoring: `save_intent`=100, `tool ≥ 5`=30, `modif ≥ 3`=30. Threshold 30. `list_candidates()` joins invocations with per-row signal counts (one query); dashboard exposes via `GET /api/plugins/echo_signals/candidates` (limit + min_score query params). Echo is the *nominator* — the actual create-skill decision stays with the user/curator. 42 new tests including regex matrix (9 English positives + 7 Chinese positives + 7 negatives) and end-to-end through `sig.on_pre_llm_call`. 304 Echo + 69 Hermes regression all pass.
-- ⬜ **Step 14+**: Open work — Tauri shell + clipboard IPC (proposal Phase 2), dashboard widget for the M1 candidate queue + M5 preference browse + M2 scope override, embedding-backed M1 fourth condition (would require adding `auxiliary.embedding` config + provider).
+- ✅ **Step 14 (dashboard widgets for M1 + M5)**: EchoPage layout extended to a 6-widget grid:
+  - **CandidateQueue** — `GET /candidates` displayed as a list of nominated invocations with score + reasons.
+  - **PreferenceLibrary** — `GET /preferences` (new endpoint, sorted by composite_score DESC) shows the M5 corpus with expand/collapse and per-row Delete (`DELETE /preferences/{id}` — idempotent).
+  Dashboard router now 9 endpoints. Bundle grew to ~940 lines, still hand-written IIFE no-build. 8 new endpoint tests; 312 Echo + 69 Hermes regression all pass.
+- ⬜ **Step 15+**: Open work — Tauri shell + clipboard IPC (proposal Phase 2), embedding-backed M1 fourth condition (would require adding `auxiliary.embedding` config + provider), M2 scope override UI in the preferences widget.
 
 (Update this list when steps move state — the file is committed and serves as a living changelog for the project.)
 

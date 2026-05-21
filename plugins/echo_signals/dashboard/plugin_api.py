@@ -255,6 +255,68 @@ def submit_feedback(payload: FeedbackPayload):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# 7. M5 — preference library browse / delete
+# ---------------------------------------------------------------------------
+
+
+@router.get("/preferences")
+def list_preferences(
+    limit: int = Query(50, ge=1, le=200),
+    skill_id: Optional[str] = Query(None, description="Filter to one skill"),
+    min_rating: int = Query(1, ge=1, le=5),
+):
+    """List stored preference examples (M5 RAG corpus).
+
+    Sorted by composite_score DESC (highest-quality / freshest first)
+    so the user sees their best examples up top. Each row carries the
+    rating, skill_id, task_request, agent_output, and usage stats —
+    enough for the dashboard to render an inspectable list with
+    "delete" affordances.
+    """
+    conn = echo_db.get_echo_conn()
+    if skill_id:
+        rows = conn.execute(
+            "SELECT example_id, task_request, agent_output, rating, "
+            "       skill_id, task_type_tag, created_at, last_used_at, "
+            "       use_count, composite_score "
+            "FROM echo_preference_example "
+            "WHERE rating >= ? AND skill_id = ? "
+            "ORDER BY composite_score DESC NULLS LAST, created_at DESC "
+            "LIMIT ?",
+            (min_rating, skill_id, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT example_id, task_request, agent_output, rating, "
+            "       skill_id, task_type_tag, created_at, last_used_at, "
+            "       use_count, composite_score "
+            "FROM echo_preference_example "
+            "WHERE rating >= ? "
+            "ORDER BY composite_score DESC NULLS LAST, created_at DESC "
+            "LIMIT ?",
+            (min_rating, limit),
+        ).fetchall()
+    return {"preferences": _rows_to_dicts(rows)}
+
+
+@router.delete("/preferences/{example_id}")
+def delete_preference(example_id: int):
+    """Remove a preference example.
+
+    Idempotent — deleting an already-gone row returns deleted=false
+    rather than a 404, so the UI can refresh-after-delete without
+    racing against a parallel deletion.
+    """
+    conn = echo_db.get_echo_conn()
+    cur = conn.execute(
+        "DELETE FROM echo_preference_example WHERE example_id = ?",
+        (example_id,),
+    )
+    conn.commit()
+    return {"deleted": cur.rowcount > 0, "example_id": example_id}
+
+
 @router.get("/scope/pending")
 def list_pending_scopes(limit: int = Query(50, ge=1, le=200)):
     """Skills whose scope_level is still 'unknown' — needing user input.

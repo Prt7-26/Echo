@@ -315,3 +315,111 @@ class TestFeedback:
             json={"skill_id": "", "rating": 1},
         )
         assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# GET /preferences and DELETE /preferences/{id}
+# ---------------------------------------------------------------------------
+
+
+def _seed_pref(conn, *, task_request: str, agent_output: str, rating: int,
+               skill_id=None, composite_score=None, created_at=None):
+    import time as _t
+
+    if created_at is None:
+        created_at = _t.time()
+    cur = conn.execute(
+        "INSERT INTO echo_preference_example "
+        "(task_request, task_embedding, agent_output, rating, skill_id, "
+        " created_at, last_used_at, use_count, composite_score) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
+        (task_request, b"\x00" * 1024, agent_output, rating, skill_id,
+         created_at, None, composite_score),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+class TestListPreferences:
+    def test_empty_db(self, client):
+        r = client.get("/api/plugins/echo_signals/preferences")
+        assert r.status_code == 200
+        assert r.json() == {"preferences": []}
+
+    def test_returns_examples(self, client):
+        conn = echo_db.get_echo_conn()
+        eid = _seed_pref(
+            conn,
+            task_request="summarize this paper",
+            agent_output="Summary…",
+            rating=5,
+            skill_id="research",
+            composite_score=5.0,
+        )
+        r = client.get("/api/plugins/echo_signals/preferences")
+        rows = r.json()["preferences"]
+        assert len(rows) == 1
+        assert rows[0]["example_id"] == eid
+        assert rows[0]["task_request"] == "summarize this paper"
+        assert rows[0]["rating"] == 5
+
+    def test_sorted_by_composite_desc(self, client):
+        conn = echo_db.get_echo_conn()
+        _seed_pref(conn, task_request="low",  agent_output="x",
+                   rating=4, composite_score=1.0)
+        _seed_pref(conn, task_request="high", agent_output="x",
+                   rating=5, composite_score=9.0)
+        _seed_pref(conn, task_request="mid",  agent_output="x",
+                   rating=4, composite_score=5.0)
+        r = client.get("/api/plugins/echo_signals/preferences")
+        tasks = [p["task_request"] for p in r.json()["preferences"]]
+        assert tasks == ["high", "mid", "low"]
+
+    def test_skill_filter(self, client):
+        conn = echo_db.get_echo_conn()
+        _seed_pref(conn, task_request="a", agent_output="x", rating=5,
+                   skill_id="alpha", composite_score=5.0)
+        _seed_pref(conn, task_request="b", agent_output="x", rating=5,
+                   skill_id="beta", composite_score=5.0)
+        r = client.get("/api/plugins/echo_signals/preferences?skill_id=alpha")
+        tasks = [p["task_request"] for p in r.json()["preferences"]]
+        assert tasks == ["a"]
+
+    def test_min_rating_filter(self, client):
+        conn = echo_db.get_echo_conn()
+        _seed_pref(conn, task_request="low", agent_output="x", rating=3,
+                   composite_score=3.0)
+        _seed_pref(conn, task_request="high", agent_output="x", rating=5,
+                   composite_score=5.0)
+        r = client.get("/api/plugins/echo_signals/preferences?min_rating=5")
+        tasks = [p["task_request"] for p in r.json()["preferences"]]
+        assert tasks == ["high"]
+
+    def test_limit(self, client):
+        conn = echo_db.get_echo_conn()
+        for i in range(5):
+            _seed_pref(conn, task_request=f"t{i}", agent_output="x",
+                       rating=5, composite_score=float(i))
+        r = client.get("/api/plugins/echo_signals/preferences?limit=2")
+        assert len(r.json()["preferences"]) == 2
+
+
+class TestDeletePreference:
+    def test_deletes_existing(self, client):
+        conn = echo_db.get_echo_conn()
+        eid = _seed_pref(conn, task_request="t", agent_output="x", rating=5)
+        r = client.delete(f"/api/plugins/echo_signals/preferences/{eid}")
+        assert r.status_code == 200
+        assert r.json() == {"deleted": True, "example_id": eid}
+        # Row gone.
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM echo_preference_example WHERE example_id=?",
+            (eid,),
+        ).fetchone()["n"]
+        assert n == 0
+
+    def test_delete_missing_returns_deleted_false(self, client):
+        echo_db.get_echo_conn()  # bootstrap
+        r = client.delete("/api/plugins/echo_signals/preferences/99999")
+        assert r.status_code == 200
+        assert r.json() == {"deleted": False, "example_id": 99999}

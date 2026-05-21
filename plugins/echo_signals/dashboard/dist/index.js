@@ -414,6 +414,200 @@
   }
 
   // ---------------------------------------------------------------------
+  // Widget 5 — M1 candidate queue (nominated skill-worthy invocations)
+  // ---------------------------------------------------------------------
+
+  function CandidateQueue({ refreshKey }) {
+    const [candidates, setCandidates] = useState(null);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+      setError(null);
+      apiGet("/candidates?limit=10")
+        .then((d) => setCandidates(d.candidates || []))
+        .catch((e) => setError(e.message || String(e)));
+    }, [refreshKey]);
+
+    const body = (() => {
+      if (error) return h(ErrorBlock, { message: error });
+      if (candidates === null) return h(LoadingBlock);
+      if (candidates.length === 0)
+        return h(EmptyBlock, {
+          message:
+            "No skill candidates yet. Echo nominates invocations as " +
+            "skill-worthy when the user expresses save intent, runs ≥ 5 " +
+            "tool calls, or iterates ≥ 3 user turns.",
+        });
+
+      return h("ul", { className: "space-y-2" },
+        candidates.map((c) => h("li", {
+          key: c.invocation_id,
+          className: "p-3 border border-zinc-800 rounded space-y-1",
+        },
+          h("div", { className: "flex items-center justify-between" },
+            h("div", { className: "flex items-center gap-2" },
+              h("span", {
+                className:
+                  "inline-flex items-center px-2 py-0.5 rounded-full " +
+                  "text-xs font-medium border bg-violet-900/40 text-violet-300 border-violet-700/50",
+              }, "score " + c.score),
+              h("span", { className: "font-mono text-sm text-zinc-200" }, c.skill_id || "(unattributed)"),
+            ),
+            h("span", { className: "text-xs text-zinc-500 tabular-nums" },
+              "inv#" + c.invocation_id,
+            ),
+          ),
+          h("ul", { className: "text-xs text-zinc-400 list-disc pl-5" },
+            c.reasons.map((r, i) => h("li", { key: i }, r)),
+          ),
+          h("div", { className: "text-xs text-zinc-500 tabular-nums" },
+            "user turns: ", c.user_turns,
+            "  ·  tool calls: ", c.tool_calls,
+            c.has_save_intent ? "  ·  save intent ✓" : "",
+          ),
+        )),
+      );
+    })();
+
+    return h(C.Card, null,
+      h(C.CardHeader, null, h(C.CardTitle, null, "Skill Candidates (M1)")),
+      h(C.CardContent, null, body),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // Widget 6 — M5 preference library browser (with per-row delete)
+  // ---------------------------------------------------------------------
+
+  function PreferenceLibrary({ refreshKey }) {
+    const [prefs, setPrefs] = useState(null);
+    const [error, setError] = useState(null);
+    const [expandedId, setExpandedId] = useState(null);
+    const [deleting, setDeleting] = useState(null);
+
+    const reload = useCallback(() => {
+      apiGet("/preferences?limit=50")
+        .then((d) => setPrefs(d.preferences || []))
+        .catch((e) => setError(e.message || String(e)));
+    }, []);
+
+    useEffect(() => {
+      setError(null);
+      reload();
+    }, [refreshKey, reload]);
+
+    const deletePref = useCallback((eid) => {
+      setDeleting(eid);
+      fetchJSON("/api/plugins/echo_signals/preferences/" + eid, {
+        method: "DELETE",
+      })
+        .then(() => {
+          setPrefs((cur) => (cur || []).filter((p) => p.example_id !== eid));
+        })
+        .catch((e) => setError(e.message || String(e)))
+        .finally(() => setDeleting(null));
+    }, []);
+
+    if (error) return h(C.Card, null,
+      h(C.CardHeader, null, h(C.CardTitle, null, "Preference Library (M5)")),
+      h(C.CardContent, null, h(ErrorBlock, { message: error })),
+    );
+    if (prefs === null) return h(C.Card, null,
+      h(C.CardHeader, null, h(C.CardTitle, null, "Preference Library (M5)")),
+      h(C.CardContent, null, h(LoadingBlock)),
+    );
+
+    if (prefs.length === 0)
+      return h(C.Card, null,
+        h(C.CardHeader, null, h(C.CardTitle, null, "Preference Library (M5)")),
+        h(C.CardContent, null, h(EmptyBlock, {
+          message:
+            "No preferences saved yet. Thumbs-up an agent reply (in the " +
+            "chat bar at the bottom) to teach Echo what you like — Echo " +
+            "will surface similar past examples as few-shots on similar " +
+            "future requests.",
+        })),
+      );
+
+    const fmtTime = (ts) => {
+      if (!ts) return "—";
+      try { return new Date(ts * 1000).toLocaleString(); }
+      catch { return String(ts); }
+    };
+
+    return h(C.Card, null,
+      h(C.CardHeader, null,
+        h(C.CardTitle, null,
+          "Preference Library (M5) · ",
+          h("span", { className: "text-zinc-400 text-base" }, prefs.length),
+        ),
+      ),
+      h(C.CardContent, null,
+        h("ul", { className: "space-y-2" },
+          prefs.map((p) => {
+            const expanded = expandedId === p.example_id;
+            return h("li", {
+              key: p.example_id,
+              className: "p-3 border border-zinc-800 rounded",
+            },
+              h("div", { className: "flex items-start justify-between gap-3" },
+                h("div", { className: "flex-1 min-w-0" },
+                  h("div", { className: "flex items-center gap-2 mb-1" },
+                    h("span", {
+                      className:
+                        "inline-flex items-center px-2 py-0.5 rounded-full " +
+                        "text-xs font-medium border bg-emerald-900/40 " +
+                        "text-emerald-300 border-emerald-700/50",
+                    }, "★ " + p.rating + "/5"),
+                    p.skill_id ? h("span", { className: "font-mono text-xs text-zinc-300" }, p.skill_id) : null,
+                    h("span", { className: "text-xs text-zinc-500" },
+                      "used " + p.use_count + "×",
+                    ),
+                  ),
+                  h("div", {
+                    className: cn(
+                      "text-sm text-zinc-200",
+                      !expanded && "line-clamp-1 truncate",
+                    ),
+                  }, p.task_request),
+                  expanded
+                    ? h("div", { className: "mt-2 text-xs text-zinc-400 whitespace-pre-wrap" },
+                        h("div", { className: "text-zinc-500 uppercase text-xs mb-1" }, "Reply"),
+                        p.agent_output,
+                      )
+                    : null,
+                  expanded
+                    ? h("div", { className: "mt-2 text-xs text-zinc-500" },
+                        "Created " + fmtTime(p.created_at),
+                        p.last_used_at ? " · last used " + fmtTime(p.last_used_at) : "",
+                      )
+                    : null,
+                ),
+                h("div", { className: "flex flex-col gap-1 shrink-0" },
+                  h("button", {
+                    className: "px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 border border-zinc-800 rounded",
+                    onClick: () => setExpandedId(expanded ? null : p.example_id),
+                  }, expanded ? "Collapse" : "Expand"),
+                  h("button", {
+                    className: cn(
+                      "px-2 py-1 text-xs rounded border",
+                      "border-rose-900/50 text-rose-400 hover:bg-rose-950/30",
+                      deleting === p.example_id && "opacity-50 pointer-events-none",
+                    ),
+                    disabled: deleting === p.example_id,
+                    onClick: () => deletePref(p.example_id),
+                    title: "Forget this preference",
+                  }, deleting === p.example_id ? "…" : "Delete"),
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------
   // Page composition
   // ---------------------------------------------------------------------
 
@@ -452,6 +646,11 @@
             onClose: () => setSelectedSkillId(null),
           })
         : null,
+      // Two-column responsive layout for the lower row
+      h("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-4" },
+        h(CandidateQueue, { refreshKey }),
+        h(PreferenceLibrary, { refreshKey }),
+      ),
       // Recent invocations full-width at the bottom
       h(RecentInvocations, { refreshKey }),
     );
