@@ -75,7 +75,11 @@ Hermes is three user-facing surfaces (CLI, TUI, multi-platform Gateway) all funn
 
 - ✅ **Step 1**: SQLite schema — [plugins/echo_signals/schema.py](plugins/echo_signals/schema.py), 15 unit tests, zero regressions on Hermes plugin discovery tests.
 - ✅ **Step 2**: Plugin wired into Hermes lifecycle. Monkey-patch over `tools.skill_usage.bump_use` writes `echo_skill_invocation` rows attributed to the active session (carried via contextvars from `on_session_start` hook). Lazy DB connection in [plugins/echo_signals/db.py](plugins/echo_signals/db.py) — schema is created on first hook fire, not at plugin load. 38 Echo tests + 69 Hermes plugin discovery tests, all passing.
-- ⬜ **Step 3**: First real Layer A signal collection (`modification_round_count`, `tool_exit_code`) via `pre_llm_call` / `post_llm_call` / `post_tool_call` hooks, written to `echo_signal_event`.
+- ✅ **Step 3**: Layer A signal collection wired up. Three event types written to `echo_signal_event`:
+   - `user_turn` — one row per `pre_llm_call` with `turn_type='user'`. `modification_round_count` is `COUNT(*)` over this.
+   - `tool_call` — one row per `post_tool_call`, with `value_text=tool_name`. Success/error parsing deferred to Step 4.
+   - `session_ended` — one row at `on_session_end` while a skill was still active.
+   Last-skill-wins attribution via `_current_invocation_id` contextvar (set by `bump_use` wrapper, read by each collector). 51 Echo tests + 69 Hermes regression, all passing.
 - ⬜ **Step 4**: Confidence-update logic (M4) reading the signal stream.
 - ⬜ **Step 5**: Web Dashboard plugin under `web/src/plugins/echo/`.
 - ⬜ **Step 6**: Tauri shell wrapping the Dashboard, exposing clipboard + window-focus IPC.
