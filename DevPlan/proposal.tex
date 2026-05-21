@@ -1,0 +1,692 @@
+% !TeX program = xelatex
+\documentclass[12pt,a4paper]{article}
+
+% =========================================================
+% 0) XeLaTeX + 中英文兼容（英文默认 Times New Roman）
+% =========================================================
+\usepackage{iftex}
+\ifXeTeX\else
+\errmessage{This template requires XeLaTeX. Please compile with XeLaTeX.}
+\fi
+
+\usepackage{fontspec}
+\usepackage{xeCJK}
+
+\IfFontExistsTF{Times New Roman}{%
+	\setmainfont{Times New Roman}%
+}{%
+	\setmainfont{TeX Gyre Termes}%
+}
+\IfFontExistsTF{Arial}{\setsansfont{Arial}}{\setsansfont{TeX Gyre Heros}}
+\IfFontExistsTF{Menlo}{\setmonofont{Menlo}}{\setmonofont{Latin Modern Mono}}
+
+\IfFontExistsTF{Songti SC}{\setCJKmainfont{Songti SC}}{
+	\IfFontExistsTF{STSong}{\setCJKmainfont{STSong}}{
+		\IfFontExistsTF{PingFang SC}{\setCJKmainfont{PingFang SC}}{
+			\IfFontExistsTF{Hiragino Sans GB}{\setCJKmainfont{Hiragino Sans GB}}{
+				\IfFontExistsTF{Noto Serif CJK SC}{\setCJKmainfont{Noto Serif CJK SC}}{
+					\IfFontExistsTF{Source Han Serif SC}{\setCJKmainfont{Source Han Serif SC}}{
+						\setCJKmainfont{FandolSong-Regular}
+					}
+				}
+			}
+		}
+	}
+}
+\IfFontExistsTF{PingFang SC}{\setCJKsansfont{PingFang SC}}{}
+\IfFontExistsTF{STHeiti}{\setCJKsansfont{STHeiti}}{}
+\IfFontExistsTF{Songti SC}{\setCJKmonofont{Songti SC}}{}
+
+% =========================================================
+% 1) 页面布局 & 排版
+% =========================================================
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{microtype}
+\usepackage{setspace}
+\setstretch{1.25}
+\usepackage{indentfirst}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.3em}
+
+% =========================================================
+% 2) 数学 & 符号
+% =========================================================
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{bm}
+
+% =========================================================
+% 3) 颜色 & 图形
+% =========================================================
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+
+% =========================================================
+% 4) 表格
+% =========================================================
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{array}
+
+% =========================================================
+% 5) 列表 & 引用 & 杂项
+% =========================================================
+\usepackage{enumitem}
+\setlist{noitemsep,topsep=0.3em}
+
+\usepackage{url}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+
+% =========================================================
+% 6) 超链接
+% =========================================================
+\usepackage{hyperref}
+\hypersetup{
+	colorlinks=true,
+	linkcolor=blue,
+	urlcolor=blue,
+	citecolor=blue,
+	bookmarksnumbered=true,
+	bookmarksopen=true,
+	pdfencoding=auto
+}
+
+\usepackage[capitalize,noabbrev]{cleveref}
+
+% =========================================================
+% 7) 文档信息
+% =========================================================
+
+\title{\textbf{Breaking the Self-Evaluation Loop:\\Echo --- User-Signal-Driven Skill Lifecycle Management\\for LLM Agents}}
+\author{
+	Lingchao Nie \quad [20243111022] \\
+	Fanghui Xu \quad [20233141020] \\
+	Yuqing Zhou \quad [20243111017] \\ \\
+	Westlake University \\
+	\texttt{nielingchao@westlake.edu.cn}
+}
+\date{\today}
+
+\begin{document}
+	\maketitle
+	
+	\begin{quote}
+		\small\textit{%
+			本 proposal 记录了我们当前阶段的设计思路与初步方案。
+			在后续实现和实验过程中，具体的技术方案、评估指标和时间安排可能会根据实际情况进行调整。}
+	\end{quote}
+	
+	% ============================================================
+	\section{Problem Statement}
+	% ============================================================
+	
+	近年来，以 Hermes Agent~\cite{hermes_agent}（GitHub 87K 星标）和
+	OpenClaw~\cite{openclaw}（358K 星标）为代表的自托管 LLM 智能体框架正在快速发展。
+	这类框架允许用户在自己的设备上运行一个持久化的 AI 助手，
+	通过 Telegram、Discord、Slack 等日常通讯工具与之交互，
+	并让助手自动执行任务、调用工具、管理记忆。
+	
+	两个框架的架构风格有所不同。
+	如\cref{fig:openclaw_arch} 所示，OpenClaw 采用以 Gateway 为中心的控制平面架构，
+	所有消息路由、会话管理、工具调度都由 Gateway 统一协调，
+	agent 作为被调度的执行组件运行。
+	如\cref{fig:hermes_arch} 所示，Hermes Agent 则以 AIAgent Loop 为中心，
+	Gateway 只负责消息转发，核心的推理、工具调用、技能创建和自我评估
+	都在 agent 的执行循环内完成。
+	
+	\begin{figure}[H]
+		\centering
+		\includegraphics[width=\textwidth]{claw.png}
+		\caption{OpenClaw 架构。采用以 Gateway 为中心的控制平面设计，
+			所有消息经过 Channel Adapter 层规范化后进入 Gateway，
+			由 Gateway 统一管理会话路由、多 agent 分发和审批流程，
+			再将任务分派给 Agent Runtime 执行。
+			回复沿原路返回，模型不能自行选择发送通道。}
+		\label{fig:openclaw_arch}
+	\end{figure}
+	
+	\begin{figure}[H]
+		\centering
+		\includegraphics[width=\textwidth]{hermes.png}
+		\caption{Hermes Agent 架构。以 AIAgent Loop 为中心，
+			Gateway 仅负责消息路由。执行循环内部包含推理、工具调用、自我评估和技能创建，
+			形成一个 closed learning loop（红色虚线）。
+			新生成的技能会反馈回 agent 自身，使其在后续任务中复用已学到的工作流。
+			然而，由于自我评估由同一个 LLM 完成且几乎总是判定为成功，
+			错误的工作流也会被编码为技能并持续传播。}
+		\label{fig:hermes_arch}
+	\end{figure}
+	
+	Hermes Agent 相对于 OpenClaw 以及其他主流 agent 框架最核心的差异化特性在于
+	其 closed learning loop：当 agent 完成一个复杂任务后，
+	会自动评估执行结果，并将被判定为``成功''的工作流编码为持久化的 Markdown 技能文件。
+	下次遇到相似任务时，agent 会通过全文搜索匹配到已有技能并自动加载复用。
+	OpenClaw 的技能系统则主要依赖人工编写和社区共享（通过 ClawHub 市场），
+	不具备从任务执行中自动提取和进化技能的能力。
+	
+	然而，Hermes Agent 的这一学习循环存在三个层次的根本性缺陷。
+	
+	\paragraph{缺陷 1：自评估的同源偏差}
+	技能创建的前提是 agent 判定``任务成功了''，
+	但这一判定由执行任务的同一个 LLM 做出，且几乎总是给出肯定的结论。
+	Huang et al.~\cite{huang2024selfcorrect} 已从理论和实验两方面论证，
+	LLM 在缺乏外部反馈的条件下无法可靠地自我修正推理错误。
+	Hermes Agent 的独立安全审计~\cite{hermes_audit}
+	进一步确认了这一问题的严重性，
+	报告指出 LLM 可以在完全没有外部校验的条件下创建和执行持久化技能，
+	这被列为四项严重（Critical）漏洞之一。
+	从本质上看，这是 sycophancy 问题的一种变体，
+	只不过 agent 谄媚的对象不是用户，而是自己的输出。
+	更值得注意的是，当用户对 agent 的输出没有做出任何反馈时（即``沉默接受''），
+	Hermes 会将这种沉默直接解释为``成功''，进一步加剧了错误技能的固化。
+	
+	\paragraph{缺陷 2：技能创建机制的覆盖盲区}
+	Hermes 目前的技能创建触发条件要求一次任务中至少包含 5 次工具调用，
+	其隐含假设是``任务复杂度等同于工具调用次数''。
+	然而，在实际使用中存在大量工具调用很少但认知密度很高的任务，
+	例如撰写会议纪要、起草周报邮件、翻译特定领域的文档等。
+	这些任务往往有高度个性化的格式和风格要求，复用频率也远超那些涉及多个工具的复杂任务，
+	但在现有的触发条件下它们永远不会被编码为技能。
+	
+	\paragraph{缺陷 3：技能没有适用边界}
+	已创建的技能只记录了执行步骤（即``怎么做''），
+	却没有记录适用条件和排除条件（即``什么时候该用、什么时候不该用''）。
+	这会导致语义相似但实际要求截然不同的任务之间发生错误匹配。
+	举例来说，agent 在帮用户写 Instagram 营销文案时学到的技能
+	会包含使用 emoji、口语化短句、强调视觉冲击力、加 hashtag 等做法，
+	当用户转而写 Google Ads 搜索广告时，
+	这个技能会因为语义检索相似度极高（两者都属于``写营销文案''）而被自动加载，
+	但 Google Ads 要求的是精简关键词、严格字符限制和 CTA 导向的风格，
+	与 Instagram 的写法完全相反。
+	由于技能缺乏对适用范围的显式描述，
+	系统无法判断同一类任务在不同平台或不同场景下需要的执行策略可能截然不同。
+	
+	现有的技能和记忆管理系统已经注意到了质量退化的问题，
+	并引入了不同形式的衰减机制~\cite{agentmemory, oc_memory_tools}。
+	但这些系统的衰减信号仍然完全来自 agent 内部，
+	例如时间流逝、访问频率或 agent 自行赋予的置信度分数。
+	这意味着一个错误但恰好被频繁匹配到的技能，反而会因为``高访问频率''而被持续强化。
+	OpenClaw-RL~\cite{openclaw_rl} 引入了来自用户回复和工具输出的 next-state 信号
+	作为外部校验源，在方向上是正确的，
+	但由于它将所有信号用于模型权重更新，
+	需要完整的 GPU 训练基础设施（Megatron + SGLang），
+	对绝大多数通过 API 使用闭源模型的用户来说并不可用。
+	
+	针对上述三个缺陷，本项目提出 \textbf{Echo}，
+	一个基于用户行为信号的技能生命周期管理系统。
+	Echo 同时是一个可独立运行的 agent 框架，
+	也可以作为对 Hermes Agent 或 OpenClaw 已有架构的针对性增强。
+	针对缺陷 1（自评估同源偏差），Echo 引入了三层用户信号驱动的置信度管理机制，
+	用外部行为证据替代 agent 的自我判断；
+	针对缺陷 2（创建覆盖盲区），Echo 将单一的工具调用阈值替换为多信号并行触发机制；
+	针对缺陷 3（适用边界缺失），Echo 在技能创建时通过轻量级的用户交互确定技能的适用范围。
+	贯穿整个设计的核心原则是：
+	\textbf{技能质量的判断不再依赖 agent 的内省能力，而由用户行为信号的统计分布驱动。}
+	
+	
+	% ============================================================
+	\section{Related Work}
+	% ============================================================
+	
+	本节介绍与 Echo 最密切相关的三项工作，
+	然后从信号来源、评估粒度、运行成本和对沉默接受问题的处理等维度，
+	对现有系统进行横向对比。
+	
+	\subsection{Agent 记忆与技能管理}
+	
+	\paragraph{agentmemory~\cite{agentmemory}}
+	是一个开源的 MCP 记忆管理工具，已在 Claude Code、Cursor 和 OpenClaw 中部署。
+	它的核心机制是基于 Ebbinghaus 遗忘曲线的记忆衰减，
+	其中频繁访问的记忆会被强化，长时间未被使用的记忆自动淘汰，
+	冲突条目会被检测并解决。
+	该系统的主要局限在于衰减信号完全来自 agent 内部。
+	由于``频繁访问''被等同于``质量好''，
+	一个被频繁调用的错误技能反而会因为高访问频率而被持续强化，
+	这与 Hermes 的退化循环在本质上是同一个问题。
+	
+	\paragraph{MemSkill~\cite{memskill}}
+	将 agent 的记忆操作重新表述为可学习、可进化的记忆技能，
+	即从交互轨迹中提取、整合和修剪信息的结构化可复用例程。
+	该系统包含一个 designer 组件，
+	能够定期审查那些产生了错误或不完整记忆的困难案例，
+	并据此提出技能改进方案或引入新技能。
+	但 MemSkill 与 OpenClaw-RL 面临共同的局限：
+	两者都依赖 GPU 基础设施完成模型训练
+	（MemSkill 需要 RL 训练 controller，OpenClaw-RL 需要 Megatron + SGLang），
+	对通过 API 调用闭源模型的用户均不可用。
+	此外，MemSkill 的信号粒度为 per-task outcome，
+	无法区分``技能没被选对''和``技能本身有问题''这两种不同的失败原因。
+	
+	\paragraph{OpenClaw-RL~\cite{openclaw_rl}}
+	提出将 agent 每次行动后产生的 next-state 信号（包括用户回复、工具输出、
+	exit code 和 GUI 状态变化）作为统一的在线学习源。
+	通过 Binary RL 和 Hindsight-Guided On-Policy Distillation（OPD）两种方法，
+	分别从 next-state 中恢复评估性信号（该动作好还是坏）
+	和指导性信号（该动作应该如何不同）。
+	如前所述，该系统同样依赖完整的 GPU 训练基础设施做权重更新，
+	并且其 PRM judge 本身仍然是一个 LLM，同源偏差并未被根本消除。
+	
+	\subsection{评估信号的横向对比}
+	
+	在对比不同系统的评估机制时，有两个维度值得特别关注。
+	第一个是\textbf{评估粒度}：
+	现有系统的评估大多作用于单次任务或单条记忆，
+	而技能质量的退化往往是一个渐进的过程，
+	需要在多次调用的统计分布上才能可靠地检测到。
+	第二个是\textbf{沉默接受问题}：
+	当用户对 agent 的输出没有做出任何反馈时，
+	系统应当如何解读这种沉默？
+	如\cref{tab:comparison} 所示，
+	大多数现有系统将沉默解释为正面信号（成功或强化），
+	这会导致错误技能在用户不知情的情况下持续固化。
+	
+	\begin{table}[H]
+		\centering
+		\small
+		\renewcommand{\arraystretch}{1.3}
+		\caption{现有系统与 Echo 的评估信号对比}
+		\label{tab:comparison}
+		\begin{tabular}{@{}p{2cm}p{1.5cm}p{3.8cm}p{1.5cm}p{1.5cm}p{2.5cm}@{}}
+			\toprule
+			\textbf{系统} & \textbf{信号来源} & \textbf{具体信号} & \textbf{粒度} & \textbf{额外开销} & \textbf{沉默接受} \\
+			\midrule
+			Hermes 自评估 & 内生 & 同一 LLM 对自身输出内省 & 每次任务 & 零 & 沉默$=$成功 \\
+			agentmemory & 内生 & 时间流逝、访问频率、遗忘曲线 & 每条记忆 & 零 & 频繁访问$=$强化 \\
+			OC memory-tools & 内生 & agent 赋值的 confidence & 每条记忆 & 零 & agent 自定 \\
+			MemSkill & 内生 & 任务结果 RL 奖励 & 每个技能 & 高(GPU) & 依赖结果标签 \\
+			OpenClaw-RL & 混合 & next-state: 用户回复、工具输出 & 每轮/token & 高(GPU) & PRM 推断 \\
+			LLM-as-Judge & 内生 & 独立 LLM 打分 & 每次任务 & ${\sim}$2x token & 只看文本 \\
+			\midrule
+			\textbf{Echo} & \textbf{外生为主} & \textbf{行为信号 + 用户语言 + 按需 judge} & \textbf{技能(分布)} & \textbf{近零$\sim$按需} & \textbf{沉默不强化} \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	Echo 与上述工作的核心差异体现在三个方面。
+	首先，Echo 的信号来源以外生为主，
+	原始信号来自用户的真实行为和自然语言反馈，
+	其中部分自然语言反馈需要轻量级的 LLM 分类来转化为结构化信号，
+	但这个分类任务的对象是用户的话，而非 agent 自身的输出，因此不存在同源偏差。
+	其次，Echo 明确将沉默定义为中性事件：
+	当用户没有做出任何反馈时，技能的置信度既不增长也不衰减，
+	从而打破了``频繁使用就意味着质量好''这一错误的隐含假设。
+	最后，Echo 的运行成本接近于零，
+	因为行为信号的采集在 Gateway 的 adapter 层完成，不需要额外的模型推理，
+	而 LLM judge 仅在行为分布偏移触发告警后才启动，
+	使得 Echo 成为目前唯一对 API 用户和消费级硬件用户均可用的方案。
+	
+	
+	% ============================================================
+	\section{Proposed Method}
+	% ============================================================
+	
+	\subsection{系统总体架构}
+	
+	Echo 是一个完整的、可独立运行的 agent 框架，
+	同时也被设计为可以直接增强 Hermes Agent 或 OpenClaw 的已有架构。
+	两类框架共有的三层架构（聊天平台 $\to$ Gateway 控制平面 $\to$ Agent 执行循环）
+	在 Echo 中被完整保留，Echo 在其中三个关键位置插入了新的模块。
+	
+	\begin{figure}[H]
+		\centering
+		\includegraphics[width=\textwidth]{echo.png}
+		\caption{Echo 系统架构。灰色部分为 Hermes/OpenClaw 已有的组件，保持不变。
+			橙色模块（M1 自适应创建触发、M2 适用范围确认）位于 Agent 执行循环内部，
+			负责技能创建阶段的改进。
+			绿色模块（M3 三层用户信号采集）分布在 Gateway adapter 层和执行循环出口，
+			持续捕获用户的行为数据和语言反馈。
+			紫色模块（M4 置信度衰减引擎、M5 偏好库）与技能库并行运行，
+			负责技能的运行时质量监控和检索增强。
+			绿色虚线表示用户信号的流动路径：
+			从 adapter 层采集行为 → 建立 per-skill 行为基线 → 检测分布偏移 →
+			触发 judge 诊断 → 更新技能置信度。}
+		\label{fig:echo_arch}
+	\end{figure}
+	
+	如\cref{fig:echo_arch} 所示，Echo 的五个新模块按其在技能生命周期中的作用分为三组。
+	在技能创建阶段，Module 1（自适应创建触发）和 Module 2（适用范围确认）
+	替换了 Hermes 原有的单一工具调用阈值，解决缺陷 2 和缺陷 3。
+	在信号采集层，Module 3（三层用户信号）在 Gateway adapter 层和执行循环出口
+	持续采集用户的行为数据和语言反馈，为后续的质量判断提供外部证据。
+	在技能管理层，Module 4（置信度衰减引擎）和 Module 5（检索增强偏好库）
+	与技能库并行运行，前者负责基于用户信号更新技能的置信度并管理其生命周期，
+	后者维护一个用户认证过的优质输出库以支持检索增强的个性化。
+	
+	以下逐一介绍各模块。
+	
+	\subsection{Module 1: 自适应技能创建触发}
+	\textit{（解决缺陷 2：技能创建的覆盖盲区）}
+	
+	Echo 将 Hermes 的单一触发条件替换为四个并行条件，
+	它们之间是 OR 关系，任意一个满足即可触发技能创建流程。
+	第一，用户显式请求：当用户直接说``把这个流程存下来''或``记住这个写法''时，
+	无需任何启发式判断，直接进入创建流程。
+	第二，任务相似度复现：如果系统检测到用户在过去 $N$ 天内发出过语义高度相似的请求
+	（通过 embedding 余弦相似度判断），
+	说明这是一个反复出现的需求，即使单次执行很简单，也值得编码为技能。
+	第三，用户投入了大量编辑精力：
+	当同一任务内的交互轮数较多、且最终输出与初稿的编辑距离较大时，
+	说明这个任务存在高度个性化的``正确答案''，值得将最终版本的模式保存下来。
+	第四，过程复杂度高：保留 Hermes 原有的 $\geq 5$ 次工具调用条件，
+	作为四个并行条件中的一个。
+	
+	\subsection{Module 2: 适用范围确认}
+	\textit{（解决缺陷 3：技能没有适用边界）}
+	
+	当技能创建被触发后，Echo 不会立即存储技能，
+	而是向用户提出一个简短的二元选择题，用以确定这个技能在未来应该被多广泛地复用。
+	例如：
+	
+	\begin{quote}
+		\textit{我把这次写 Instagram 营销文案的流程存为了一个技能。
+			下次你写其他平台的营销文案时，我应该：\\
+			A) 直接复用这套写法 \\
+			B) 只参考大体思路，具体风格重新来}
+	\end{quote}
+	
+	如果用户选择 A，技能将被整体存储，并标记为适用范围较宽。
+	如果用户选择 B，技能会被拆分为两层：
+	一层是可跨场景泛化的方法论（例如``先分析目标受众再动笔''），
+	另一层是与当前场景绑定的具体操作（例如``加 emoji、用 hashtag、口语化短句''），
+	同时将当前场景的条件作为适用范围记录下来。
+	
+	这一机制只在技能创建触发时弹出，频率很低，对用户几乎没有额外负担。
+	同时，用户的选择本身就构成了一个高质量的外部信号，
+	直接告诉系统这个技能应该在多大范围内被复用。
+	
+	\subsection{Module 3: 三层用户信号采集与融合}
+	\textit{（解决缺陷 1：自评估的同源偏差）}
+	
+	Echo 在 Gateway 的 adapter 层采集用户信号，
+	并按照成本和可靠性将其组织为三个层次。
+	
+	\paragraph{Layer A：纯行为信号}
+	这一层不涉及任何 LLM 推理，采集成本为零，且持续运行。
+	具体包括：agent 输出是否被用户复制，复制后的编辑距离有多大，
+	同一任务内用户要求修改了多少轮，用户是否换了一种说法重新提出同一个请求，
+	会话是否在 agent 输出后立刻结束，以及工具执行的 exit code 等。
+	对于每个技能，系统会维护一个行为基线分布，
+	记录该技能在正常使用状态下的各项行为指标。
+	后续每次该技能被调用时，系统不对单次行为做判断，
+	而是检测当前滑动窗口的行为分布是否偏离了基线。
+	这一设计的核心思路是将噪声极大的单次行为分类问题
+	转化为噪声容忍度高得多的分布偏移检测问题。
+	
+	\paragraph{Layer B：用户语言信号}
+	这一层在技能执行完成的时间点采集，需要一个轻量级的 LLM 分类器。
+	具体包括：用户的显式评分（如 thumbs up/down），
+	以及用户自然语言反馈中包含的满意或不满意信号
+	（例如``太棒了''会被分类为正面，``这不对''会被分类为负面）。
+	这些信号的来源是外生的（来自用户的真实表达），
+	但对其的解读需要 LLM 进行情感分类。
+	与 Hermes 自评估的本质区别在于：
+	这里 LLM 要做的是判断用户说的一句话是正面还是负面（一个相对简单、不涉及自我判断的分类任务），
+	而不是评判 agent 自己生成的输出是否正确（一个困难且存在严重同源偏差的任务）。
+	
+	\paragraph{Layer C：按需 LLM Judge 诊断}
+	这一层仅在 Layer A 检测到行为分布偏移超过阈值时才会启动，运行频率极低。
+	启动后，系统会使用一个与主 agent 不同系列的模型作为 judge，
+	以避免同源偏差，并参考 OpenClaw-RL~\cite{openclaw_rl} 的 PRM 多次投票机制来降低噪声。
+	Judge 的诊断结果不仅包含``技能质量下降''的判断，
+	还可以进一步细化为``该技能在当前特定场景下不适用''，
+	并将这一失败场景追加到技能的排除条件列表中。
+	
+	三层信号的融合逻辑如下：
+	Layer A 持续在后台运行，采集成本为零；
+	Layer B 在每次技能执行完成时采集，成本很低；
+	Layer C 仅在 Layer A 触发告警后才启动，成本较高但发生频率极低。
+	通过这种分层设计，系统的日常运行开销接近于零，
+	而在技能确实出现问题时又能获得高精度的诊断。
+	
+	\subsection{Module 4: 技能置信度衰减与生命周期管理}
+	
+	Echo 为每个自动生成的技能维护一个置信度分数 $c$，取值范围为 $[0, 1]$，
+	用于量化系统对该技能质量的信任程度。
+	$c$ 的初始值根据技能创建时的上下文设定（例如用户显式请求存储的技能初始置信度较高）。
+	$c$ 的更新由以下规则驱动：
+	
+	\begin{itemize}[nosep]
+		\item 当 Layer B 收到显式正面反馈（如 thumbs up）时，
+		置信度增加一个固定步长 $\alpha$（默认 0.1），即 $c \leftarrow \min(c + \alpha,\; 1.0)$。
+		\item 当 Layer B 通过 LLM 分类识别到自然语言正面反馈时，
+		置信度增加一个较小的步长 $\alpha'$（默认 0.05，小于 $\alpha$），
+		因为自然语言信号的确定性低于显式评分。
+		\item 当 Layer A 检测到该技能的行为分布偏离基线超过阈值时，
+		置信度按比例衰减，$c \leftarrow c \cdot (1 - \beta)$，
+		其中衰减系数 $\beta$（默认 0.15）与偏移程度正相关。
+		\item 当 Layer B 收到显式负面反馈时，
+		置信度按更大比例衰减，$c \leftarrow c \cdot (1 - \gamma)$，
+		其中 $\gamma$（默认 0.3）大于 $\beta$，
+		因为用户的显式否定是最明确的质量信号。
+		\item 当技能被调用但用户没有给出任何反馈时，
+		$c$ \textbf{保持不变}，既不增长也不衰减。
+		这是 Echo 与 agentmemory~\cite{agentmemory} 最关键的设计差异：
+		agentmemory 将频繁访问解释为强化信号，而 Echo 将沉默解释为中性事件。
+		\item 如果用户手动编辑过某个技能的内容，
+		该技能会被自动标记为锁定状态，后续的自学习循环不允许覆盖它。
+	\end{itemize}
+	
+	当一个技能的置信度降至 $c_{\min}$（默认 0.3）以下时，
+	系统将其标记为``待验证''，并触发 Layer C 的 LLM judge 进行精确诊断。
+	如果 judge 确认技能质量确实下降，
+	置信度将进一步降低；当 $c$ 降至 $c_{\text{retire}}$（默认 0.1）以下时，
+	该技能从活跃技能库中淘汰。
+	
+	\subsection{Module 5: 检索增强的偏好库}
+	
+	Echo 维护一个经过用户认证的优质输出库，
+	用于在不修改模型权重的前提下实现个性化改进。
+	只有 Layer B 评分达到上位区间（默认为 4 分及以上，满分 5 分）的输出才会被存入。
+	每条记录包含任务请求的 embedding 向量、用户评分、任务类型标签和时间戳。
+	当新任务到来时，系统从偏好库中检索与当前任务最相关的 $k$ 个高分示例，
+	将它们注入到 prompt 中作为 few-shot demonstrations。
+	检索过程使用 MMR（Maximal Marginal Relevance）算法，
+	在保证相关性的同时兼顾示例之间的多样性。
+	偏好库设有容量上限，
+	当超出上限时按照 $\text{评分} \times \text{时间近度} \times \text{使用次数}$
+	的综合分数淘汰排名末位的条目。
+	
+	
+	% ============================================================
+	\section{Evaluation Plan}
+	% ============================================================
+	
+	\subsection{数据集构建}
+	
+	由于目前不存在包含``用户与 agent 交互记录、偏好打分和行为信号''的公开数据集，
+	本项目计划采用三层数据策略。
+	第一层是合成模拟数据（预计数千条），
+	参考 OpenClaw-RL~\cite{openclaw_rl} 的实验设置，
+	用 LLM 模拟具有冲突偏好（如``简洁但要有礼貌''）
+	和时变偏好（如``工作日偏好正式风格，周末偏好轻松风格''）的用户 persona，
+	并模拟行为信号和自然语言反馈，主要用于系统开发和调试。
+	第二层是半合成数据（预计数百条），
+	任务池来自真实数据集（例如邮件写作任务基于 Enron Email Corpus，
+	代码辅助任务基于 CodeAlpaca），但用户行为和打分仍由 LLM 模拟，用于主实验。
+	第三层是真实使用数据（预计 50 至 100 条），
+	通过搭建 Telegram bot 供团队成员和实验室同学使用约两周，
+	每次 agent 回复后采集 thumbs up/down 评分、自然语言反馈和行为信号，
+	用于最终的真实性验证。
+	
+	\subsection{实验设置}
+	
+	实验设置三个对照组：
+	Baseline A 为纯 agent 运行，不附带任何反馈或技能管理机制，对应 OpenClaw 的默认行为；
+	Baseline B 为 agent 加上自评估和基于时间/频率的衰减机制，对应 Hermes 和 agentmemory 的行为；
+	Echo 组为 agent 加上 Echo 完整系统。
+	
+	\subsection{评估指标}
+	
+	\paragraph{Metric 1: 用户满意度曲线（主指标）}
+	由模拟用户或真实用户对每次 agent 输出打 1--5 分，
+	在时间轴上统计三组的平均分曲线。
+	预期 Echo 组的曲线随交互次数单调上升，
+	两个 baseline 组保持平稳或出现下降趋势。
+	
+	\paragraph{Metric 2: 错误传播率}
+	在实验开始时向技能库中注入 10 个``看起来成功但实际包含错误''的技能，
+	追踪三组中这些错误技能的存活轮数。
+	预期 Baseline B 中错误技能持续存活（因为自评估和频率衰减都不会发现它们），
+	而 Echo 组能够在一定数量的交互后通过行为分布偏移检测到异常并触发衰减。
+	
+	\paragraph{Metric 3: 系统开销}
+	记录三组的 token 消耗量和平均响应延迟。
+	预期 Echo 的额外 token 开销不超过 15\%，
+	因为 Layer A 的行为信号采集完全不涉及 LLM 推理，
+	而 Layer C 的 judge 诊断仅在分布偏移告警时才启动。
+	
+	统计检验方面，组间平均分差异计划使用 paired $t$-test，
+	时间序列趋势计划使用 Mann-Kendall 检验。
+	
+	
+	% ============================================================
+	\section{Challenges}
+	% ============================================================
+	
+	\paragraph{Challenge 1: 行为信号的噪声与冷启动}
+	Module 3 Layer A 的核心假设是通过统计聚合消除单次行为事件的噪声，
+	但分布偏移检测需要足够的样本量才能给出可靠的结论。
+	在技能刚被创建、调用次数尚少的冷启动阶段，
+	系统没有足够的数据来建立可靠的行为基线，
+	需要设计合理的最小样本量阈值和初始置信度策略来应对这一阶段。
+	
+	\paragraph{Challenge 2: 自然语言反馈的分类边界}
+	Module 3 Layer B 需要对用户的自然语言反馈做正面/负面/中性的分类，
+	但实际反馈中存在大量模糊地带，
+	例如``还行吧''属于正面还是中性，``你能不能换个方式''是负面反馈还是正常的后续请求。
+	分类器的精度和召回率之间需要仔细权衡：
+	过于激进的正面分类会削弱``沉默不强化''这一核心设计原则，
+	而过于保守则会浪费有价值的用户信号。
+	
+	\paragraph{Challenge 3: 适用范围确认的用户体验}
+	Module 2 的选择题虽然被设计为二元且与具体任务直接相关的，
+	但对非技术背景的用户来说，
+	``直接复用''和``只参考思路''之间的边界可能仍然不够直观。
+	需要通过实际用户测试来验证问题措辞的清晰度，
+	并为用户不回应选择题的情况设计合理的默认策略。
+	
+	\paragraph{Challenge 4: 不修改权重条件下的效果上限}
+	Echo 面向的是通过 API 调用闭源模型的用户群体，
+	所有个性化改进只能通过检索增强（Module 5）和技能文件管理来实现。
+	这意味着 Echo 的效果天花板在理论上低于
+	OpenClaw-RL~\cite{openclaw_rl} 等可以直接更新模型权重的方案。
+	这是一个有意的设计取舍，Echo 选择了更广泛的适用性而非更高的理论效果上限。
+	
+	
+	% ============================================================
+	\section{Timeline}
+	% ============================================================
+	
+	\begin{table}[H]
+		\centering
+		\small
+		\begin{tabular}{@{}p{2.5cm}p{11cm}@{}}
+			\toprule
+			\textbf{时间} & \textbf{任务} \\
+			\midrule
+			第 1--2 周 &
+			搭建最小化 agent loop 和 Telegram bot 骨架；
+			实现 Module 3 Layer A 的行为信号采集 pipeline，
+			包括复制率追踪、编辑距离计算和 rephrase 检测；
+			设计用户 persona 并生成第一批合成模拟数据 \\
+			\midrule
+			第 3--4 周 &
+			实现 Module 4 的置信度衰减引擎，
+			包括 per-skill 行为基线建模和分布偏移检测逻辑；
+			实现 Module 3 Layer B 的自然语言反馈分类器；
+			接入 Enron Email Corpus 生成半合成数据集 \\
+			\midrule
+			第 5--6 周 &
+			实现 Module 1 自适应创建触发的四个并行条件；
+			实现 Module 2 适用范围确认的交互流程；
+			实现 Module 5 偏好库的存储、MMR 检索和 prompt 注入逻辑；
+			实现 Module 3 Layer C 的按需 LLM judge 诊断 \\
+			\midrule
+			第 7 周 &
+			部署 Telegram bot 供团队成员和实验室同学使用，采集真实使用数据；
+			搭建 Baseline A 和 Baseline B 对照组 \\
+			\midrule
+			第 8 周 &
+			运行三组对照实验，收集三项评估指标的数据；
+			绘制技能生命周期可视化图和满意度曲线；
+			撰写最终报告，包含 case study 和失败案例分析 \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	
+	% ============================================================
+	\begin{thebibliography}{99}
+		% ============================================================
+		
+		\bibitem{huang2024selfcorrect}
+		J.~Huang, X.~Chen, S.~Mishra, H.~S.~Zheng, A.~W.~Yu, X.~Song, and D.~Zhou,
+		``Large language models cannot self-correct reasoning yet,''
+		\textit{arXiv preprint arXiv:2310.01798}, 2024.
+		
+		\bibitem{hermes_audit}
+		``Security audit: 4 critical, 9 high severity findings in default configuration,''
+		Hermes Agent GitHub Issue \#7826, 2026.
+		\url{https://github.com/NousResearch/hermes-agent/issues/7826}
+		
+		\bibitem{agentmemory}
+		R.~Gupta,
+		``agentmemory: Persistent memory for AI coding agents,''
+		GitHub, 2026.
+		\url{https://github.com/rohitg00/agentmemory}
+		
+		\bibitem{oc_memory_tools}
+		``Memory-tools: Agent-controlled memory plugin for OpenClaw,''
+		ClawHub, 2026.
+		\url{https://playbooks.com/skills/openclaw/skills/memory-tools}
+		
+		\bibitem{memskill}
+		``MemSkill: Learning and evolving memory skills for self-evolving agents,''
+		\textit{arXiv preprint arXiv:2602.02474}, 2026.
+		
+		\bibitem{openclaw_rl}
+		Y.~Wang, X.~Chen, X.~Jin, M.~Wang, and L.~Yang,
+		``OpenClaw-RL: Train any agent simply by talking,''
+		\textit{arXiv preprint arXiv:2603.10165}, 2026.
+		
+		\bibitem{self_refine}
+		A.~Madaan et al.,
+		``Self-refine: Iterative refinement with self-feedback,''
+		in \textit{Proc. NeurIPS}, 2023.
+		
+		\bibitem{reflexion}
+		N.~Shinn, F.~Cassano, A.~Gopinath, K.~Narasimhan, and S.~Yao,
+		``Reflexion: Language agents with verbal reinforcement learning,''
+		in \textit{Proc. NeurIPS}, 2023.
+		
+		\bibitem{llm_judge}
+		L.~Zheng et al.,
+		``Judging LLM-as-a-judge with MT-Bench and Chatbot Arena,''
+		in \textit{Proc. NeurIPS}, 2023.
+		
+		\bibitem{hermes_agent}
+		NousResearch,
+		``Hermes Agent: The agent that grows with you,''
+		GitHub, 2026.
+		\url{https://github.com/NousResearch/hermes-agent}
+		
+		\bibitem{openclaw}
+		``OpenClaw: Your own personal AI assistant,''
+		GitHub, 2026.
+		\url{https://github.com/openclaw/openclaw}
+		
+		\bibitem{memory_decay}
+		``Memory management and contextual consistency for long-running low-code agents,''
+		\textit{arXiv preprint arXiv:2509.25250}, 2025.
+		
+		\bibitem{skillreducer}
+		``SkillReducer: Optimizing LLM agent skills for token efficiency,''
+		\textit{arXiv preprint arXiv:2603.29919}, 2026.
+		
+	\end{thebibliography}
+	
+\end{document}
