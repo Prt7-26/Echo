@@ -20,6 +20,60 @@ c_ok()   { printf '\033[32m%s\033[0m\n' "$*"; }
 c_warn() { printf '\033[33m%s\033[0m\n' "$*" >&2; }
 c_err()  { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 
+# Resolve a Python interpreter that has Hermes' web deps installed AND
+# can see Echo's source as the highest-priority hermes_cli.
+#
+# We deliberately do NOT use the `hermes` shim on PATH: it's a console-script
+# entry point, so sys.path[0] is the venv bin/ rather than CWD, which makes
+# `import hermes_cli` resolve to whatever's in the venv site-packages —
+# typically the upstream Hermes install at ~/.hermes/hermes-agent/, NOT this
+# repo. That's why /echo would 404 (echo_signals not in bundled plugins) and
+# the chat:bottom thumbs widget never showed up.
+#
+# Using `<py> -m hermes_cli.main` from REPO_ROOT puts CWD on sys.path first,
+# so Echo's hermes_cli wins and get_bundled_plugins_dir() points at
+# ./plugins/ (which contains echo_signals).
+resolve_python() {
+  local probe candidates=(
+    "${ECHO_PYTHON:-}"
+    "${VIRTUAL_ENV:+$VIRTUAL_ENV/bin/python}"
+    "$HOME/.hermes/hermes-agent/venv/bin/python"
+    "$(command -v python3 2>/dev/null || true)"
+  )
+  for probe in "${candidates[@]}"; do
+    [[ -z "$probe" || ! -x "$probe" ]] && continue
+    "$probe" -c "import fastapi, uvicorn" >/dev/null 2>&1 && { echo "$probe"; return 0; }
+  done
+  # Fall back to plain python3 even without fastapi — `chat`/`tui` don't
+  # need it, only the dashboard does.  We'll print a warning if dashboard
+  # is requested with a deps-poor interpreter.
+  [[ -n "${candidates[3]:-}" ]] && { echo "${candidates[3]}"; return 0; }
+  return 1
+}
+
+PYBIN="$(resolve_python || true)"
+if [[ -z "$PYBIN" ]]; then
+  c_err "Couldn't find a usable Python.  Set ECHO_PYTHON to a Python that can 'import hermes_cli'."
+  exit 1
+fi
+
+# Pin the Python used by every subprocess in the Hermes chain.
+#
+# Without this: ui-tui/gatewayClient.ts:36 falls back to $VIRTUAL_ENV/bin/python,
+# which on this machine is an active anaconda env without openai/uvicorn.
+# The dashboard would start fine in $PYBIN but the embedded chat would crash
+# with "Failed to initialize OpenAI client: No module named 'openai'".
+#
+# Exporting HERMES_PYTHON makes ui-tui / tui_gateway / any other Python-spawning
+# Node code use the same interpreter that runs Hermes proper.
+export HERMES_PYTHON="$PYBIN"
+
+hermes_cli() {
+  # Always invoke via -m so CWD (REPO_ROOT) wins on sys.path and Echo's
+  # source is what runs.  $PYBIN provides the deps.
+  "$PYBIN" -m hermes_cli.main "$@"
+}
+
 usage() {
   cat <<'EOF'
 Echo launcher — one entry point for every Hermes + Echo flavor.
@@ -65,12 +119,9 @@ start_dashboard_bg() {
     c_dim "Dashboard already up at http://${DASH_HOST}:${DASH_PORT}"
     return 0
   fi
-  if ! command -v hermes >/dev/null 2>&1; then
-    c_err "hermes CLI not on PATH — make sure Hermes is installed (pip install -e '.[all,dev]')"
-    return 1
-  fi
   echo "Starting dashboard in background on ${DASH_HOST}:${DASH_PORT} ..."
-  nohup hermes dashboard --host "$DASH_HOST" --port "$DASH_PORT" --no-open \
+  nohup "$PYBIN" -m hermes_cli.main dashboard \
+        --host "$DASH_HOST" --port "$DASH_PORT" --no-open \
         >"$DASH_LOG_FILE" 2>&1 &
   echo $! > "$DASH_PID_FILE"
   for _ in $(seq 1 30); do
@@ -119,13 +170,13 @@ cmd="${1:-}"
 
 case "$cmd" in
   chat)
-    exec hermes chat "$@"
+    exec "$PYBIN" -m hermes_cli.main chat "$@"
     ;;
   tui)
-    exec hermes --tui "$@"
+    exec "$PYBIN" -m hermes_cli.main --tui "$@"
     ;;
   dash|dashboard)
-    exec hermes dashboard --host "$DASH_HOST" --port "$DASH_PORT" "$@"
+    exec "$PYBIN" -m hermes_cli.main dashboard --host "$DASH_HOST" --port "$DASH_PORT" "$@"
     ;;
   tauri)
     start_dashboard_bg
