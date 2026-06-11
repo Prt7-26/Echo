@@ -165,26 +165,63 @@ ensure_tauri_deps() {
   fi
 }
 
+# Install Echo's skin into <hermes_home>/skins/ and make it the default —
+# but only when display.skin is still "default" (i.e. the user never chose
+# a skin). A user who explicitly picked another skin (/skin ares etc.) is
+# left alone. Caveat: `/skin default` reads as "never chose", so the next
+# ./echo launch flips back to echo — use any other skin or launch bare
+# `hermes` to keep the stock look. Idempotent + best-effort: a failure
+# here must never block startup.
+install_echo_skin() {
+  "$PYBIN" - <<'PY' 2>/dev/null || true
+import shutil, sys
+from pathlib import Path
+sys.path.insert(0, ".")
+
+from hermes_constants import get_hermes_home
+
+src = Path("plugins/echo_signals/skin/echo.yaml")
+dst = get_hermes_home() / "skins" / "echo.yaml"
+if src.exists():
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if not dst.exists() or dst.read_bytes() != src.read_bytes():
+        shutil.copy2(src, dst)
+
+from hermes_cli.config import load_config, save_config
+
+cfg = load_config()
+display = cfg.setdefault("display", {})
+if display.get("skin", "default") == "default":
+    display["skin"] = "echo"
+    save_config(cfg)
+PY
+}
+
 cmd="${1:-}"
 [[ $# -gt 0 ]] && shift
 
 case "$cmd" in
   chat)
+    install_echo_skin
     exec "$PYBIN" -m hermes_cli.main chat "$@"
     ;;
   tui)
+    install_echo_skin
     exec "$PYBIN" -m hermes_cli.main --tui "$@"
     ;;
   dash|dashboard)
+    install_echo_skin
     exec "$PYBIN" -m hermes_cli.main dashboard --host "$DASH_HOST" --port "$DASH_PORT" "$@"
     ;;
   tauri)
+    install_echo_skin
     start_dashboard_bg
     ensure_tauri_deps
     cd tauri-shell
     exec npm run dev
     ;;
   full)
+    install_echo_skin
     trap stop_dashboard_bg EXIT INT TERM
     start_dashboard_bg
     ensure_tauri_deps

@@ -1,0 +1,90 @@
+# Echo skin — sonar teal.
+#
+# Lives inside the Echo plugin so `git diff upstream/main` stays clean.
+# The ./echo launcher installs this file into <hermes_home>/skins/echo.yaml
+# (idempotent byte-compare copy) and sets display.skin: echo when the
+# user hasn't picked a different skin themselves.
+#
+# Schema: see hermes_cli/skin_engine.py module docstring. All fields are
+# optional; anything missing inherits from the built-in "default" skin.
+
+name: echo
+description: Echo — sonar teal · every signal counts (powered by Hermes)
+
+colors:
+  banner_border: "#0E7490"
+  banner_title: "#2DD4BF"
+  banner_accent: "#5EEAD4"
+  banner_dim: "#0F766E"
+  banner_text: "#CCFBF1"
+  ui_accent: "#2DD4BF"
+  ui_label: "#67E8F9"
+  ui_ok: "#34D399"
+  ui_error: "#F87171"
+  ui_warn: "#FBBF24"
+  prompt: "#CCFBF1"
+  input_rule: "#0E7490"
+  response_border: "#2DD4BF"
+  status_bar_bg: "#042F2E"
+  status_bar_text: "#99F6E4"
+  status_bar_strong: "#2DD4BF"
+  status_bar_dim: "#134E4A"
+  status_bar_good: "#34D399"
+  status_bar_warn: "#FBBF24"
+  status_bar_bad: "#FB923C"
+  status_bar_critical: "#F87171"
+  session_label: "#67E8F9"
+  session_border: "#134E4A"
+  selection_bg: "#134E4A"
+  voice_status_bg: "#042F2E"
+  completion_menu_bg: "#042F2E"
+  completion_menu_current_bg: "#115E59"
+  completion_menu_meta_bg: "#042F2E"
+  completion_menu_meta_current_bg: "#115E59"
+
+spinner:
+  waiting_faces:
+    - "(·)"
+    - "(··)"
+    - "(···)"
+    - "(··●)"
+    - "(·●·)"
+    - "(●··)"
+  thinking_faces:
+    - "(·●·)"
+    - "(●·●)"
+    - "(∿)"
+    - "(≋)"
+    - "(··●)"
+  thinking_verbs:
+    - "listening"
+    - "pinging"
+    - "echoing"
+    - "triangulating"
+    - "resonating"
+    - "sounding the depths"
+    - "tracing the signal"
+    - "tuning"
+  wings:
+    - ["≋·", "·≋"]
+    - ["⟨⟨·", "·⟩⟩"]
+    - ["··(", ")··"]
+
+branding:
+  agent_name: "Echo"
+  welcome: "··●·· Echo online — every signal counts. Type a message or /help."
+  goodbye: "Signal fading ··● goodbye"
+  response_label: " ◉ Echo "
+  prompt_symbol: "∿"
+  help_header: "(·●·)? Commands"
+
+tool_prefix: "┆"
+
+banner_logo: |-
+  [bold #5EEAD4]███████╗ ██████╗██╗  ██╗ ██████╗ [/]
+  [bold #2DD4BF]██╔════╝██╔════╝██║  ██║██╔═══██╗[/]
+  [#14B8A6]█████╗  ██║     ███████║██║   ██║[/]
+  [#0D9488]██╔══╝  ██║     ██╔══██║██║   ██║[/]
+  [#0F766E]███████╗╚██████╗██║  ██║╚██████╔╝[/]
+  [#115E59]╚══════╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ [/]
+  [#0F766E]   ·· ● ··  powered by Hermes  ·· ● ··[/]
