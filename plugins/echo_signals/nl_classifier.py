@@ -175,8 +175,21 @@ def classify(text: str) -> Label:
     Returns "neutral" on any failure — no LLM configured, transient
     error, surprising response, prompt-cache wonk, anything. Layer B
     should never throw an error up into the Hermes pre_llm_call path.
+
+    Also honours the user's choice via ``aux_config``: if Layer B is
+    disabled (echo.aux_mode = "off", or "separate" with no separate
+    config), classify becomes a no-op that returns "neutral" — sacred
+    invariant preserved, no LLM call made, no API credit spent.
     """
     if not text or not text.strip():
+        return "neutral"
+    try:
+        from . import aux_config
+        if not aux_config.classifier_enabled():
+            return "neutral"
+    except Exception as exc:
+        logger.debug("Echo aux_config check failed: %s", exc, exc_info=True)
+        # On any check failure default to OFF (safer than burning credit).
         return "neutral"
     try:
         return _classifier_impl(text)

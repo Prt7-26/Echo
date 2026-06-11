@@ -312,7 +312,18 @@ def run_judge(skill_id: str, confidence: float) -> JudgeVerdict:
     Returns a "ok" verdict on any error. Caller treats ok as "no
     action", so a broken judge degrades gracefully into "skill stays in
     pending_review until signals push it further".
+
+    Also honours ``aux_config``: when Layer C is disabled (echo.aux_mode
+    = "off", or "separate" with no separate config), returns "ok" without
+    making any LLM call.
     """
+    try:
+        from . import aux_config
+        if not aux_config.judge_enabled():
+            return JudgeVerdict(verdict="ok")
+    except Exception as exc:
+        logger.debug("Echo aux_config check failed: %s", exc, exc_info=True)
+        return JudgeVerdict(verdict="ok")
     try:
         return _judge_impl(skill_id, confidence)
     except Exception as exc:

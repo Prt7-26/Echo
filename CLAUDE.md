@@ -36,6 +36,10 @@ The repository already contains substantial design documentation. Read before gu
 - `docs/hermes-architecture.html` — onboarding aid
 - `tauri-shell/` — Rust/Tauri desktop wrapper around the dashboard (Step 17)
 - `scripts/verify_echo.py` — end-to-end smoke check
+- `scripts/eval/` — evaluation harness, four metric scripts, hyperparameter sweep (Step 19)
+- `hermes_cli/setup.py` — Echo registers its own wizard section here via the
+  one-line `_setup_echo` shim (delegates to `plugins/echo_signals/setup_wizard.py`).
+  `setup.py` is NOT one of the four core files, so this is allowed.
 
 A clean `git diff upstream/main` should show only files under these paths plus `.gitignore`, `LICENSE`, and `CLAUDE.md`. If you find yourself wanting to edit a Hermes core file, **stop and ask** — see the hard constraints below.
 

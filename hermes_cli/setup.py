@@ -3118,8 +3118,24 @@ def _offer_openclaw_migration(hermes_home: Path) -> bool:
 # Main Wizard Orchestrator
 # =============================================================================
 
+def _setup_echo(config: dict):
+    """Thin shim that delegates to Echo's own wizard module.
+
+    Kept here so Echo-specific logic stays in plugins/echo_signals/; we
+    only need a one-liner in setup.py to expose it as a wizard section.
+    Failing-import does not break the rest of the wizard.
+    """
+    try:
+        from plugins.echo_signals.setup_wizard import run_aux_provider_setup
+        run_aux_provider_setup(config)
+    except Exception as exc:
+        print_warning(f"Echo aux setup unavailable: {exc}")
+        logger.debug("Echo setup_wizard error: %s", exc, exc_info=True)
+
+
 SETUP_SECTIONS = [
     ("model", "Model & Provider", setup_model_provider),
+    ("echo", "Echo Auxiliary Model (Layer B + Layer C)", _setup_echo),
     ("tts", "Text-to-Speech", setup_tts),
     ("terminal", "Terminal Backend", setup_terminal_backend),
     ("gateway", "Messaging Platforms (Gateway)", setup_gateway),
