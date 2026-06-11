@@ -11,8 +11,9 @@ This is **Echo** — a research-flavored secondary-development project built on 
 ## Workflow rules (set by the maintainer, must follow)
 
 1. **Commit after every completed step.** Use the task granularity reflected in the current todo list (e.g. "Step 1: SQLite schema", "Step 2: plugin hooks") as a commit boundary, not finer. Always present the commit diff before running `git commit` so the maintainer can inspect.
-2. **Ask before deciding on anything not fully certain.** If a design choice has more than one reasonable answer and the maintainer hasn't picked, surface the options via `AskUserQuestion` rather than picking one and hoping. Examples that should be questions, not assumptions: choice of dependency, schema field naming when ambiguous, UI/UX decisions, how a Hermes-side hook should be invoked when multiple are candidates, what to do when an Echo design choice conflicts with a Hermes convention.
-3. **Default communication language: Chinese (中文).** The maintainer writes in Chinese; reply in Chinese unless they switch.
+2. **Push immediately after every commit.** `git push origin main` (or whichever branch we're on) right after each commit lands. The maintainer treats the GitHub fork as the source of truth — anything sitting only in the local repo is invisible to teammates and at risk if the laptop dies. Only skip the push when explicitly told to (e.g. "stage a few commits before pushing"). Force-pushing to main is still off-limits without explicit permission.
+3. **Ask before deciding on anything not fully certain.** If a design choice has more than one reasonable answer and the maintainer hasn't picked, surface the options via `AskUserQuestion` rather than picking one and hoping. Examples that should be questions, not assumptions: choice of dependency, schema field naming when ambiguous, UI/UX decisions, how a Hermes-side hook should be invoked when multiple are candidates, what to do when an Echo design choice conflicts with a Hermes convention.
+4. **Default communication language: Chinese (中文).** The maintainer writes in Chinese; reply in Chinese unless they switch.
 
 ## Where to look first
 
