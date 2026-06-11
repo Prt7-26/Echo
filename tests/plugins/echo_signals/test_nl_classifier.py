@@ -303,7 +303,7 @@ class TestSignalsIntegration:
         c = conn.execute(
             "SELECT confidence FROM echo_skill_confidence WHERE skill_id='test-skill'"
         ).fetchone()["confidence"]
-        # nl_negative uses GAMMA_EXPLICIT_NEGATIVE / 2 = 0.15 multiplicative.
+        # nl_negative uses BETA_NL_NEGATIVE = 0.15 multiplicative.
         # 0.5 * (1 - 0.15) = 0.425
         assert c == pytest.approx(0.5 * 0.85)
 

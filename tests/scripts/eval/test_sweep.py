@@ -11,8 +11,8 @@ from scripts.eval import sweep
 
 
 def test_grid_has_expected_size():
-    # Default: 4 knobs × 2 values each = 16 cells.
-    assert len(sweep.grid()) == 16
+    # Default: 7 knobs × 2 values each = 128 cells.
+    assert len(sweep.grid()) == 2 ** len(sweep.KNOBS)
 
 
 def test_grid_subset():

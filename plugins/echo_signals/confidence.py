@@ -63,10 +63,14 @@ logger = logging.getLogger(__name__)
 INITIAL_CONFIDENCE = 0.5
 ALPHA_EXPLICIT_POSITIVE = 0.10     # explicit thumbs up
 ALPHA_NL_POSITIVE = 0.05           # NL-classified positive sentiment
-GAMMA_EXPLICIT_NEGATIVE = 0.30     # explicit thumbs down (large hit)
+BETA_EXPLICIT_NEGATIVE = 0.30      # explicit thumbs down (large hit)
+BETA_NL_NEGATIVE = 0.15            # NL-classified negative sentiment
 BETA_DRIFT = 0.15                  # Layer A behavior-drift detected
 C_MIN = 0.30                       # falling below → pending_review
 C_RETIRE = 0.10                    # falling below → retired
+
+# Back-compat alias for any external code that imported the previous name.
+GAMMA_EXPLICIT_NEGATIVE = BETA_EXPLICIT_NEGATIVE
 
 STATUS_ACTIVE = "active"
 STATUS_PENDING_REVIEW = "pending_review"
@@ -114,21 +118,26 @@ def _apply_rule(
 ) -> float:
     """Return the new confidence value after applying one rule.
 
-    severity is only consulted for 'drift_detected' — proposal text says
-    β scales with the magnitude of the distributional shift. Other event
-    types ignore it.
+    Matches the report formula in DevPlan/document.tex literally:
+
+      g_T(c, s) = c + α_T                  for T ∈ {explicit+, NL+}
+      g_T(c, s) = c · (1 − β_T · s)        for T ∈ {explicit−, NL−, drift}
+      g_T(c, s) = c                        for T = silence
+
+    Severity is consulted for ALL three multiplicative rules. Explicit
+    and NL callers pass severity=1.0 (the default) so it is numerically
+    a no-op there, but the formula structure is preserved — this matters
+    when the simulator or a future caller wants to vary severity per
+    event (e.g. weight explicit_negative by intensity).
     """
     if event == "explicit_positive":
         return min(c + ALPHA_EXPLICIT_POSITIVE, 1.0)
     if event == "nl_positive":
         return min(c + ALPHA_NL_POSITIVE, 1.0)
     if event == "explicit_negative":
-        return max(c * (1.0 - GAMMA_EXPLICIT_NEGATIVE), 0.0)
+        return max(c * (1.0 - BETA_EXPLICIT_NEGATIVE * severity), 0.0)
     if event == "nl_negative":
-        # Symmetric with nl_positive — half the step of explicit_negative.
-        # Not in proposal text explicitly; included for completeness so
-        # NL classifier output can drive update independently of explicit.
-        return max(c * (1.0 - GAMMA_EXPLICIT_NEGATIVE / 2.0), 0.0)
+        return max(c * (1.0 - BETA_NL_NEGATIVE * severity), 0.0)
     if event == "drift_detected":
         return max(c * (1.0 - BETA_DRIFT * severity), 0.0)
     if event == "silence":

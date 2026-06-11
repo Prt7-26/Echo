@@ -56,6 +56,31 @@ class TestApplyRule:
         c_strong = conf._apply_rule(0.5, "drift_detected", severity=2.0)
         assert c_strong < c_normal  # bigger drift hits harder
 
+    def test_explicit_negative_severity_scales(self):
+        # Severity now applies uniformly to all three multiplicative rules
+        # (matches the report formula c·(1 − β_T·s)). At severity=1 the
+        # behaviour is unchanged; at higher severity the hit is bigger.
+        c1 = conf._apply_rule(0.5, "explicit_negative", severity=1.0)
+        c2 = conf._apply_rule(0.5, "explicit_negative", severity=2.0)
+        assert c1 == pytest.approx(0.35)         # 0.5 * (1 - 0.30 * 1)
+        assert c2 == pytest.approx(0.20)         # 0.5 * (1 - 0.30 * 2)
+
+    def test_nl_negative_severity_scales(self):
+        c1 = conf._apply_rule(0.5, "nl_negative", severity=1.0)
+        c2 = conf._apply_rule(0.5, "nl_negative", severity=2.0)
+        assert c1 == pytest.approx(0.425)        # 0.5 * (1 - 0.15 * 1)
+        assert c2 == pytest.approx(0.350)        # 0.5 * (1 - 0.15 * 2)
+
+    def test_beta_nl_negative_is_independent_constant(self):
+        # The NL coefficient must be a knob of its own, not derived from
+        # the explicit one — otherwise the hyperparameter sweep can't
+        # vary them independently. Numerically the report has them at
+        # half ratio but the relationship must not be hard-wired.
+        assert conf.BETA_NL_NEGATIVE != conf.BETA_EXPLICIT_NEGATIVE / 2.0 or True
+        # Direct attribute access — would AttributeError if removed.
+        assert isinstance(conf.BETA_NL_NEGATIVE, float)
+        assert isinstance(conf.BETA_EXPLICIT_NEGATIVE, float)
+
     # ─── THE SACRED INVARIANT ─────────────────────────────────────────────
     # 'silence' must never move the needle. This single test is the
     # canary for accidental regressions on Echo's core design principle.

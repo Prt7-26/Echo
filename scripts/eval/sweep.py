@@ -40,8 +40,17 @@ KNOBS: Dict[str, Tuple[str, str, List[Any]]] = {
     "alpha_explicit_pos": (
         "plugins.echo_signals.confidence", "ALPHA_EXPLICIT_POSITIVE", [0.05, 0.10],
     ),
-    "gamma_explicit_neg": (
-        "plugins.echo_signals.confidence", "GAMMA_EXPLICIT_NEGATIVE", [0.20, 0.30],
+    "alpha_nl_pos": (
+        "plugins.echo_signals.confidence", "ALPHA_NL_POSITIVE", [0.025, 0.05],
+    ),
+    "beta_explicit_neg": (
+        "plugins.echo_signals.confidence", "BETA_EXPLICIT_NEGATIVE", [0.20, 0.30],
+    ),
+    "beta_nl_neg": (
+        "plugins.echo_signals.confidence", "BETA_NL_NEGATIVE", [0.10, 0.15],
+    ),
+    "beta_drift": (
+        "plugins.echo_signals.confidence", "BETA_DRIFT", [0.10, 0.15],
     ),
     "drift_threshold_z": (
         "plugins.echo_signals.baseline", "DRIFT_THRESHOLD_Z", [1.5, 2.0],
