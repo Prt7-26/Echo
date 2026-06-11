@@ -82,3 +82,61 @@ def test_branding_keeps_hermes_attribution(skin):
     visible somewhere in the banner (maintainer's dual-attribution call)."""
     assert skin["branding"]["agent_name"] == "Echo"
     assert "powered by Hermes" in skin["banner_logo"]
+
+
+# ---------------------------------------------------------------------
+# Contrast guards — the TUI maps banner_dim → muted text, session_border
+# → frame lines, etc. (ui-tui/src/theme.ts fromSkin). The first version
+# of this skin used ~25%-luminance teals for those roles and they were
+# unreadable on dark terminals. These tests pin the fix.
+# ---------------------------------------------------------------------
+
+
+def _luminance(hex_color: str) -> float:
+    """WCAG relative luminance of an #RRGGBB color, 0..1."""
+    r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+
+    def lin(c: float) -> float:
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+
+
+def _contrast(a: str, b: str) -> float:
+    la, lb = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+def test_text_layers_are_readable_on_dark_background(skin):
+    """Foreground roles must clear WCAG-ish contrast against the darkest
+    surface the skin uses (the menu/status background)."""
+    colors = skin["colors"]
+    bg = colors["completion_menu_bg"]
+    # (role, minimum contrast ratio) — 4.5 is WCAG AA for body text;
+    # secondary/dim roles get a relaxed-but-visible 3.0.
+    for key, minimum in [
+        ("banner_text", 7.0),     # TUI body text
+        ("prompt", 7.0),
+        ("banner_dim", 3.0),      # TUI muted — the original sin
+        ("session_border", 3.0),
+        ("status_bar_dim", 3.0),
+        ("status_bar_text", 4.5),
+        ("ui_label", 4.5),
+        ("banner_title", 4.5),
+    ]:
+        ratio = _contrast(colors[key], bg)
+        assert ratio >= minimum, (
+            f"{key} ({colors[key]}) on {bg}: contrast {ratio:.2f} < {minimum}"
+        )
+
+
+def test_highlight_surfaces_are_distinguishable(skin):
+    """Selected/current-row backgrounds must sit clearly above the base
+    menu background — tone-on-tone teal was the 'colors too close' bug."""
+    colors = skin["colors"]
+    base = colors["completion_menu_bg"]
+    for key in ("completion_menu_current_bg", "selection_bg"):
+        ratio = _contrast(colors[key], base)
+        assert ratio >= 1.8, (
+            f"{key} ({colors[key]}) vs menu bg {base}: only {ratio:.2f}× apart"
+        )

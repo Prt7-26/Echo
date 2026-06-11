@@ -11,36 +11,46 @@
 name: echo
 description: Echo — sonar teal · every signal counts (powered by Hermes)
 
+# Contrast design (the TUI maps these via ui-tui/src/theme.ts fromSkin):
+#   text layer    ≈ 95% luminance  (banner_text → TUI body text)
+#   accent layer  ≈ 70%            (banner_title/accent → primary/accent)
+#   muted layer   ≈ 55%            (banner_dim → TUI muted; Hermes' default
+#                                   theme deliberately keeps muted ≥ 55% —
+#                                   anything darker vanishes on dark terminals)
+#   structure     ≈ 40%            (borders, separators)
+#   background    ≈  5%            (menus, status bar — near-black, teal hint)
+# Selected/current rows sit a full layer above their background so the
+# highlight is unmistakable instead of tone-on-tone.
 colors:
-  banner_border: "#0E7490"
+  banner_border: "#1597B8"
   banner_title: "#2DD4BF"
   banner_accent: "#5EEAD4"
-  banner_dim: "#0F766E"
-  banner_text: "#CCFBF1"
+  banner_dim: "#5EB8AC"
+  banner_text: "#E6FBF7"
   ui_accent: "#2DD4BF"
   ui_label: "#67E8F9"
   ui_ok: "#34D399"
   ui_error: "#F87171"
   ui_warn: "#FBBF24"
-  prompt: "#CCFBF1"
-  input_rule: "#0E7490"
+  prompt: "#E6FBF7"
+  input_rule: "#1597B8"
   response_border: "#2DD4BF"
-  status_bar_bg: "#042F2E"
-  status_bar_text: "#99F6E4"
-  status_bar_strong: "#2DD4BF"
-  status_bar_dim: "#134E4A"
+  status_bar_bg: "#07211F"
+  status_bar_text: "#B9F4E8"
+  status_bar_strong: "#5EEAD4"
+  status_bar_dim: "#4E8F87"
   status_bar_good: "#34D399"
   status_bar_warn: "#FBBF24"
   status_bar_bad: "#FB923C"
   status_bar_critical: "#F87171"
   session_label: "#67E8F9"
-  session_border: "#134E4A"
-  selection_bg: "#134E4A"
-  voice_status_bg: "#042F2E"
-  completion_menu_bg: "#042F2E"
-  completion_menu_current_bg: "#115E59"
-  completion_menu_meta_bg: "#042F2E"
-  completion_menu_meta_current_bg: "#115E59"
+  session_border: "#4E8F87"
+  selection_bg: "#2A6B62"
+  voice_status_bg: "#07211F"
+  completion_menu_bg: "#07211F"
+  completion_menu_current_bg: "#1F5C55"
+  completion_menu_meta_bg: "#07211F"
+  completion_menu_meta_current_bg: "#1F5C55"
 
 spinner:
   waiting_faces:
@@ -84,7 +94,7 @@ banner_logo: |-
   [bold #5EEAD4]███████╗ ██████╗██╗  ██╗ ██████╗ [/]
   [bold #2DD4BF]██╔════╝██╔════╝██║  ██║██╔═══██╗[/]
   [#14B8A6]█████╗  ██║     ███████║██║   ██║[/]
-  [#0D9488]██╔══╝  ██║     ██╔══██║██║   ██║[/]
-  [#0F766E]███████╗╚██████╗██║  ██║╚██████╔╝[/]
-  [#115E59]╚══════╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ [/]
-  [#0F766E]   ·· ● ··  powered by Hermes  ·· ● ··[/]
+  [#0FA396]██╔══╝  ██║     ██╔══██║██║   ██║[/]
+  [#128F84]███████╗╚██████╗██║  ██║╚██████╔╝[/]
+  [#157A71]╚══════╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ [/]
+  [#4E8F87]   ·· ● ··  powered by Hermes  ·· ● ··[/]
