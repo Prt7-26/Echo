@@ -110,6 +110,10 @@ class TestExistingInstallDefault:
                 prompt_choice="hermes_cli.setup.prompt_choice",
                 quick="hermes_cli.setup._run_quick_setup",
                 model="hermes_cli.setup.setup_model_provider",
+                # Echo's aux-model section is interactive; mock it out like
+                # the other sections so the no-menu assertion stays about
+                # the wizard's own quick-vs-full menu.
+                echo="hermes_cli.setup._setup_echo",
                 terminal="hermes_cli.setup.setup_terminal_backend",
                 agent="hermes_cli.setup.setup_agent_settings",
                 gateway="hermes_cli.setup.setup_gateway",
@@ -138,6 +142,7 @@ class TestExistingInstallDefault:
                 stack,
                 prompt_choice="hermes_cli.setup.prompt_choice",
                 model="hermes_cli.setup.setup_model_provider",
+                echo="hermes_cli.setup._setup_echo",
                 terminal="hermes_cli.setup.setup_terminal_backend",
                 agent="hermes_cli.setup.setup_agent_settings",
                 gateway="hermes_cli.setup.setup_gateway",

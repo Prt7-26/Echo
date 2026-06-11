@@ -3339,6 +3339,10 @@ def run_setup_wizard(args):
     if not (migration_ran and _skip_configured_section(config, "model", "Model & Provider")):
         setup_model_provider(config)
 
+    # Section 1b: Echo auxiliary model — asked right after the main provider
+    # so the user decides about Layer B/C while keys are still at hand.
+    _setup_echo(config)
+
     # Section 2: Terminal Backend
     if not (migration_ran and _skip_configured_section(config, "terminal", "Terminal Backend")):
         setup_terminal_backend(config)
@@ -3372,6 +3376,11 @@ def _run_first_time_quick_setup(config: dict, hermes_home, is_existing: bool):
     """
     # Step 1: Model & Provider (essential — skips rotation/vision/TTS)
     setup_model_provider(config, quick=True)
+
+    # Step 1b: Echo auxiliary model — the user just entered their main
+    # provider key, so this is the natural moment to decide whether Echo's
+    # Layer B/C get a separate model, share the main one, or stay off.
+    _setup_echo(config)
 
     # Step 2: Terminal Backend — where commands run is a core decision
     setup_terminal_backend(config)
