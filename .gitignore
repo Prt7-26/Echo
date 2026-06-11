@@ -105,3 +105,9 @@ config.yaml
 scratch/
 tmp/
 .tmp/
+
+# LaTeX build artifacts (DevPlan/document.tex sources stay; build outputs don't).
+DevPlan/*.aux
+DevPlan/*.out
+DevPlan/*.log
+DevPlan/*.synctex.gz
