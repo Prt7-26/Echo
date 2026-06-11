@@ -150,7 +150,21 @@ Hermes is three user-facing surfaces (CLI, TUI, multi-platform Gateway) all funn
   - **`GET /status` endpoint + dashboard StatusStrip widget**: schema version, active encoder (neural vs hashing — reflects sticky-fallback live), and per-table row counts (collapsible "table breakdown" details). Polls on dashboard refresh.
   - **SkillTimeline badges**: bundle's `SIGNAL_BADGES` map grew from 5 entries to 12, covering desktop-shell signals (`clipboard_copy/paste`, `window_focus/blur` cyan/zinc), Layer B NL classifier (`nl_positive/negative` emerald/rose dimmer than explicit), and M1 nominations (`m1_save_intent`, `m1_semantic_recurrence` amber).
   14 new tests; 376 Echo + 69 Hermes regression all pass.
-- ⬜ **Step 19+**: Open work — proposal §4 evaluation suite (datasets, simulated personas, baselines, metrics), real-runtime UI walkthrough (defer until report-writing time per maintainer's preference), final app icon for tauri-shell.
+- ✅ **Step 19 — Evaluation harness (closes the report's "experiments" commitments).**
+  - `ECHO_DISABLE_CONFIDENCE=1` env-var check at the top of [plugins/echo_signals/confidence.py:update_confidence](plugins/echo_signals/confidence.py) short-circuits the engine to a no-op with `reason="disabled_for_ablation"`. Powers the signals-only ablation baseline.
+  - [plugins/echo_signals/llm_cache.py](plugins/echo_signals/llm_cache.py) — record-and-replay layer for Layer B + Layer C LLM calls. `enable_record(path)` wraps the current `_classifier_impl` / `_judge_impl` to append each (input, output) to a JSONL; `enable_replay(path, strict=True)` serves from the file with cache-miss raising `CacheMiss`. Keys are `sha256(task + canonical(input))`. 12 unit tests.
+  - [scripts/eval/harness.py](scripts/eval/harness.py) — deterministic simulated-user harness. Scenario DSL (`UserTurn` / `Invocation` / `Session` / `Scenario` with `should_be_nominated` / `should_drift` / `skill_true_usefulness` ground-truth fields). The harness owns an isolated `HERMES_HOME`, installs the plugin, runs Layer B / Layer C synchronously (so each turn's effect lands before the next), spies on `baseline.finalize_invocation` to capture drift events, then dumps a JSONL artifact with config + ground truth + invocations + signals + final confidences + M1 candidates + drift events. 4 built-in scenarios (`repeat_save_intent`, `high_tool_count`, `drift`, `neutral_baseline`) exercise all four metrics.
+  - [scripts/eval/metrics/](scripts/eval/metrics/) — four metric scripts, each runnable as `python -m scripts.eval.metrics.<name> <artifact.jsonl>`:
+    - `m1.py` — `M1Result` with `echo_precision` / `recall` compared against the Hermes ≥5-tool-call rule on the same artifact.
+    - `m3.py` — `M3Result` with `precision` / `recall` / `f1`; excludes invocations still in the 20-sample warm-up window from the denominator (the detector physically cannot fire there).
+    - `m4.py` — `M4Result` with `spearman_rho` between Echo's final per-skill confidence and the planted true-usefulness score. Spearman is implemented in `common.py` with tie-aware average ranking, no scipy dependency.
+    - `m5.py` — self-contained recall@k against a planted 8-example library with 3 planted queries; reports recall with and without confidence weights and the `uplift` between them.
+  - [scripts/eval/sweep.py](scripts/eval/sweep.py) — hyperparameter sweep. `KNOBS` maps 4 tunable constants (`ALPHA_EXPLICIT_POSITIVE`, `GAMMA_EXPLICIT_NEGATIVE`, `DRIFT_THRESHOLD_Z`, `N_WARM`) to value lists; a context manager temporarily overrides module attributes per cell, runs the harness + M1/M3/M4 metrics, and writes one JSONL row per cell. Default grid is 16 cells, ~10 s total. `summarise()` picks the best cell per metric.
+  - 21 new eval tests under [tests/scripts/eval/](tests/scripts/eval/) — `test_harness.py` (8) + `test_metrics.py` (7) + `test_sweep.py` (6). 398 Echo + 69 Hermes regression + 34/34 smoke all pass.
+
+  **Not done (intentionally deferred or out of scope of "code-completable items"):**
+  - Walkthrough screenshots / recording — needs the live UI and the maintainer's preference; deferred to the report-writing phase.
+  - Final `.icns/.ico` for the Tauri shell — cosmetic.
 
 (Update this list when steps move state — the file is committed and serves as a living changelog for the project.)
 

@@ -33,11 +33,23 @@ this module — a future filesystem-watch hook will set the flag.)
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass
 from typing import Literal, Optional
 
 from .db import get_echo_conn
+
+
+def _is_disabled() -> bool:
+    """Ablation switch: ECHO_DISABLE_CONFIDENCE=1 short-circuits update_confidence.
+
+    Used by the evaluation harness to compare full Echo against a
+    'signals-only' baseline — hooks still record echo_signal_event rows,
+    but confidence never moves and the state machine never advances.
+    Checked every call (not memoised) so a test can toggle mid-run.
+    """
+    return os.environ.get("ECHO_DISABLE_CONFIDENCE", "").strip() in ("1", "true", "yes")
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +184,18 @@ def update_confidence(
     auto-creating, because confidence updates should only flow into
     skills Echo already knows about (i.e. has seen a bump_use for).
     """
+    if _is_disabled():
+        return UpdateResult(
+            skill_id=skill_id,
+            old_confidence=INITIAL_CONFIDENCE,
+            new_confidence=INITIAL_CONFIDENCE,
+            old_status=STATUS_ACTIVE,
+            new_status=STATUS_ACTIVE,
+            event=event,
+            applied=False,
+            reason="disabled_for_ablation",
+        )
+
     conn = get_echo_conn()
     row = conn.execute(
         "SELECT confidence, status, locked FROM echo_skill_confidence "
