@@ -38,7 +38,13 @@ import sqlite3
 #          embedding so M1 can detect "is the user repeating a request
 #          they made days ago?" without requiring a neural embedding
 #          provider.
-ECHO_SCHEMA_VERSION = 3
+# v3 → v4: added echo_skill_content_hash for M4 manual-edit locking.
+#          Tracks each tracked skill's SKILL.md content hash + the last
+#          time Echo observed an agent-driven skill_manage op, so a
+#          content change with NO corresponding skill_manage is attributed
+#          to a manual user edit and the skill is auto-locked (proposal §M4
+#          "用户手动编辑过 → 锁定").
+ECHO_SCHEMA_VERSION = 4
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +215,16 @@ CREATE TABLE IF NOT EXISTS echo_user_request_log (
 
 CREATE INDEX IF NOT EXISTS idx_echo_user_request_ts
     ON echo_user_request_log(ts DESC);
+
+-- v4: M4 manual-edit lock. Tracks each skill's SKILL.md content hash and
+-- the last time Echo saw an agent-driven skill_manage op for it. A content
+-- change with no recent agent op is a manual user edit → auto-lock.
+CREATE TABLE IF NOT EXISTS echo_skill_content_hash (
+    skill_id          TEXT    PRIMARY KEY,
+    content_hash      TEXT,
+    hash_updated_at   REAL,
+    agent_managed_at  REAL
+);
 """
 
 
@@ -223,6 +239,7 @@ ECHO_TABLES = (
     "echo_preference_example",
     "echo_turn_cache",
     "echo_user_request_log",
+    "echo_skill_content_hash",
 )
 
 

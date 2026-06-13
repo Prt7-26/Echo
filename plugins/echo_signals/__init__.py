@@ -62,6 +62,17 @@ def _on_session_start(session_id=None, platform=None, **_kwargs):
         maybe_run_gc()
     except Exception as exc:
         logger.debug("Echo maybe_run_gc failed: %s", exc, exc_info=True)
+    # M4 manual-edit lock: detect hand-edited SKILL.md files and lock them
+    # so the self-learning loop can't overwrite the user's edits. Runs in a
+    # daemon thread so file IO never blocks session startup.
+    try:
+        import threading
+        from .skill_lock import check_skill_edits
+        threading.Thread(
+            target=check_skill_edits, name="echo_skill_lock", daemon=True,
+        ).start()
+    except Exception as exc:
+        logger.debug("Echo check_skill_edits scheduling failed: %s", exc, exc_info=True)
 
 
 def _on_session_end(**kwargs):
@@ -136,4 +147,8 @@ def register(ctx) -> None:
     # them both per fire.
     ctx.register_hook("post_tool_call", on_post_tool_call)
     ctx.register_hook("post_tool_call", on_post_tool_call_scope)
+    # M4 manual-edit lock: note agent-driven skill_manage writes so a later
+    # content change can be attributed to the agent vs a manual user edit.
+    from .skill_lock import on_post_tool_call as on_post_tool_call_lock
+    ctx.register_hook("post_tool_call", on_post_tool_call_lock)
     logger.info("Echo signals plugin registered (schema v%d)", ECHO_SCHEMA_VERSION)
