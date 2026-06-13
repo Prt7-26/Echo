@@ -52,6 +52,21 @@ class JudgeVerdict:
 # Number of recent invocations summarized for the judge prompt.
 JUDGE_HISTORY_WINDOW = 8
 
+# PRM-style multi-vote (proposal §M3 Layer C: "参考 OpenClaw-RL 的 PRM 多次
+# 投票机制来降低噪声"). The judge is polled JUDGE_VOTES times and a
+# *strict majority* is required before any non-"ok" verdict is acted on —
+# a single hallucinated "degraded"/"exclusion" can't flip a skill on its
+# own. Set to 1 to disable voting (single call). Because Layer C only
+# fires on an active→pending_review transition (rare), the extra calls are
+# affordable; the proposal explicitly accepts "成本较高但发生频率极低".
+JUDGE_VOTES = 3
+
+# Sampling temperature for the voting calls. Must be > 0 so the votes can
+# actually diverge — otherwise majority voting over identical deterministic
+# samples reduces to a single call. Kept modest so structured-JSON output
+# stays reliable.
+JUDGE_VOTE_TEMPERATURE = 0.4
+
 
 JUDGE_PROMPT = """\
 You are an independent quality auditor for an AI skill management system. \
@@ -168,7 +183,10 @@ def _default_judge_impl(
         task="echo_judge",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=120,
-        temperature=0.0,
+        # Small positive temperature so the PRM-style multi-vote in
+        # run_judge() samples diverse opinions rather than the same
+        # deterministic answer N times.
+        temperature=JUDGE_VOTE_TEMPERATURE,
     )
     text = response.choices[0].message.content
     if not isinstance(text, str):
@@ -306,12 +324,38 @@ def process_verdict(skill_id: str, verdict: JudgeVerdict) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _aggregate_verdicts(verdicts: list[JudgeVerdict]) -> JudgeVerdict:
+    """PRM-style majority vote over a list of independent verdicts.
+
+    Conservative by design: a non-"ok" action requires a STRICT majority
+    (> half the votes). Anything short of that — a tie, a plurality, or an
+    "ok" majority — resolves to "ok" (no action). This is what makes the
+    voting "降噪": one outlier "degraded"/"exclusion" can't move a skill.
+
+    The reason/context of the winning verdict is carried from the first
+    vote that matches the winning label.
+    """
+    from collections import Counter
+
+    if not verdicts:
+        return JudgeVerdict(verdict="ok")
+    counts = Counter(v.verdict for v in verdicts)
+    top_label, top_n = counts.most_common(1)[0]
+    if top_label == "ok" or top_n <= len(verdicts) / 2:
+        return JudgeVerdict(verdict="ok")
+    for v in verdicts:
+        if v.verdict == top_label:
+            return v
+    return JudgeVerdict(verdict="ok")
+
+
 def run_judge(skill_id: str, confidence: float) -> JudgeVerdict:
     """Synchronous judge run with broad exception swallowing.
 
-    Returns a "ok" verdict on any error. Caller treats ok as "no
-    action", so a broken judge degrades gracefully into "skill stays in
-    pending_review until signals push it further".
+    Polls the judge impl JUDGE_VOTES times and majority-votes (PRM-style
+    noise reduction, proposal §M3 Layer C). Returns "ok" on any error or
+    when no strict majority backs a non-"ok" verdict. Caller treats ok as
+    "no action", so a broken/uncertain judge degrades gracefully.
 
     Also honours ``aux_config``: when Layer C is disabled (echo.aux_mode
     = "off", or "separate" with no separate config), returns "ok" without
@@ -324,11 +368,19 @@ def run_judge(skill_id: str, confidence: float) -> JudgeVerdict:
     except Exception as exc:
         logger.debug("Echo aux_config check failed: %s", exc, exc_info=True)
         return JudgeVerdict(verdict="ok")
-    try:
-        return _judge_impl(skill_id, confidence)
-    except Exception as exc:
-        logger.debug("Echo judge failed for %s: %s", skill_id, exc, exc_info=True)
-        return JudgeVerdict(verdict="ok")
+
+    n_votes = max(1, JUDGE_VOTES)
+    verdicts: list[JudgeVerdict] = []
+    for i in range(n_votes):
+        try:
+            verdicts.append(_judge_impl(skill_id, confidence))
+        except Exception as exc:
+            logger.debug(
+                "Echo judge vote %d/%d failed for %s: %s",
+                i + 1, n_votes, skill_id, exc, exc_info=True,
+            )
+            verdicts.append(JudgeVerdict(verdict="ok"))
+    return _aggregate_verdicts(verdicts)
 
 
 def start_judge_async(

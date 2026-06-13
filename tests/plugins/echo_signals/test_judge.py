@@ -223,6 +223,59 @@ class TestRunJudge:
         v = jdg.run_judge("alpha", 0.25)
         assert v.verdict == "ok"  # SACRED: never raises
 
+    def test_polls_judge_votes_times(self, isolated_db):
+        _seed("alpha")
+        calls = []
+        jdg.set_judge_impl(lambda sk, c: (calls.append(1),
+                                          jdg.JudgeVerdict(verdict="degraded"))[1])
+        jdg.run_judge("alpha", 0.25)
+        assert len(calls) == jdg.JUDGE_VOTES  # multi-vote, not single
+
+
+class TestAggregateVerdicts:
+    def _v(self, label, **kw):
+        return jdg.JudgeVerdict(verdict=label, **kw)
+
+    def test_strict_majority_degraded_wins(self):
+        out = jdg._aggregate_verdicts([
+            self._v("degraded", reason="bad"), self._v("degraded"), self._v("ok"),
+        ])
+        assert out.verdict == "degraded"
+        assert out.reason == "bad"  # carried from first matching vote
+
+    def test_no_majority_resolves_ok(self):
+        # 1 degraded, 1 exclusion, 1 ok — no strict majority → ok.
+        out = jdg._aggregate_verdicts([
+            self._v("degraded"), self._v("exclusion"), self._v("ok"),
+        ])
+        assert out.verdict == "ok"
+
+    def test_single_outlier_cannot_flip(self):
+        # 2 ok vs 1 exclusion → ok (noise rejected).
+        out = jdg._aggregate_verdicts([
+            self._v("ok"), self._v("ok"), self._v("exclusion", context="X"),
+        ])
+        assert out.verdict == "ok"
+
+    def test_exclusion_majority_carries_context(self):
+        out = jdg._aggregate_verdicts([
+            self._v("exclusion", context="ad-hoc shell"),
+            self._v("exclusion"), self._v("degraded"),
+        ])
+        assert out.verdict == "exclusion"
+        assert out.context == "ad-hoc shell"
+
+    def test_empty_is_ok(self):
+        assert jdg._aggregate_verdicts([]).verdict == "ok"
+
+    def test_tie_two_two_resolves_ok(self):
+        # Even split between degraded and ok → not a strict majority → ok.
+        out = jdg._aggregate_verdicts([
+            self._v("degraded"), self._v("degraded"),
+            self._v("ok"), self._v("ok"),
+        ])
+        assert out.verdict == "ok"
+
 
 # ---------------------------------------------------------------------------
 # start_judge_async — fire-and-forget
