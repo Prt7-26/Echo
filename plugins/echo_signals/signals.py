@@ -236,13 +236,58 @@ def on_pre_llm_call(
         logger.debug("Echo on_pre_llm_call(nl_classify) failed: %s", exc, exc_info=True)
 
 
-def on_post_tool_call(*, tool_name: str = "", **_kwargs: Any) -> None:
-    """Record one tool_call event per completed tool execution.
+def tool_call_failed(result: Any) -> bool:
+    """Heuristic 'did this tool call fail' over Hermes' heterogeneous tool
+    results (proposal §M3 Layer A: '工具执行的 exit code').
 
-    Step 3 records event presence only -- value_text holds the tool's
-    name. Success/error parsing of the result is deferred to Step 4
-    (different tools have different result shapes; not worth a one-size
-    parser now).
+    There is no uniform exit-code field across Hermes tools, so we infer
+    failure from the result shape:
+      * None / empty            → failed (tool produced nothing)
+      * dict with a truthy 'error'/'err' key, 'ok'==False, 'success'==False,
+        or a non-zero 'exit_code'/'returncode' → failed
+      * str starting with 'error'/'failed'/'traceback'/'exception' → failed
+    Everything else is treated as success. Conservative on the failure
+    side so a normal result is never mislabeled.
+    """
+    if result is None:
+        return True
+    if isinstance(result, dict):
+        for k in ("exit_code", "returncode", "status_code"):
+            v = result.get(k)
+            if isinstance(v, (int, float)) and int(v) != 0:
+                return True
+        if result.get("error") or result.get("err"):
+            return True
+        if result.get("ok") is False or result.get("success") is False:
+            return True
+        if result.get("failed") is True:
+            return True
+        return False
+    if isinstance(result, str):
+        head = result.strip().lower()
+        if not head:
+            return True
+        return head.startswith(("error", "failed", "traceback", "exception", "✗"))
+    return False
+
+
+# Sentinel so we can tell "Hermes passed result=None (a real failure)"
+# apart from "no result kwarg was passed at all (unknown — don't guess)".
+_NO_RESULT = object()
+
+
+def on_post_tool_call(*, tool_name: str = "", result: Any = _NO_RESULT,
+                      **_kwargs: Any) -> None:
+    """Record one tool_call event per completed tool execution, plus a
+    tool_error event when the result looks like a failure.
+
+    The tool_error count per invocation is a Layer A drift metric: a skill
+    whose tool calls start failing more often than its baseline is drifting
+    (proposal §M3 Layer A — exit codes feed the per-skill behavior baseline).
+
+    If no ``result`` is supplied (the caller doesn't carry one), we record
+    only the tool_call event and make NO success/failure claim — guessing
+    would fabricate errors on every call.
     """
     invocation_id = get_current_invocation_id()
     if invocation_id is None:
@@ -254,6 +299,13 @@ def on_post_tool_call(*, tool_name: str = "", **_kwargs: Any) -> None:
             signal_type="tool_call",
             value_text=tool_name or None,
         )
+        if result is not _NO_RESULT and tool_call_failed(result):
+            record_signal(
+                invocation_id=invocation_id,
+                layer="A",
+                signal_type="tool_error",
+                value_text=tool_name or None,
+            )
     except Exception as exc:
         logger.debug("Echo on_post_tool_call failed: %s", exc, exc_info=True)
 

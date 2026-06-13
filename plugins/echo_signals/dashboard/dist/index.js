@@ -322,6 +322,7 @@
     // Layer A — pure behavior
     user_turn: { color: "bg-blue-900/40 text-blue-300 border-blue-700/50", label: "user turn" },
     tool_call: { color: "bg-violet-900/40 text-violet-300 border-violet-700/50", label: "tool call" },
+    tool_error: { color: "bg-rose-900/40 text-rose-300 border-rose-700/50", label: "✗ tool error" },
     session_ended: { color: "bg-zinc-800 text-zinc-400 border-zinc-700", label: "session ended" },
     // Desktop-shell signals (Step 17)
     clipboard_copy: { color: "bg-cyan-900/40 text-cyan-300 border-cyan-700/50", label: "📋 clipboard copy" },

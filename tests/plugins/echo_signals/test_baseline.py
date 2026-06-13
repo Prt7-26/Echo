@@ -156,13 +156,15 @@ class TestComputeMetrics:
         inv = _seed_invocation("alpha")
         _seed_events(inv, "alpha", user_turns=3, tool_calls=2)
         m = bl.compute_invocation_metrics(inv)
-        assert m == {"modification_round_count": 3.0, "tool_call_count": 2.0}
+        assert m == {"modification_round_count": 3.0, "tool_call_count": 2.0,
+                     "tool_error_count": 0.0}
 
     def test_zero_signals_returns_zero(self, isolated_db):
         _seed_confidence("alpha")
         inv = _seed_invocation("alpha")
         m = bl.compute_invocation_metrics(inv)
-        assert m == {"modification_round_count": 0.0, "tool_call_count": 0.0}
+        assert m == {"modification_round_count": 0.0, "tool_call_count": 0.0,
+                     "tool_error_count": 0.0}
 
     def test_isolation_between_invocations(self, isolated_db):
         _seed_confidence("alpha")
@@ -460,7 +462,7 @@ class TestLifecycleIntegration:
             baseline_rows = conn.execute(
                 "SELECT n FROM echo_skill_baseline WHERE skill_id='alpha'"
             ).fetchall()
-            assert len(baseline_rows) == 2  # one per tracked metric
+            assert len(baseline_rows) == len(bl.TRACKED_METRICS)  # one per tracked metric
         finally:
             uh.uninstall_bump_use_hook()
             sc.clear_session_context()

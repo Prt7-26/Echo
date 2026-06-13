@@ -58,6 +58,7 @@ SEVERITY_CAP = 3.0           # one drift never multiplies confidence-loss past t
 TRACKED_METRICS: tuple[str, ...] = (
     "modification_round_count",
     "tool_call_count",
+    "tool_error_count",
 )
 
 
@@ -95,7 +96,8 @@ def compute_invocation_metrics(invocation_id: int) -> dict[str, float]:
     row = conn.execute(
         "SELECT "
         "  SUM(CASE WHEN signal_type='user_turn' THEN 1 ELSE 0 END) AS user_turns, "
-        "  SUM(CASE WHEN signal_type='tool_call' THEN 1 ELSE 0 END) AS tool_calls "
+        "  SUM(CASE WHEN signal_type='tool_call' THEN 1 ELSE 0 END) AS tool_calls, "
+        "  SUM(CASE WHEN signal_type='tool_error' THEN 1 ELSE 0 END) AS tool_errors "
         "FROM echo_signal_event "
         "WHERE invocation_id = ?",
         (invocation_id,),
@@ -103,6 +105,7 @@ def compute_invocation_metrics(invocation_id: int) -> dict[str, float]:
     return {
         "modification_round_count": float(row["user_turns"] or 0),
         "tool_call_count": float(row["tool_calls"] or 0),
+        "tool_error_count": float(row["tool_errors"] or 0),
     }
 
 

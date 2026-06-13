@@ -168,6 +168,53 @@ class TestHookShortCircuits:
         n = conn.execute("SELECT COUNT(*) AS n FROM echo_signal_event").fetchone()["n"]
         assert n == 0
 
+    def test_post_tool_call_no_result_records_only_tool_call(self, active_invocation):
+        """No result kwarg → no failure claim, just the tool_call event."""
+        sig.on_post_tool_call(tool_name="execute_bash")
+        conn = echo_db.get_echo_conn()
+        types = [r["signal_type"] for r in conn.execute(
+            "SELECT signal_type FROM echo_signal_event").fetchall()]
+        assert types == ["tool_call"]  # no tool_error fabricated
+
+    def test_post_tool_call_failed_result_records_tool_error(self, active_invocation):
+        sig.on_post_tool_call(tool_name="execute_bash",
+                              result={"error": "command not found"})
+        conn = echo_db.get_echo_conn()
+        types = sorted(r["signal_type"] for r in conn.execute(
+            "SELECT signal_type FROM echo_signal_event").fetchall())
+        assert types == ["tool_call", "tool_error"]
+
+    def test_post_tool_call_success_result_no_error(self, active_invocation):
+        sig.on_post_tool_call(tool_name="read_file", result="file contents here")
+        conn = echo_db.get_echo_conn()
+        types = [r["signal_type"] for r in conn.execute(
+            "SELECT signal_type FROM echo_signal_event").fetchall()]
+        assert types == ["tool_call"]
+
+
+class TestToolCallFailed:
+    def test_none_is_failure(self):
+        assert sig.tool_call_failed(None) is True
+
+    def test_empty_string_is_failure(self):
+        assert sig.tool_call_failed("   ") is True
+
+    def test_error_prefix_string(self):
+        assert sig.tool_call_failed("Error: boom") is True
+        assert sig.tool_call_failed("Traceback (most recent call last)") is True
+
+    def test_normal_string_ok(self):
+        assert sig.tool_call_failed("done, wrote 3 files") is False
+
+    def test_dict_error_key(self):
+        assert sig.tool_call_failed({"error": "nope"}) is True
+        assert sig.tool_call_failed({"ok": False}) is True
+        assert sig.tool_call_failed({"exit_code": 1}) is True
+
+    def test_dict_clean(self):
+        assert sig.tool_call_failed({"ok": True, "output": "x"}) is False
+        assert sig.tool_call_failed({"exit_code": 0}) is False
+
     def test_session_end_signal_records(self, active_invocation):
         sig.on_session_end_signal()
         conn = echo_db.get_echo_conn()
