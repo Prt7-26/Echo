@@ -240,17 +240,17 @@ def tool_call_failed(result: Any) -> bool:
     """Heuristic 'did this tool call fail' over Hermes' heterogeneous tool
     results (proposal §M3 Layer A: '工具执行的 exit code').
 
-    There is no uniform exit-code field across Hermes tools, so we infer
-    failure from the result shape:
-      * None / empty            → failed (tool produced nothing)
+    Conservative: we only return True on POSITIVE evidence of failure, so a
+    normal result is never mislabeled (a false 'failed' would corrupt the
+    skill's behavior baseline). In particular None and empty string are NOT
+    failures — plenty of tools succeed with no output.
+
+    Positive failure evidence:
       * dict with a truthy 'error'/'err' key, 'ok'==False, 'success'==False,
-        or a non-zero 'exit_code'/'returncode' → failed
-      * str starting with 'error'/'failed'/'traceback'/'exception' → failed
-    Everything else is treated as success. Conservative on the failure
-    side so a normal result is never mislabeled.
+        'failed'==True, or a non-zero 'exit_code'/'returncode'/'status_code'
+      * str starting with 'error'/'failed'/'traceback'/'exception'/'✗'
+    Everything else (incl. None, '', normal strings, clean dicts) → success.
     """
-    if result is None:
-        return True
     if isinstance(result, dict):
         for k in ("exit_code", "returncode", "status_code"):
             v = result.get(k)
@@ -266,7 +266,7 @@ def tool_call_failed(result: Any) -> bool:
     if isinstance(result, str):
         head = result.strip().lower()
         if not head:
-            return True
+            return False
         return head.startswith(("error", "failed", "traceback", "exception", "✗"))
     return False
 

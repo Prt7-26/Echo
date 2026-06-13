@@ -193,11 +193,14 @@ class TestHookShortCircuits:
 
 
 class TestToolCallFailed:
-    def test_none_is_failure(self):
-        assert sig.tool_call_failed(None) is True
+    def test_none_is_not_failure(self):
+        # Conservative: no positive failure evidence → success.
+        assert sig.tool_call_failed(None) is False
 
-    def test_empty_string_is_failure(self):
-        assert sig.tool_call_failed("   ") is True
+    def test_empty_string_is_not_failure(self):
+        # Many tools succeed with no output.
+        assert sig.tool_call_failed("   ") is False
+        assert sig.tool_call_failed("") is False
 
     def test_error_prefix_string(self):
         assert sig.tool_call_failed("Error: boom") is True
