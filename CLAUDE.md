@@ -26,6 +26,7 @@ The repository already contains substantial design documentation. Read before gu
 | **Echo's SQLite schema design** | [DevPlan/schema.md](DevPlan/schema.md) |
 | **Per-platform signal observability matrix** (what Layer A can actually measure on each surface) | [DevPlan/signal-matrix.md](DevPlan/signal-matrix.md) |
 | **Launch & debug runbook** (every way to start Echo, where signals/logs live, common pitfalls) | [DevPlan/launch-and-debug.md](DevPlan/launch-and-debug.md) |
+| **Full audit report** (proposal-promise-vs-code gap inventory + UI bug findings) | [DevPlan/audit-report.md](DevPlan/audit-report.md) |
 | **Hermes architecture visual overview** (15 sections, browser-readable) | [docs/hermes-architecture.html](docs/hermes-architecture.html) |
 | **Cross-session memory about user/project** | `~/.claude/projects/-Users-mac-code-Echo/memory/` |
 

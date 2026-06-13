@@ -683,17 +683,23 @@
     const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
     return h("div", { className: "p-6 space-y-6 max-w-7xl mx-auto" },
-      // Header
-      h("div", { className: "flex items-end justify-between" },
+      // Header — Echo sonar-teal identity (matches the CLI/TUI skin).
+      h("div", { className: "flex items-end justify-between border-b border-teal-900/40 pb-4" },
         h("div", null,
-          h("h1", { className: "text-2xl font-bold text-zinc-100" }, "Echo"),
+          h("div", { className: "flex items-center gap-2" },
+            h("span", { className: "text-teal-400 text-lg", title: "Echo" }, "◉"),
+            h("h1", {
+              className: "text-2xl font-bold text-teal-300 tracking-tight",
+            }, "Echo"),
+            h("span", { className: "text-teal-700 text-xs tabular-nums" }, "·· ● ··"),
+          ),
           h("p", { className: "text-sm text-zinc-400 mt-1" },
             "User-signal-driven skill lifecycle. Confidence updates flow from explicit feedback, language sentiment, and behavior-drift detection."),
         ),
         h("button", {
-          className: "text-xs text-zinc-400 hover:text-zinc-200 px-3 py-1.5 border border-zinc-800 rounded hover:border-zinc-600",
+          className: "text-xs text-teal-400 hover:text-teal-200 px-3 py-1.5 border border-teal-900/50 rounded hover:border-teal-600",
           onClick: refresh,
-        }, "Refresh"),
+        }, "↻ Refresh"),
       ),
       // Status strip — diagnostic info
       h(StatusStrip, { refreshKey }),
