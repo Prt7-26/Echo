@@ -575,18 +575,73 @@ def _build_confidence_weights() -> dict[str, float]:
         return {}
 
 
+def _active_skill_exclusions() -> tuple[Optional[str], list]:
+    """Return (skill_id, exclusion_conditions list) for the currently active
+    skill, or (None, []) when there is no active skill or no exclusions.
+
+    The Layer C judge appends scenarios where a skill should NOT apply to
+    echo_skill_scope.exclusion_conditions (a JSON array). This surfaces them
+    so on_pre_llm_call_inject can warn the agent — the one non-invasive
+    channel Echo has to make the judge's verdict actually affect behavior,
+    since Echo cannot hook Hermes' skill-retrieval path directly.
+    """
+    try:
+        from .session_context import get_current_invocation_id
+
+        invocation_id = get_current_invocation_id()
+        if invocation_id is None:
+            return None, []
+        conn = get_echo_conn()
+        inv = conn.execute(
+            "SELECT skill_id FROM echo_skill_invocation WHERE invocation_id = ?",
+            (invocation_id,),
+        ).fetchone()
+        if inv is None:
+            return None, []
+        skill_id = inv["skill_id"]
+        row = conn.execute(
+            "SELECT exclusion_conditions FROM echo_skill_scope WHERE skill_id = ?",
+            (skill_id,),
+        ).fetchone()
+        if row is None or not row["exclusion_conditions"]:
+            return skill_id, []
+        import json
+        try:
+            conds = json.loads(row["exclusion_conditions"])
+        except (ValueError, TypeError):
+            return skill_id, []
+        conds = [str(c).strip() for c in conds if str(c).strip()] if isinstance(conds, list) else []
+        return skill_id, conds
+    except Exception as exc:
+        logger.debug("_active_skill_exclusions failed: %s", exc, exc_info=True)
+        return None, []
+
+
+def format_exclusions_for_injection(skill_id: str, conditions: list) -> str:
+    """Render a skill's exclusion conditions as a short caution block."""
+    if not conditions:
+        return ""
+    lines = [
+        f"**Echo caution — the active skill `{skill_id}` has known limitations.**",
+        "It was found NOT to apply well in these situations:",
+    ]
+    lines += [f"- {c}" for c in conditions]
+    lines.append(
+        "If the current request resembles any of the above, adapt your "
+        "approach instead of reusing this skill verbatim."
+    )
+    return "\n".join(lines)
+
+
 def on_pre_llm_call_inject(
     *,
     user_message=None,
     **_kwargs,
 ) -> Optional[dict]:
-    """Retrieve top-k preference examples for this user message + return
-    them as ``{"context": <markdown_block>}`` for Hermes to append.
-
-    Hermes' pre_llm_call handlers are documented to accept either a
-    string return value or a dict with a ``context`` key, both of which
-    get appended to the user message (not the system prompt → cache
-    safe). Returning None / empty dict means "nothing to inject".
+    """Inject (a) the active skill's exclusion caution and (b) top-k
+    preference examples for this user message, as ``{"context": ...}`` for
+    Hermes to append to the user message (not the system prompt → cache
+    safe). Returning None means "nothing to inject".
 
     Errors are caught and downgraded to "no injection" so a broken
     retrieval path can't break the agent loop.
@@ -595,6 +650,20 @@ def on_pre_llm_call_inject(
     if not user_text:
         return None
 
+    blocks: list = []
+
+    # (a) Exclusion caution for the active skill — makes the Layer C judge's
+    # exclusion verdict actually reach the agent.
+    try:
+        skill_id, exclusions = _active_skill_exclusions()
+        if skill_id and exclusions:
+            caution = format_exclusions_for_injection(skill_id, exclusions)
+            if caution:
+                blocks.append(caution)
+    except Exception as exc:
+        logger.debug("exclusion injection failed: %s", exc, exc_info=True)
+
+    # (b) M5 few-shot preference examples.
     try:
         weights = _build_confidence_weights()
         examples = retrieve_topk(
@@ -602,13 +671,16 @@ def on_pre_llm_call_inject(
             k=TOP_K_DEFAULT,
             confidence_weights=weights or None,
         )
-        if not examples:
-            return None
-        block = format_for_injection(examples)
-        return {"context": block} if block else None
+        if examples:
+            block = format_for_injection(examples)
+            if block:
+                blocks.append(block)
     except Exception as exc:
-        logger.debug("on_pre_llm_call_inject failed: %s", exc, exc_info=True)
+        logger.debug("on_pre_llm_call_inject retrieval failed: %s", exc, exc_info=True)
+
+    if not blocks:
         return None
+    return {"context": "\n\n".join(blocks)}
 
 
 def store_from_turn_cache_by_skill(skill_id: str, rating: int = 5) -> int:

@@ -212,6 +212,58 @@ class TestPreLLMCallInject:
         assert prag.on_pre_llm_call_inject(user_message="") is None
         assert prag.on_pre_llm_call_inject(user_message=None) is None
 
+    def test_active_skill_exclusions_injected(self, active_skill):
+        """When the active skill has exclusion_conditions (from the Layer C
+        judge), they are injected as a caution — even with no preferences.
+        This is what makes the judge's exclusion verdict affect behavior."""
+        import json
+        conn = echo_db.get_echo_conn()
+        now = time.time()
+        conn.execute(
+            "INSERT INTO echo_skill_scope "
+            "(skill_id, scope_level, exclusion_conditions, created_at, updated_at) "
+            "VALUES ('test-skill', 'narrow', ?, ?, ?)",
+            (json.dumps(["Google Ads short-form copy", "legal disclaimers"]),
+             now, now),
+        )
+        conn.commit()
+        out = prag.on_pre_llm_call_inject(user_message="write some copy")
+        assert out is not None
+        ctx = out["context"]
+        assert "known limitations" in ctx
+        assert "test-skill" in ctx
+        assert "Google Ads short-form copy" in ctx
+        assert "legal disclaimers" in ctx
+
+    def test_exclusions_and_preferences_both_injected(self, active_skill):
+        import json
+        conn = echo_db.get_echo_conn()
+        now = time.time()
+        conn.execute(
+            "INSERT INTO echo_skill_scope "
+            "(skill_id, scope_level, exclusion_conditions, created_at, updated_at) "
+            "VALUES ('test-skill', 'narrow', ?, ?, ?)",
+            (json.dumps(["formal legal tone"]), now, now),
+        )
+        conn.commit()
+        prag.store_preference(
+            task_request="write a casual marketing email",
+            agent_output="Hey! Big news ...",
+            rating=5, skill_id="test-skill",
+        )
+        out = prag.on_pre_llm_call_inject(
+            user_message="write a casual marketing email for our launch")
+        assert out is not None
+        ctx = out["context"]
+        assert "known limitations" in ctx       # exclusion caution
+        assert "formal legal tone" in ctx
+        assert "Big news" in ctx                # preference example
+
+    def test_no_exclusions_no_prefs_returns_none(self, active_skill):
+        # Active skill but no exclusions and no preferences → nothing.
+        out = prag.on_pre_llm_call_inject(user_message="anything at all")
+        assert out is None
+
     def test_irrelevant_query_returns_none(self, isolated_db):
         prag.store_preference(
             task_request="write a marketing email",
