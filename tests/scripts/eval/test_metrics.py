@@ -16,6 +16,7 @@ import pytest
 
 from scripts.eval import harness as H
 from scripts.eval.metrics import common, m1, m3, m4, m5
+from scripts.eval.metrics import error_propagation as ep
 
 
 @pytest.fixture(scope="module")
@@ -121,3 +122,24 @@ def test_m5_runs(tmp_path):
     # The library is set up so the planted-relevant skills all have high
     # confidence — weighting should NOT hurt recall.
     assert res.recall_with_weights >= res.recall_no_weights - 1e-6
+
+
+# ---------------------------------------------------------------------
+# Metric 2 — error propagation (Echo vs Baseline B)
+# ---------------------------------------------------------------------
+
+
+def test_error_propagation_echo_beats_baseline_b(tmp_path):
+    res = ep.compute(home=tmp_path / "ep-home")
+    assert res.n_bad == ep.N_BAD_SKILLS
+    assert res.n_good == ep.N_GOOD_SKILLS
+    # Echo catches the planted bad skills via accumulated negative signals…
+    assert res.echo_bad_caught >= res.n_bad - 1   # allow 1 slow retirer
+    # …without false-positiving the good controls…
+    assert res.echo_good_false_positives == 0
+    # …while the frequency-decay baseline catches none (never retires).
+    assert res.baseline_b_bad_caught == 0
+    # And the separation is real: bad skills end far below good ones.
+    assert res.echo_mean_conf_bad < res.echo_mean_conf_good
+    # JSON round-trips.
+    json.loads(json.dumps(res.to_dict()))
