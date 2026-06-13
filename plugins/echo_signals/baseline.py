@@ -307,9 +307,28 @@ def finalize_invocation(invocation_id: int) -> list[DriftEvent]:
     # C judge. Late-imported to avoid import cycles.
     if drifts:
         from .confidence_actions import apply_signal_event
+        from .signals import record_signal
 
         for drift in drifts:
             try:
+                # Audit trail first: a Layer A drift_detected signal_event so
+                # the dashboard timeline shows WHY confidence dropped (z-score
+                # in value_real, which metric in value_text). Without this the
+                # confidence move is invisible in the per-skill timeline.
+                try:
+                    record_signal(
+                        invocation_id=invocation_id,
+                        layer="A",
+                        signal_type="drift_detected",
+                        value_real=float(drift.z_score),
+                        value_text=drift.metric_name,
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "drift signal_event write failed for %s/%s: %s",
+                        drift.skill_id, drift.metric_name, exc, exc_info=True,
+                    )
+
                 apply_signal_event(
                     drift.skill_id,
                     "drift_detected",

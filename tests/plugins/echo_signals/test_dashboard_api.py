@@ -302,6 +302,50 @@ class TestFeedback:
         assert data["applied"] is False
         assert data["reason"] == "locked"
 
+    def test_feedback_writes_signal_event_for_timeline(self, client):
+        """A thumbs-up must leave a Layer B signal_event attributed to the
+        skill's most recent invocation, so the dashboard timeline can show
+        it (regression guard for the 'explicit feedback is invisible in the
+        timeline' bug)."""
+        _seed_skill("alpha", confidence=0.5)
+        inv = _seed_invocation("alpha")
+        r = client.post(
+            "/api/plugins/echo_signals/feedback",
+            json={"skill_id": "alpha", "rating": 1, "reason": "nailed it"},
+        )
+        assert r.json()["applied"] is True
+
+        conn = echo_db.get_echo_conn()
+        rows = conn.execute(
+            "SELECT invocation_id, layer, signal_type, value_text "
+            "FROM echo_signal_event WHERE skill_id = 'alpha'"
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["layer"] == "B"
+        assert rows[0]["signal_type"] == "explicit_positive"
+        assert rows[0]["invocation_id"] == inv
+        assert rows[0]["value_text"] == "nailed it"
+        # n_signals bumped by record_signal.
+        n = conn.execute(
+            "SELECT n_signals FROM echo_skill_confidence WHERE skill_id='alpha'"
+        ).fetchone()["n_signals"]
+        assert n == 1
+
+    def test_feedback_without_invocation_still_applies(self, client):
+        """If the skill has no invocation yet, feedback still moves
+        confidence — only the audit-trail event is skipped."""
+        _seed_skill("alpha", confidence=0.5)  # no invocation
+        r = client.post(
+            "/api/plugins/echo_signals/feedback",
+            json={"skill_id": "alpha", "rating": -1},
+        )
+        assert r.json()["applied"] is True
+        conn = echo_db.get_echo_conn()
+        events = conn.execute(
+            "SELECT COUNT(*) AS n FROM echo_signal_event WHERE skill_id='alpha'"
+        ).fetchone()["n"]
+        assert events == 0  # gracefully skipped, no crash
+
     def test_missing_skill_id_rejected(self, client):
         r = client.post(
             "/api/plugins/echo_signals/feedback",

@@ -317,6 +317,19 @@ class TestFinalizeInvocation:
         ).fetchone()["confidence"]
         assert c < 0.5
 
+        # A drift_detected signal_event must be written so the dashboard
+        # timeline shows WHY confidence dropped (regression guard for the
+        # 'drift is invisible in the timeline' bug). z-score in value_real,
+        # metric name in value_text.
+        drift_rows = conn.execute(
+            "SELECT layer, value_real, value_text FROM echo_signal_event "
+            "WHERE skill_id='alpha' AND signal_type='drift_detected'"
+        ).fetchall()
+        assert len(drift_rows) >= 1
+        assert drift_rows[0]["layer"] == "A"
+        assert drift_rows[0]["value_text"] == "modification_round_count"
+        assert drift_rows[0]["value_real"] is not None
+
     def test_severity_capped(self, isolated_db):
         """Even an extreme z-score can't push severity past SEVERITY_CAP."""
         _seed_confidence("alpha", confidence=0.5)

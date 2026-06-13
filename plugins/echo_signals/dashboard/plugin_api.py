@@ -273,6 +273,34 @@ def submit_feedback(payload: FeedbackPayload):
     event = "explicit_positive" if payload.rating == 1 else "explicit_negative"
     result = apply_signal_event(payload.skill_id, event)
 
+    # Leave an audit trail: record the explicit feedback as a Layer B
+    # signal_event attributed to the skill's most recent invocation, so it
+    # shows up in the dashboard timeline and counts toward n_signals.
+    # Without this, a thumbs-up moves confidence but is invisible in the
+    # per-skill timeline (the explicit_positive/negative badges would be
+    # dead). Best-effort: if the skill has no invocation yet (e.g. tagged
+    # before its first bump_use) we skip the event row but the confidence
+    # update above still stands.
+    if result.applied:
+        try:
+            conn = echo_db.get_echo_conn()
+            inv = conn.execute(
+                "SELECT invocation_id FROM echo_skill_invocation "
+                "WHERE skill_id = ? ORDER BY started_at DESC LIMIT 1",
+                (payload.skill_id,),
+            ).fetchone()
+            if inv is not None:
+                from plugins.echo_signals.signals import record_signal
+                record_signal(
+                    invocation_id=inv["invocation_id"],
+                    layer="B",
+                    signal_type=event,
+                    value_text=(payload.reason or None),
+                )
+        except Exception:
+            # Audit-trail write must never break the feedback response.
+            pass
+
     # M5: thumbs-up + applied → also persist the most recent cached
     # turn for this skill into the preference library. Rating 5 when
     # the user added a long-press reason, 4 otherwise — the explicit

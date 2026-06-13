@@ -328,6 +328,8 @@
     clipboard_paste: { color: "bg-cyan-900/40 text-cyan-300 border-cyan-700/50", label: "📋 clipboard paste" },
     window_focus: { color: "bg-zinc-800 text-zinc-400 border-zinc-700", label: "window focus" },
     window_blur: { color: "bg-zinc-800 text-zinc-500 border-zinc-700", label: "window blur" },
+    // Layer A — drift detection (M3)
+    drift_detected: { color: "bg-orange-900/40 text-orange-300 border-orange-700/50", label: "⚠ drift detected" },
     // Layer B — explicit
     explicit_positive: { color: "bg-emerald-900/40 text-emerald-300 border-emerald-700/50", label: "👍 positive" },
     explicit_negative: { color: "bg-rose-900/40 text-rose-300 border-rose-700/50", label: "👎 negative" },
@@ -852,14 +854,13 @@
       setPendingScope(null);
     }, []);
 
-    // PRIORITY: pending scope wins over thumbs.
-    if (pendingScope) {
-      return h(ScopeQuestion, {
-        skill: pendingScope,
-        onAnswered: onScopeAnswered,
-      });
-    }
-
+    // NOTE: every hook (useState/useEffect/useCallback) MUST run on every
+    // render. `submit` therefore lives ABOVE the conditional early returns
+    // below — moving it under `if (pendingScope) return` would change the
+    // hook count between renders (9 vs 10) the moment a scope question
+    // appears, which makes React throw "rendered fewer hooks than expected"
+    // and unmounts the whole chat-bottom widget. That bug is exactly the
+    // "thumbs never show up after a skill is created" symptom.
     const submit = useCallback((rating, reason) => {
       if (!recent || !recent.skill_id || submitting) return;
       setSubmitting(true);
@@ -885,6 +886,15 @@
         })
         .finally(() => setSubmitting(false));
     }, [recent, submitting]);
+
+    // PRIORITY: pending scope wins over thumbs. (Conditional render only —
+    // all hooks above have already run, so the hook count is stable.)
+    if (pendingScope) {
+      return h(ScopeQuestion, {
+        skill: pendingScope,
+        onAnswered: onScopeAnswered,
+      });
+    }
 
     // Long-press tracker — pointer down starts a timer; tap fires submit
     // unless the timer already opened detail mode.
