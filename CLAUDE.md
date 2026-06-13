@@ -172,6 +172,16 @@ Hermes is three user-facing surfaces (CLI, TUI, multi-platform Gateway) all funn
   **Not done (intentionally deferred or out of scope of "code-completable items"):**
   - Walkthrough screenshots / recording — needs the live UI and the maintainer's preference; deferred to the report-writing phase.
   - Final `.icns/.ico` for the Tauri shell — cosmetic.
+- ✅ **Steps 20–21 (setup wizard + skin)**: Echo aux-model gets its own first-run setup step ([plugins/echo_signals/setup_wizard.py](plugins/echo_signals/setup_wizard.py) + `_setup_echo` shim in [hermes_cli/setup.py](hermes_cli/setup.py)) with the three-mode `echo.aux_mode` gate ([plugins/echo_signals/aux_config.py](plugins/echo_signals/aux_config.py)); sonar-teal CLI/TUI skin ([plugins/echo_signals/skin/echo.yaml](plugins/echo_signals/skin/echo.yaml), installed + defaulted by `./echo`) with WCAG contrast guards.
+- ✅ **Step 22 (full audit + backlog implementation)**: a line-by-line audit ([DevPlan/audit-report.md](DevPlan/audit-report.md)) found 4 dashboard UI bugs + a set of proposal-promise gaps; all were fixed/implemented:
+  - **UI fixes**: ThumbsBar React hooks-order crash (the `submit` useCallback sat below an early return → widget unmounted whenever a scope question appeared); explicit thumbs feedback + drift now write `echo_signal_event` rows (were invisible in the timeline + didn't bump `n_signals`); `drift_detected` / `tool_error` badges added; dashboard header given the teal Echo identity.
+  - **M3 Layer C**: judge now PRM-multi-votes ([judge.py](plugins/echo_signals/judge.py) `JUDGE_VOTES=3`, strict-majority `_aggregate_verdicts`, temp 0.4).
+  - **M3 Layer A**: tool exit-code → `tool_error` signal + 3rd `TRACKED_METRIC` ([signals.py](plugins/echo_signals/signals.py) `tool_call_failed`).
+  - **M4**: context-dependent initial confidence (save-intent skills seed 0.65 via [scope_dialog.py](plugins/echo_signals/scope_dialog.py)); manual-edit auto-lock ([skill_lock.py](plugins/echo_signals/skill_lock.py), schema v4 `echo_skill_content_hash`, agent-vs-manual attribution so Hermes' own skill_manage edits don't lock).
+  - **exclusion now lives**: the judge's exclusion verdict is injected to the agent via M5's cache-safe user-message-append channel ([preference_rag.py](plugins/echo_signals/preference_rag.py) `_active_skill_exclusions`).
+  - **Eval Metric 2**: error-propagation rate ([scripts/eval/metrics/error_propagation.py](scripts/eval/metrics/error_propagation.py)) — Echo catches 3/3 planted bad skills, frequency-decay Baseline B catches 0/3.
+  - 440 Echo + 22 eval + 78 Hermes regression + 34/34 smoke all green.
+  - **Still open** (external resources / larger design forks): M1 edit-distance signal, M2 "narrow → split into methodology+specifics layers", task_type_tag taxonomy, scope_level→M5-breadth coupling, semi-synthetic datasets, real Telegram bot, Metric 1 satisfaction curve / Metric 3 token cost, statistical tests.
 
 (Update this list when steps move state — the file is committed and serves as a living changelog for the project.)
 

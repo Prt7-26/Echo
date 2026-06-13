@@ -6,6 +6,26 @@
 
 ---
 
+## 更新 · 本轮已闭环（审计后立即实现）
+
+审计列出的 backlog 已实现 6 项（每项独立 commit + 测试 + 推送）。下方原始审计正文保留作记录，但这些项现已闭环：
+
+| 原审计缺口 | 状态 | commit |
+|---|---|---|
+| **UI**：ThumbsBar hooks 崩溃 / 打分无 timeline / drift 无 timeline / drift badge | 🔧 全修 + 回归测试 | 253e06e54 |
+| **Layer C**：judge 只调一次 → PRM 多次投票（3 票严格多数降噪） | ✅ 实现 | 27c0551ab |
+| **M4**：初始置信度永远 0.5 → save-intent 创建的技能 0.65 | ✅ 实现 | 7010f7d43 |
+| **Layer A**：无 exit code 信号 → tool_error 信号 + 第 3 个 drift metric | ✅ 实现 | 1d70a8d5f |
+| **exclusion 死数据**：写而不读 → 经 M5 注入通道下发给 agent（cache-safe） | ✅ 生效 | 7f374c63c |
+| **M4**：手动编辑锁定 set_locked 零调用 → SKILL.md hash 检测 + 归因（区分用户/Hermes 编辑） | ✅ 实现 | 985df62b4 |
+| **评估**：缺 Metric 2 → 错误传播率（Echo 抓 3/3 坏技能，Baseline B 抓 0/3） | ✅ 实现 | a41e4f3a5 |
+
+**仍未做（需要外部资源或更大设计决策，留给你）**：M1 编辑距离信号（CLI/TUI 难捕获初稿 vs 终稿）、M2 选 B 真拆方法论/具体两层（需 LLM 拆分技能文本）、task_type_tag 语义标签（需 taxonomy）、scope_level 影响 M5 检索广度（需定策略）、半合成数据（Enron/CodeAlpaca）、真实 Telegram bot、Metric 1 满意度曲线 / Metric 3 token 开销、统计检验。
+
+下方为审计当时的原始记录 ↓
+
+---
+
 ## 一、总评
 
 代码工程质量高、测试覆盖好（409 Echo 单测 + 21 评估 + 78 Hermes 回归 + 34/34 smoke 全绿），五大模块的**骨架都在**。但对照 proposal 逐条看，有若干"画了但没完全落地"的饼，分两类：
