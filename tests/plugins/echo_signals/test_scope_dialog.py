@@ -171,6 +171,71 @@ class TestOnPostToolCall:
         assert row is not None
         assert row["confidence"] == 0.5
 
+    def test_save_intent_raises_initial_confidence(self, isolated_db):
+        """proposal §M4: a skill created right after the user said 'save
+        this' starts with a higher initial confidence than the neutral
+        default."""
+        conn = echo_db.get_echo_conn()
+        now = time.time()
+        # An m1_save_intent signal needs an invocation to hang off (FK).
+        conn.execute(
+            "INSERT INTO echo_skill_confidence (skill_id, created_at, updated_at) "
+            "VALUES ('prior', ?, ?)", (now, now),
+        )
+        cur = conn.execute(
+            "INSERT INTO echo_skill_invocation (skill_id, platform, started_at) "
+            "VALUES ('prior', 'cli', ?)", (now,),
+        )
+        inv = cur.lastrowid
+        conn.execute(
+            "INSERT INTO echo_signal_event "
+            "(invocation_id, skill_id, layer, signal_type, ts) "
+            "VALUES (?, 'prior', 'B', 'm1_save_intent', ?)", (inv, now),
+        )
+        conn.commit()
+
+        sd.on_post_tool_call(
+            tool_name="skill_manage",
+            args={"action": "create", "name": "saved-skill"},
+            result="Created.",
+        )
+        c = conn.execute(
+            "SELECT confidence FROM echo_skill_confidence WHERE skill_id='saved-skill'"
+        ).fetchone()["confidence"]
+        from plugins.echo_signals.confidence import INITIAL_CONFIDENCE_SAVE_INTENT
+        assert c == pytest.approx(INITIAL_CONFIDENCE_SAVE_INTENT)
+
+    def test_stale_save_intent_does_not_raise_confidence(self, isolated_db):
+        """A save-intent from long ago (outside the lookback window) must
+        NOT bump a freshly created skill's initial confidence."""
+        conn = echo_db.get_echo_conn()
+        now = time.time()
+        old = now - sd.SAVE_INTENT_LOOKBACK_SECONDS - 60
+        conn.execute(
+            "INSERT INTO echo_skill_confidence (skill_id, created_at, updated_at) "
+            "VALUES ('prior', ?, ?)", (now, now),
+        )
+        cur = conn.execute(
+            "INSERT INTO echo_skill_invocation (skill_id, platform, started_at) "
+            "VALUES ('prior', 'cli', ?)", (old,),
+        )
+        inv = cur.lastrowid
+        conn.execute(
+            "INSERT INTO echo_signal_event "
+            "(invocation_id, skill_id, layer, signal_type, ts) "
+            "VALUES (?, 'prior', 'B', 'm1_save_intent', ?)", (inv, old),
+        )
+        conn.commit()
+        sd.on_post_tool_call(
+            tool_name="skill_manage",
+            args={"action": "create", "name": "later-skill"},
+            result="Created.",
+        )
+        c = conn.execute(
+            "SELECT confidence FROM echo_skill_confidence WHERE skill_id='later-skill'"
+        ).fetchone()["confidence"]
+        assert c == pytest.approx(0.5)
+
     def test_idempotent_on_recreate(self, isolated_db):
         sd.on_post_tool_call(
             tool_name="skill_manage",

@@ -61,6 +61,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 INITIAL_CONFIDENCE = 0.5
+# proposal §M4: "c 的初始值根据技能创建时的上下文设定（例如用户显式请求存储
+# 的技能初始置信度较高）". A skill the user explicitly asked to save is a
+# stronger prior than one auto-nominated, so it starts above the neutral
+# default. scope_dialog seeds this when a recent m1_save_intent precedes
+# the skill's creation.
+INITIAL_CONFIDENCE_SAVE_INTENT = 0.65
 ALPHA_EXPLICIT_POSITIVE = 0.10     # explicit thumbs up
 ALPHA_NL_POSITIVE = 0.05           # NL-classified positive sentiment
 BETA_EXPLICIT_NEGATIVE = 0.30      # explicit thumbs down (large hit)

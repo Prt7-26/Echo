@@ -113,6 +113,30 @@ def on_post_tool_call(
         )
 
 
+# How far back (seconds) to look for an m1_save_intent signal when
+# deciding a newly-created skill's initial confidence. If the user said
+# "save this as a skill" shortly before the skill was created, the skill
+# starts with a higher prior (proposal §M4).
+SAVE_INTENT_LOOKBACK_SECONDS = 300
+
+
+def _recent_save_intent(conn, lookback_s: float = SAVE_INTENT_LOOKBACK_SECONDS) -> bool:
+    """True if an m1_save_intent signal fired within the lookback window.
+
+    This is the "user explicitly asked to save this" context the proposal
+    uses to justify a higher initial confidence. Session-agnostic recency
+    check — a save-intent in the last few minutes immediately followed by a
+    skill creation is the signal we want.
+    """
+    cutoff = time.time() - lookback_s
+    row = conn.execute(
+        "SELECT 1 FROM echo_signal_event "
+        "WHERE signal_type = 'm1_save_intent' AND ts >= ? LIMIT 1",
+        (cutoff,),
+    ).fetchone()
+    return row is not None
+
+
 def _record_pending_scope(skill_name: str) -> None:
     """Insert an echo_skill_scope row with scope_level='unknown' if absent.
 
@@ -121,16 +145,25 @@ def _record_pending_scope(skill_name: str) -> None:
     If the user wants to re-confirm, they can clear the row via the
     dashboard.
     """
+    from .confidence import INITIAL_CONFIDENCE, INITIAL_CONFIDENCE_SAVE_INTENT
+
     conn = get_echo_conn()
     now = time.time()
 
     # Also seed the confidence row if this is a brand-new skill — that
     # way the dashboard's confidence-ranking widget shows the skill
-    # immediately, even before its first bump_use fires.
+    # immediately, even before its first bump_use fires. Initial
+    # confidence is context-dependent (proposal §M4): a skill created
+    # right after the user said "save this" starts with a higher prior.
+    initial_c = (
+        INITIAL_CONFIDENCE_SAVE_INTENT
+        if _recent_save_intent(conn)
+        else INITIAL_CONFIDENCE
+    )
     conn.execute(
         "INSERT OR IGNORE INTO echo_skill_confidence "
-        "(skill_id, created_at, updated_at) VALUES (?, ?, ?)",
-        (skill_name, now, now),
+        "(skill_id, confidence, created_at, updated_at) VALUES (?, ?, ?, ?)",
+        (skill_name, initial_c, now, now),
     )
 
     conn.execute(
