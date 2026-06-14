@@ -2,6 +2,11 @@ import { Typography } from "@/components/NouiTypography";
 import { useSidebarStatus } from "@/hooks/useSidebarStatus";
 import { cn } from "@/lib/utils";
 
+/** Echo's own version (see plugins/echo_signals/plugin.yaml). Shown instead
+ *  of the underlying Hermes version — Echo is a distinct project, currently
+ *  in alpha. The Hermes version stays available in the hover tooltip. */
+const ECHO_VERSION = "0.1.0-alpha";
+
 export function SidebarFooter() {
   const status = useSidebarStatus();
 
@@ -16,8 +21,13 @@ export function SidebarFooter() {
       <Typography
         mondwest
         className="font-mono-ui text-[0.7rem] tabular-nums tracking-[0.1em] text-muted-foreground/70 lowercase"
+        title={
+          status?.version != null
+            ? `Echo ${ECHO_VERSION} · on Hermes ${status.version}`
+            : `Echo ${ECHO_VERSION}`
+        }
       >
-        {status?.version != null ? `v${status.version}` : "—"}
+        {`v${ECHO_VERSION}`}
       </Typography>
 
       <a

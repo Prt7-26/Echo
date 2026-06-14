@@ -371,7 +371,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
           }
           if (Object.keys(defs).length > 0) setUserThemeDefs(defs);
         }
-        if (resp.active && resp.active !== themeName) {
+        // Only adopt the server's configured theme when this browser has no
+        // explicit local choice yet. A theme the user picked here (persisted
+        // in localStorage) must win — otherwise a stale server config would
+        // silently revert their selection on every reload.
+        const hadLocalChoice =
+          typeof window !== "undefined" &&
+          window.localStorage.getItem(STORAGE_KEY) != null;
+        if (resp.active && resp.active !== themeName && !hadLocalChoice) {
           setThemeName(resp.active);
           window.localStorage.setItem(STORAGE_KEY, resp.active);
         }
