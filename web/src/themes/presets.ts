@@ -44,13 +44,20 @@ export const defaultTheme: DashboardTheme = {
   description: "Sonar teal on deep water — Echo's dark mode",
   palette: {
     background: { hex: "#020e0e", alpha: 1 },
-    midground: { hex: "#ffe6cb", alpha: 1 },
+    // Cool brand-white ink (matches Echo's CLI skin banner_text) instead of
+    // Hermes' warm cream, so dark mode reads as Echo, not Hermes.
+    midground: { hex: "#e6fbf7", alpha: 1 },
     foreground: { hex: "#ffffff", alpha: 0 },
-    warmGlow: "rgba(255, 189, 56, 0.35)",
+    // Echo teal corner glow, not Hermes gold.
+    warmGlow: "rgba(45, 212, 191, 0.22)",
     noiseOpacity: 1,
   },
   typography: DEFAULT_TYPOGRAPHY,
   layout: DEFAULT_LAYOUT,
+  // Teal focus rings / accents carry the Echo identity into interactive chrome.
+  colorOverrides: {
+    ring: "#2dd4bf",
+  },
 };
 
 /**
