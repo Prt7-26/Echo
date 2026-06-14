@@ -36,15 +36,20 @@ import { usePageHeader } from "@/contexts/usePageHeader";
 import { useI18n } from "@/i18n";
 import { api } from "@/lib/api";
 import { PluginSlot } from "@/plugins";
+import { useTheme } from "@/themes";
 
 function buildWsUrl(
   token: string,
   resume: string | null,
   channel: string,
+  isLight: boolean,
 ): string {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   const qs = new URLSearchParams({ token, channel });
   if (resume) qs.set("resume", resume);
+  // Tell /api/pty which terminal skin to launch so the embedded TUI's
+  // colors match the dashboard's web theme (light -> echo-light skin).
+  qs.set("theme", isLight ? "light" : "dark");
   return `${proto}//${window.location.host}${HERMES_BASE_PATH}/api/pty?${qs.toString()}`;
 }
 
@@ -59,17 +64,39 @@ function generateChannelId(): string {
   return `chat-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
 }
 
-// Colors for the terminal body.  Matches the dashboard's dark teal canvas
-// with cream foreground — we intentionally don't pick monokai or a loud
-// theme, because the TUI's skin engine already paints the content; the
-// terminal chrome just needs to sit quietly inside the dashboard.
-const TERMINAL_THEME = {
-  background: "#0d2626",
-  foreground: "#f0e6d2",
-  cursor: "#f0e6d2",
-  cursorAccent: "#0d2626",
-  selectionBackground: "#f0e6d244",
-};
+// Colors for the terminal body. The TUI's skin engine paints the content,
+// so this only needs to set the canvas + default fg/cursor and sit quietly
+// inside the dashboard. Two variants so the terminal follows the web theme:
+// the dark teal canvas, or a light ivory one paired with the echo-light TUI
+// skin (selected server-side via /api/pty?theme=light).
+function terminalTheme(isLight: boolean) {
+  return isLight
+    ? {
+        background: "#f3f7f5",
+        foreground: "#0c2e29",
+        cursor: "#0c2e29",
+        cursorAccent: "#f3f7f5",
+        selectionBackground: "#0c2e2933",
+      }
+    : {
+        background: "#0d2626",
+        foreground: "#f0e6d2",
+        cursor: "#f0e6d2",
+        cursorAccent: "#0d2626",
+        selectionBackground: "#f0e6d244",
+      };
+}
+
+/** Perceived-luminance test on a #rrggbb hex — used to decide whether the
+ *  active web theme is light, so the embedded terminal can match it. */
+function isLightHex(hex: string): boolean {
+  const h = hex.replace("#", "");
+  if (h.length < 6) return false;
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5;
+}
 
 /**
  * CSS width for xterm font tiers.
@@ -157,6 +184,14 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
   // terminal session when it changes.
   const resumeParam = searchParams.get("resume");
   const channel = useMemo(() => generateChannelId(), [resumeParam]);
+
+  // Match the embedded terminal to the active web theme. A light web theme
+  // gives the terminal an ivory canvas + the echo-light TUI skin; switching
+  // theme changes `isLightTerminal`, which is part of the PTY identity below
+  // so the terminal rebuilds + reconnects with the matching skin.
+  const { theme } = useTheme();
+  const isLightTerminal = isLightHex(theme.palette.background.hex);
+  const tt = useMemo(() => terminalTheme(isLightTerminal), [isLightTerminal]);
 
   useEffect(() => {
     if (!resumeParam) return;
@@ -301,7 +336,7 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
       // Browser-embedded chat runs the TUI in inline mode. Keep transcript
       // history in xterm.js so the browser wheel can scroll it directly.
       scrollback: 5000,
-      theme: TERMINAL_THEME,
+      theme: tt,
     });
     termRef.current = term;
 
@@ -545,7 +580,7 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
     });
 
     // WebSocket
-    const url = buildWsUrl(token, resumeParam, channel);
+    const url = buildWsUrl(token, resumeParam, channel, isLightTerminal);
     const ws = new WebSocket(url);
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
@@ -650,7 +685,7 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
         copyResetRef.current = null;
       }
     };
-  }, [channel, resumeParam]);
+  }, [channel, resumeParam, isLightTerminal, tt]);
 
   // When the user returns to the chat tab (isActive: false → true), the
   // terminal host just transitioned from display:none to display:flex.
@@ -806,7 +841,7 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
             "p-2 sm:p-3",
           )}
           style={{
-            backgroundColor: TERMINAL_THEME.background,
+            backgroundColor: tt.background,
             boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
           }}
         >
@@ -829,7 +864,7 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
               "bottom-2 right-2 px-2 py-1 text-[0.65rem] sm:bottom-3 sm:right-3 sm:px-2.5 sm:py-1.5 sm:text-xs",
               "lg:bottom-4 lg:right-4",
             )}
-            style={{ color: TERMINAL_THEME.foreground }}
+            style={{ color: tt.foreground }}
           >
             <span className="inline-flex items-center gap-1.5">
               <Copy className="h-3 w-3 shrink-0" />

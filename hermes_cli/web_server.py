@@ -3432,11 +3432,21 @@ async def pty_ws(ws: WebSocket) -> None:
 
     # --- spawn PTY ------------------------------------------------------
     resume = ws.query_params.get("resume") or None
+    theme = ws.query_params.get("theme") or None
     channel = _channel_or_close_code(ws)
     sidecar_url = _build_sidecar_url(channel) if channel else None
 
     try:
         argv, cwd, env = _resolve_chat_argv(resume=resume, sidecar_url=sidecar_url)
+        # Match the embedded terminal to the dashboard's web theme. A light
+        # web theme drives the TUI onto its built-in LIGHT_THEME base
+        # (HERMES_TUI_THEME) and selects the light-tuned Echo skin
+        # (HERMES_SKIN), so the agent's colored output stays readable on a
+        # light canvas. Dark is the default and needs no override. Set here
+        # (not in _resolve_chat_argv) to keep that helper's signature stable.
+        if env is not None and (theme or "").strip().lower() == "light":
+            env["HERMES_TUI_THEME"] = "light"
+            env["HERMES_SKIN"] = "echo-light"
     except SystemExit as exc:
         # _make_tui_argv calls sys.exit(1) when node/npm is missing.
         await ws.send_text(f"\r\n\x1b[31mChat unavailable: {exc}\x1b[0m\r\n")

@@ -791,7 +791,20 @@ def init_skin_from_config(config: dict) -> None:
     """Initialize the active skin from CLI config at startup.
 
     Call this once during CLI init with the loaded config dict.
+
+    A ``HERMES_SKIN`` environment variable takes precedence over the config
+    value. This lets a single process (e.g. the dashboard's embedded-chat
+    gateway) request a per-session skin — the dashboard sets
+    ``HERMES_SKIN=echo-light`` in the PTY env when the web theme is light —
+    without rewriting the user's global ``display.skin`` config.
     """
+    import os
+
+    env_skin = (os.environ.get("HERMES_SKIN") or "").strip()
+    if env_skin:
+        set_active_skin(env_skin)
+        return
+
     display = config.get("display") or {}
     if not isinstance(display, dict):
         display = {}

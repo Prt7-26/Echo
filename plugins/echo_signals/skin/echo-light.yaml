@@ -1,0 +1,107 @@
+# Echo skin — daytime (light) variant of echo.yaml.
+#
+# Used by the dashboard's embedded chat terminal when the web theme is
+# light: web_server's /api/pty sets HERMES_SKIN=echo-light + HERMES_TUI_THEME
+# =light so the TUI lays out on its built-in LIGHT_THEME base and fromSkin()
+# overlays these light-tuned colors. Every color is the dark-teal-ink-on-
+# ivory inverse of echo.yaml so the agent's output stays readable on a light
+# canvas (the dark echo.yaml uses light text, which would vanish on white).
+#
+# Installed into <hermes_home>/skins/echo-light.yaml by the ./echo launcher.
+
+name: echo-light
+description: Echo — daytime · dark teal ink on ivory (powered by Hermes)
+
+# Contrast ladder (inverse of echo.yaml): ink ~12% luminance, structure ~40%,
+# muted ~50%, accents ~45% (teal-600/700 so they read on near-white), bg ~96%.
+colors:
+  banner_border: "#0D9488"
+  banner_title: "#0F766E"
+  banner_accent: "#14B8A6"
+  banner_dim: "#5B8D86"
+  banner_text: "#0C2E29"
+  ui_accent: "#0D9488"
+  ui_label: "#0E7490"
+  ui_ok: "#15803D"
+  ui_error: "#DC2626"
+  ui_warn: "#B45309"
+  prompt: "#0C2E29"
+  input_rule: "#0D9488"
+  response_border: "#0F766E"
+  status_bar_bg: "#DCEFE9"
+  status_bar_text: "#0C2E29"
+  status_bar_strong: "#0F766E"
+  status_bar_dim: "#5B8D86"
+  status_bar_good: "#15803D"
+  status_bar_warn: "#B45309"
+  status_bar_bad: "#C2410C"
+  status_bar_critical: "#DC2626"
+  session_label: "#0E7490"
+  session_border: "#5B8D86"
+  selection_bg: "#BFE6DD"
+  voice_status_bg: "#DCEFE9"
+  completion_menu_bg: "#E6F4F0"
+  completion_menu_current_bg: "#BFE6DD"
+  completion_menu_meta_bg: "#E6F4F0"
+  completion_menu_meta_current_bg: "#BFE6DD"
+
+spinner:
+  waiting_faces:
+    - "(·)"
+    - "(··)"
+    - "(···)"
+    - "(··●)"
+    - "(·●·)"
+    - "(●··)"
+  thinking_faces:
+    - "(·●·)"
+    - "(●·●)"
+    - "(∿)"
+    - "(≋)"
+    - "(··●)"
+  thinking_verbs:
+    - "listening"
+    - "pinging"
+    - "echoing"
+    - "triangulating"
+    - "resonating"
+    - "sounding the depths"
+    - "tracing the signal"
+    - "tuning"
+  wings:
+    - ["≋·", "·≋"]
+    - ["⟨⟨·", "·⟩⟩"]
+    - ["··(", ")··"]
+
+branding:
+  agent_name: "Echo"
+  welcome: "··●·· Echo online — every signal counts. Type a message or /help."
+  goodbye: "Signal fading ··● goodbye"
+  response_label: " ◉ Echo "
+  prompt_symbol: "∿"
+  help_header: "(·●·)? Commands"
+
+tool_prefix: "┆"
+
+# ECHO wordmark in darker teal so it reads on a light canvas.
+banner_logo: |-
+  [bold #0F766E]███████╗ ██████╗██╗  ██╗ ██████╗ [/]
+  [bold #0D9488]██╔════╝██╔════╝██║  ██║██╔═══██╗[/]
+  [#14B8A6]█████╗  ██║     ███████║██║   ██║[/]
+  [#0E7490]██╔══╝  ██║     ██╔══██║██║   ██║[/]
+  [#115E59]███████╗╚██████╗██║  ██║╚██████╔╝[/]
+  [#134E4A]╚══════╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ [/]
+  [#5B8D86]   ·· ● ··  powered by Hermes  ·· ● ··[/]
+
+# Sonar bloom, darkened for light backgrounds (centre strongest).
+banner_hero: |-
+  [#5B8D86]       · · · · ·       [/]
+  [#14B8A6]    ·             ·    [/]
+  [#0D9488]  ·     ╭─────╮     ·  [/]
+  [#0F766E] ·      ╱     ╲      · [/]
+  [#134E4A] ·      │  ◉  │      · [/]
+  [#0F766E] ·      ╲     ╱      · [/]
+  [#0D9488]  ·     ╰─────╯     ·  [/]
+  [#14B8A6]    ·             ·    [/]
+  [#5B8D86]       · · · · ·       [/]
+  [dim #5B8D86]   every signal counts   [/]

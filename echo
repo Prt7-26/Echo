@@ -180,12 +180,17 @@ sys.path.insert(0, ".")
 
 from hermes_constants import get_hermes_home
 
-src = Path("plugins/echo_signals/skin/echo.yaml")
-dst = get_hermes_home() / "skins" / "echo.yaml"
-if src.exists():
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    if not dst.exists() or dst.read_bytes() != src.read_bytes():
-        shutil.copy2(src, dst)
+skins_dir = get_hermes_home() / "skins"
+# Install both the dark (echo) and light (echo-light) skins. The light one
+# is used by the dashboard's embedded chat terminal when the web theme is
+# light (web_server sets HERMES_SKIN=echo-light per session).
+for stem in ("echo", "echo-light"):
+    src = Path(f"plugins/echo_signals/skin/{stem}.yaml")
+    dst = skins_dir / f"{stem}.yaml"
+    if src.exists():
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if not dst.exists() or dst.read_bytes() != src.read_bytes():
+            shutil.copy2(src, dst)
 
 from hermes_cli.config import load_config, save_config
 
