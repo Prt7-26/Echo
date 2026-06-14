@@ -43,7 +43,7 @@ export const defaultTheme: DashboardTheme = {
   label: "Echo",
   description: "Sonar teal on deep water — Echo's dark mode",
   palette: {
-    background: { hex: "#041c1c", alpha: 1 },
+    background: { hex: "#020e0e", alpha: 1 },
     midground: { hex: "#ffe6cb", alpha: 1 },
     foreground: { hex: "#ffffff", alpha: 0 },
     warmGlow: "rgba(255, 189, 56, 0.35)",
