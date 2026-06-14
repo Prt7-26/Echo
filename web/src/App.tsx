@@ -497,14 +497,20 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <PluginSlot name="header-left" />
 
-                <Typography
-                  className="font-bold text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground"
-                  style={{ mixBlendMode: "plus-lighter" }}
-                >
-                  Hermes
-                  <br />
-                  Agent
-                </Typography>
+                <div className="flex flex-col gap-0.5">
+                  <Typography
+                    className="font-bold text-[1.25rem] leading-[0.95] tracking-[0.0525rem] text-midground"
+                    style={{ mixBlendMode: "plus-lighter" }}
+                  >
+                    Echo
+                  </Typography>
+                  <Typography
+                    className="font-mono-ui text-[0.5rem] leading-none tracking-[0.12em] text-muted-foreground/60 lowercase"
+                    style={{ mixBlendMode: "plus-lighter" }}
+                  >
+                    powered by Hermes
+                  </Typography>
+                </div>
               </div>
 
               <Button

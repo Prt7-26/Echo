@@ -1,11 +1,9 @@
 import { Typography } from "@/components/NouiTypography";
 import { useSidebarStatus } from "@/hooks/useSidebarStatus";
 import { cn } from "@/lib/utils";
-import { useI18n } from "@/i18n";
 
 export function SidebarFooter() {
   const status = useSidebarStatus();
-  const { t } = useI18n();
 
   return (
     <div
@@ -23,7 +21,7 @@ export function SidebarFooter() {
       </Typography>
 
       <a
-        href="https://nousresearch.com"
+        href="https://github.com/Prt7-26"
         target="_blank"
         rel="noopener noreferrer"
         className={cn(
@@ -33,7 +31,7 @@ export function SidebarFooter() {
         )}
         style={{ mixBlendMode: "plus-lighter" }}
       >
-        {t.app.footer.org}
+        Prt7-26
       </a>
     </div>
   );
