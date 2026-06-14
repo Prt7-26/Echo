@@ -63,6 +63,11 @@
   --background-base: #041c1c;
   --background-alpha: 1;
 
+  /* UI chrome glow blend. `plus-lighter` makes logos/titles glow on a dark
+     canvas; light themes flip this to `normal` (via their customCSS) so
+     dark ink doesn't additively wash out to white. */
+  --ui-chrome-blend: plus-lighter;
+
   /* Consumed by <Backdrop />; also theme-switchable. */
   --warm-glow: rgba(255, 189, 56, 0.35);
   --noise-opacity-mul: 1;
@@ -195,9 +200,10 @@ code { font-size: 0.875rem; }
   display: none;
 }
 
-/* Plus-lighter blend used by logos/titles for a subtle glow. */
+/* Plus-lighter blend used by logos/titles for a subtle glow. Routed through
+   `--ui-chrome-blend` so light themes can disable the additive wash-out. */
 .blend-lighter {
-  mix-blend-mode: plus-lighter;
+  mix-blend-mode: var(--ui-chrome-blend, plus-lighter);
 }
 
 /* System UI-monospace stack — distinct from `font-courier` (Courier

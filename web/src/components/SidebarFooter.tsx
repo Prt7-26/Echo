@@ -29,7 +29,7 @@ export function SidebarFooter() {
           "transition-opacity hover:opacity-90",
           "focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground/40",
         )}
-        style={{ mixBlendMode: "plus-lighter" }}
+        style={{ mixBlendMode: "var(--ui-chrome-blend, plus-lighter)" } as unknown as React.CSSProperties}
       >
         Prt7-26
       </a>

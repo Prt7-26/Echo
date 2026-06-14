@@ -449,7 +449,7 @@ export default function App() {
 
         <Typography
           className="font-bold text-[0.95rem] leading-[0.95] tracking-[0.05em] text-midground"
-          style={{ mixBlendMode: "plus-lighter" }}
+          style={{ mixBlendMode: "var(--ui-chrome-blend, plus-lighter)" } as unknown as React.CSSProperties}
         >
           {t.app.brand}
         </Typography>
@@ -500,13 +500,13 @@ export default function App() {
                 <div className="flex flex-col gap-0.5">
                   <Typography
                     className="font-bold text-[1.25rem] leading-[0.95] tracking-[0.0525rem] text-midground"
-                    style={{ mixBlendMode: "plus-lighter" }}
+                    style={{ mixBlendMode: "var(--ui-chrome-blend, plus-lighter)" } as unknown as React.CSSProperties}
                   >
                     Echo
                   </Typography>
                   <Typography
                     className="font-mono-ui text-[0.5rem] leading-none tracking-[0.12em] text-muted-foreground/60 lowercase"
-                    style={{ mixBlendMode: "plus-lighter" }}
+                    style={{ mixBlendMode: "var(--ui-chrome-blend, plus-lighter)" } as unknown as React.CSSProperties}
                   >
                     powered by Hermes
                   </Typography>
@@ -701,7 +701,7 @@ function SidebarNavLink({ closeMobile, item, t }: SidebarNavLinkProps) {
               <span
                 aria-hidden
                 className="absolute left-0 top-0 bottom-0 w-px bg-midground"
-                style={{ mixBlendMode: "plus-lighter" }}
+                style={{ mixBlendMode: "var(--ui-chrome-blend, plus-lighter)" } as unknown as React.CSSProperties}
               />
             )}
           </>
@@ -810,7 +810,7 @@ function SidebarSystemActions({ onNavigate }: { onNavigate: () => void }) {
                   <span
                     aria-hidden
                     className="absolute left-0 top-0 bottom-0 w-px bg-midground"
-                    style={{ mixBlendMode: "plus-lighter" }}
+                    style={{ mixBlendMode: "var(--ui-chrome-blend, plus-lighter)" } as unknown as React.CSSProperties}
                   />
                 )}
               </ListItem>

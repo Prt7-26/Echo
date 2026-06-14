@@ -40,8 +40,8 @@ const DEFAULT_LAYOUT: ThemeLayout = {
 
 export const defaultTheme: DashboardTheme = {
   name: "default",
-  label: "Hermes Teal",
-  description: "Classic dark teal — the canonical Hermes look",
+  label: "Echo",
+  description: "Sonar teal on deep water — Echo's dark mode",
   palette: {
     background: { hex: "#041c1c", alpha: 1 },
     midground: { hex: "#ffe6cb", alpha: 1 },
@@ -51,6 +51,57 @@ export const defaultTheme: DashboardTheme = {
   },
   typography: DEFAULT_TYPOGRAPHY,
   layout: DEFAULT_LAYOUT,
+};
+
+/**
+ * Echo's daytime mode. The DS cascade in `index.css` is luminance-agnostic
+ * — every token derives as `color-mix(midground%, background)` and body
+ * text tracks `--midground` — so a light theme is just an inverted palette:
+ * a bright ivory canvas (`background`) with dark teal ink (`midground`).
+ *
+ * The one catch is `<Backdrop />`: its base layer composites with
+ * `mix-blend-mode: difference` to paint the dark canvas, which would invert
+ * a light fill. We flip it to `normal` (and soften the vignette/noise to
+ * `multiply`) via the `backdrop` component-style bucket so the bright
+ * canvas paints directly. Status hues are darkened through `colorOverrides`
+ * so they stay legible on white surfaces.
+ */
+export const echoLightTheme: DashboardTheme = {
+  name: "echo-light",
+  label: "Echo Light",
+  description: "Bright ivory canvas with teal ink — Echo's daytime mode",
+  palette: {
+    background: { hex: "#f3f7f5", alpha: 1 },
+    midground: { hex: "#0c2e29", alpha: 1 },
+    foreground: { hex: "#04231f", alpha: 0 },
+    warmGlow: "rgba(13, 148, 136, 0.14)",
+    noiseOpacity: 0.4,
+  },
+  typography: DEFAULT_TYPOGRAPHY,
+  layout: DEFAULT_LAYOUT,
+  // Disable the `plus-lighter` chrome glow: on a light canvas that blend is
+  // additive and washes dark ink (logos, titles, footer) out to white.
+  customCSS: ":root { --ui-chrome-blend: normal; }",
+  componentStyles: {
+    // Repaint the backdrop for a light canvas: paint the fill directly
+    // (normal, not difference), hide the inverted filler photo, and turn
+    // the corner glow + grain into gentle multiplies so they tint rather
+    // than blow out on near-white.
+    backdrop: {
+      baseBlendMode: "normal",
+      fillerOpacity: "0",
+      vignetteBlendMode: "multiply",
+      vignetteOpacity: "0.07",
+      noiseBlendMode: "multiply",
+    },
+  },
+  colorOverrides: {
+    // Default success/warning greens & ambers are tuned for a dark canvas;
+    // darken them so they keep ~4.5:1 contrast on light surfaces.
+    success: "#15803d",
+    warning: "#b45309",
+    destructive: "#dc2626",
+  },
 };
 
 export const midnightTheme: DashboardTheme = {
@@ -190,8 +241,8 @@ export const roseTheme: DashboardTheme = {
  */
 export const defaultLargeTheme: DashboardTheme = {
   name: "default-large",
-  label: "Hermes Teal (Large)",
-  description: "Hermes Teal with bigger fonts and roomier spacing",
+  label: "Echo (Large)",
+  description: "Echo with bigger fonts and roomier spacing",
   palette: defaultTheme.palette,
   typography: {
     ...DEFAULT_TYPOGRAPHY,
@@ -206,6 +257,7 @@ export const defaultLargeTheme: DashboardTheme = {
 
 export const BUILTIN_THEMES: Record<string, DashboardTheme> = {
   default: defaultTheme,
+  "echo-light": echoLightTheme,
   "default-large": defaultLargeTheme,
   midnight: midnightTheme,
   ember: emberTheme,

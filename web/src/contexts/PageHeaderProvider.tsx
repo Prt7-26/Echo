@@ -88,7 +88,7 @@ export function PageHeaderProvider({
                       ? "shrink truncate"
                       : "truncate",
                 )}
-                style={{ mixBlendMode: "plus-lighter" }}
+                style={{ mixBlendMode: "var(--ui-chrome-blend, plus-lighter)" } as unknown as React.CSSProperties}
               >
                 {displayTitle}
               </h1>

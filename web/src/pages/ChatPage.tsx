@@ -757,7 +757,7 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
           >
             <Typography
               className="font-bold text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground"
-              style={{ mixBlendMode: "plus-lighter" }}
+              style={{ mixBlendMode: "var(--ui-chrome-blend, plus-lighter)" } as unknown as React.CSSProperties}
             >
               {t.app.modelToolsSheetTitle}
               <br />

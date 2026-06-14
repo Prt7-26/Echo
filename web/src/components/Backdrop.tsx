@@ -31,10 +31,16 @@ export function Backdrop() {
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 z-[1]"
-        style={{
-          backgroundColor: "var(--background-base)",
-          mixBlendMode: "difference",
-        }}
+        style={
+          {
+            backgroundColor: "var(--background-base)",
+            // `difference` is what paints the dark teal canvas. Light themes
+            // flip this to `normal` (via componentStyles.backdrop) so the
+            // bright fill paints directly instead of inverting.
+            mixBlendMode:
+              "var(--component-backdrop-base-blend-mode, difference)",
+          } as unknown as React.CSSProperties
+        }
       />
 
       <div
@@ -67,12 +73,15 @@ export function Backdrop() {
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 z-[99]"
-        style={{
-          background:
-            "radial-gradient(ellipse at 0% 0%, transparent 60%, var(--warm-glow) 100%)",
-          mixBlendMode: "lighten",
-          opacity: 0.22,
-        }}
+        style={
+          {
+            background:
+              "radial-gradient(ellipse at 0% 0%, transparent 60%, var(--warm-glow) 100%)",
+            mixBlendMode:
+              "var(--component-backdrop-vignette-blend-mode, lighten)",
+            opacity: "var(--component-backdrop-vignette-opacity, 0.22)",
+          } as unknown as React.CSSProperties
+        }
       />
 
       {gpuTier > 0 && (
@@ -83,9 +92,10 @@ export function Backdrop() {
             backgroundImage:
               "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' fill='%23eaeaea' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E\")",
             backgroundSize: "512px 512px",
-            mixBlendMode: "color-dodge",
+            mixBlendMode:
+              "var(--component-backdrop-noise-blend-mode, color-dodge)",
             opacity: "calc(0.55 * var(--noise-opacity-mul, 1))",
-          }}
+          } as unknown as React.CSSProperties}
         />
       )}
     </>
