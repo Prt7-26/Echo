@@ -449,16 +449,27 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
     fitRef.current = fit;
     term.loadAddon(fit);
 
-    // Dashboard chat should scroll the browser-side transcript, not send
-    // mouse-wheel protocol bytes through the PTY.
+    // The embedded TUI runs in inline mode with mouse tracking off, so it
+    // never receives wheel events and xterm's own scrollback stays empty
+    // (the TUI redraws its transcript in place). Without help the wheel does
+    // nothing and a resumed conversation taller than the viewport can't be
+    // scrolled — its banner + earlier context are unreachable. Translate the
+    // wheel into the TUI's own Shift+Up / Shift+Down transcript-scroll keys
+    // so wheeling scrolls the conversation. These are scroll keys, not agent
+    // input — they reach useInputHandlers' transcript scroll handler.
     term.attachCustomWheelEventHandler((ev) => {
       const delta = ev.deltaY;
       if (!delta) {
         return false;
       }
 
-      const step = Math.max(1, Math.round(Math.abs(delta) / 50));
-      term.scrollLines(delta > 0 ? step : -step);
+      const lines = Math.min(8, Math.max(1, Math.round(Math.abs(delta) / 40)));
+      // Shift+Up = CSI 1;2 A, Shift+Down = CSI 1;2 B.
+      const seq = (delta > 0 ? "\x1b[1;2B" : "\x1b[1;2A").repeat(lines);
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(seq);
+      }
 
       ev.preventDefault();
       ev.stopPropagation();

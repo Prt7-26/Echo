@@ -9,7 +9,6 @@ import {
   useState,
   useSyncExternalStore
 } from 'react'
-import { INLINE_MODE } from '../config/env.js'
 
 const ESTIMATE = 4
 // Overscan was 40 (= viewport) which is way more than needed when heights
@@ -24,17 +23,6 @@ const OVERSCAN = 20
 // rows/item, so 120 leaves >4× headroom and never blanks the viewport
 // even when items are tiny.
 const MAX_MOUNTED = 120
-// Inline mode renders into the primary buffer so the host terminal's native
-// scrollback is supposed to hold whatever scrolls off the top (see
-// INLINE_MODE in config/env). Windowing defeats that: off-screen-top rows
-// (e.g. the banner + session-context intro on resume) become a blank
-// topSpacer instead of being emitted to scrollback. So in inline mode we
-// effectively disable windowing — mount the whole transcript — which the
-// dashboard's embedded xterm (5k-line scrollback) handles fine for the
-// bounded conversations it hosts. The native full-screen TUI keeps the 120
-// cap (its alternate-screen re-renders rows on scroll, so windowing is
-// correct there).
-const INLINE_MAX_MOUNTED = 100_000
 const COLD_START = 30
 // Floor on unmeasured row height used when computing coverage — guarantees
 // the mounted span physically reaches the viewport bottom regardless of how
@@ -118,7 +106,7 @@ export function useVirtualHistory(
     liveTailActive = false,
     onHeightsChange,
     overscan = OVERSCAN,
-    maxMounted = INLINE_MODE ? INLINE_MAX_MOUNTED : MAX_MOUNTED,
+    maxMounted = MAX_MOUNTED,
     coldStartCount = COLD_START
   }: VirtualHistoryOptions = {}
 ) {
