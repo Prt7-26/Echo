@@ -111,3 +111,8 @@ DevPlan/*.aux
 DevPlan/*.out
 DevPlan/*.log
 DevPlan/*.synctex.gz
+
+# Agent-generated architecture diagrams dropped in the repo root during
+# dashboard testing (e.g. macos-architecture.html, microservice-architecture.html).
+# Root-anchored so docs/hermes-architecture.html (tracked) is unaffected.
+/*-architecture*.html
