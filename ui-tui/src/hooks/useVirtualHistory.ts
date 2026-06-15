@@ -9,6 +9,7 @@ import {
   useState,
   useSyncExternalStore
 } from 'react'
+import { INLINE_MODE } from '../config/env.js'
 
 const ESTIMATE = 4
 // Overscan was 40 (= viewport) which is way more than needed when heights
@@ -509,6 +510,26 @@ export function useVirtualHistory(
       bumpMeasuredHeightVersion(n => n + 1)
     }
   }, [effEnd, effStart, items, liveTailActive, measuredHeightVersion, n, offsets, scrollRef, sticky, total, vp])
+
+  // The dashboard's embedded terminal runs in inline mode, where there is no
+  // alternate-screen viewport to clip the spacer and no host scrollback to
+  // fall back on. A lagging deferred window then renders the topSpacer as a
+  // blank gap where off-window rows (the banner + earlier context on a
+  // resumed conversation) should be. Bypass windowing entirely here: mount
+  // the whole transcript (start=0, end=n) so nothing is ever blank — every
+  // row still gets measureRef, and both spacers collapse to 0. The embedded
+  // conversations are bounded, and ChatPage's wheel bridge scrolls the full
+  // range. The native full-screen TUI (not inline) keeps windowing.
+  if (INLINE_MODE) {
+    return {
+      bottomSpacer: 0,
+      end: n,
+      measureRef,
+      offsets,
+      start: 0,
+      topSpacer: 0
+    }
+  }
 
   return {
     bottomSpacer: Math.max(0, total - (offsets[effEnd] ?? total)),
