@@ -749,8 +749,22 @@ export default function SessionsPage() {
                 className="flex min-w-0 max-w-full flex-col gap-2 border border-border p-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="min-w-0 truncate text-sm font-medium">
-                    {s.title ?? t.common.untitled}
+                  {/* Hermes doesn't auto-title sessions, so s.title is
+                      usually null. Fall back to the first-message preview
+                      (same as SessionRow below) instead of showing a wall
+                      of "UNTITLED". */}
+                  <span
+                    className={`min-w-0 truncate text-sm ${
+                      s.title && s.title !== "Untitled"
+                        ? "font-medium"
+                        : "italic text-muted-foreground"
+                    }`}
+                  >
+                    {s.title && s.title !== "Untitled"
+                      ? s.title
+                      : s.preview
+                        ? s.preview.slice(0, 60)
+                        : t.sessions.untitledSession}
                   </span>
 
                   <span className="min-w-0 break-words text-xs text-muted-foreground">
@@ -760,12 +774,6 @@ export default function SessionsPage() {
                     · {s.message_count} {t.common.msgs} ·{" "}
                     {timeAgo(s.last_active)}
                   </span>
-
-                  {s.preview && (
-                    <p className="min-w-0 max-w-full text-xs leading-snug text-muted-foreground/70 [overflow-wrap:anywhere]">
-                      {s.preview}
-                    </p>
-                  )}
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1 self-start sm:self-center">
@@ -792,6 +800,16 @@ export default function SessionsPage() {
             ))}
           </CardContent>
         </Card>
+      )}
+
+      {/* Clear visual break between the recent-sessions overview and the
+          full list below, which otherwise blend together. */}
+      {recentSessions.length > 0 && filtered.length > 0 && (
+        <div
+          role="separator"
+          aria-hidden="true"
+          className="my-1 h-0.5 w-full rounded-full bg-border"
+        />
       )}
 
       {filtered.length === 0 ? (
