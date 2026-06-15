@@ -53,6 +53,7 @@ CONFIG_KEY_MODE = "aux_mode"
 TASK_CLASSIFIER = "echo_classifier"
 TASK_JUDGE = "echo_judge"
 TASK_REASON_SCORE = "echo_reason_score"
+TASK_SKILL_DEDUP = "echo_skill_dedup"
 
 
 def _load_config() -> dict:
@@ -131,3 +132,7 @@ def judge_enabled() -> bool:
 
 def reason_scorer_enabled() -> bool:
     return aux_enabled_for(TASK_REASON_SCORE)
+
+
+def skill_dedup_enabled() -> bool:
+    return aux_enabled_for(TASK_SKILL_DEDUP)
