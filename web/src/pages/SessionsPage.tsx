@@ -428,6 +428,7 @@ export default function SessionsPage() {
   const { t } = useI18n();
   const { setAfterTitle, setEnd } = usePageHeader();
   const { activeAction, actionStatus, dismissLog } = useSystemActions();
+  const navigate = useNavigate();
   const resumeInChatEnabled = isDashboardEmbeddedChatEnabled();
 
   useLayoutEffect(() => {
@@ -767,13 +768,26 @@ export default function SessionsPage() {
                   )}
                 </div>
 
-                <Badge
-                  tone="outline"
-                  className="shrink-0 self-start text-[10px] sm:self-center"
-                >
-                  <Database className="mr-1 h-3 w-3" />
-                  {s.source ?? "local"}
-                </Badge>
+                <div className="flex shrink-0 items-center gap-1 self-start sm:self-center">
+                  <Badge tone="outline" className="text-[10px]">
+                    <Database className="mr-1 h-3 w-3" />
+                    {s.source ?? "local"}
+                  </Badge>
+                  {resumeInChatEnabled && (
+                    <Button
+                      ghost
+                      size="icon"
+                      className="text-muted-foreground hover:text-success"
+                      aria-label={t.sessions.resumeInChat}
+                      title={t.sessions.resumeInChat}
+                      onClick={() =>
+                        navigate(`/chat?resume=${encodeURIComponent(s.id)}`)
+                      }
+                    >
+                      <Play />
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
           </CardContent>
