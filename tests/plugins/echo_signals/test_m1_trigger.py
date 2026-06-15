@@ -604,3 +604,157 @@ class TestSignalIntegration:
         finally:
             uh.uninstall_bump_use_hook()
             sc.clear_session_context()
+
+
+# ---------------------------------------------------------------------------
+# list_session_candidates — SKILL-LESS conversation nomination (M1 孵化)
+# ---------------------------------------------------------------------------
+
+
+def _log_request(session_id, user_message, *, save_intent=False,
+                 recurrence_sim=None, invocation_id=None, skill_id=None):
+    """Append a row straight through the public logging API."""
+    m1.log_user_request(
+        invocation_id=invocation_id,
+        skill_id=skill_id,
+        session_id=session_id,
+        user_message=user_message,
+        save_intent=save_intent,
+        recurrence_sim=recurrence_sim,
+    )
+
+
+class TestListSessionCandidates:
+    def test_empty_db(self, isolated_db):
+        echo_db.get_echo_conn()
+        assert m1.list_session_candidates() == []
+
+    def test_save_intent_alone_qualifies(self, isolated_db):
+        echo_db.get_echo_conn()
+        _log_request("sess-A", "draft a launch email", save_intent=True)
+        out = m1.list_session_candidates()
+        assert len(out) == 1
+        assert out[0].session_id == "sess-A"
+        assert out[0].score == m1.WEIGHT_SAVE_INTENT
+        assert out[0].has_save_intent is True
+        assert out[0].first_message == "draft a launch email"
+
+    def test_modif_turns_threshold_alone_qualifies(self, isolated_db):
+        echo_db.get_echo_conn()
+        for i in range(3):
+            _log_request("sess-B", f"iterate email v{i}")
+        out = m1.list_session_candidates()
+        assert len(out) == 1
+        assert out[0].score == m1.WEIGHT_MODIF_ROUNDS
+        assert out[0].user_turns == 3
+
+    def test_below_threshold_excluded(self, isolated_db):
+        echo_db.get_echo_conn()
+        # Two turns, no save intent, no recurrence → 0 points.
+        _log_request("sess-C", "hello")
+        _log_request("sess-C", "thanks")
+        assert m1.list_session_candidates() == []
+
+    def test_recurrence_above_threshold_qualifies(self, isolated_db):
+        echo_db.get_echo_conn()
+        _log_request("sess-D", "marketing email",
+                     recurrence_sim=m1.RECURRENCE_THRESHOLD + 0.05)
+        out = m1.list_session_candidates()
+        assert len(out) == 1
+        assert out[0].has_recurrence is True
+        assert out[0].score == m1.WEIGHT_RECURRENCE
+
+    def test_recurrence_below_threshold_does_not_count(self, isolated_db):
+        echo_db.get_echo_conn()
+        # One turn, recurrence below threshold → 0 points, excluded.
+        _log_request("sess-E", "x", recurrence_sim=m1.RECURRENCE_THRESHOLD - 0.1)
+        assert m1.list_session_candidates() == []
+
+    def test_conditions_sum(self, isolated_db):
+        echo_db.get_echo_conn()
+        _log_request("sess-F", "draft email", save_intent=True,
+                     recurrence_sim=m1.RECURRENCE_THRESHOLD + 0.1)
+        _log_request("sess-F", "again")
+        _log_request("sess-F", "and again")
+        out = m1.list_session_candidates()
+        assert len(out) == 1
+        assert out[0].score == (m1.WEIGHT_SAVE_INTENT
+                                + m1.WEIGHT_RECURRENCE
+                                + m1.WEIGHT_MODIF_ROUNDS)
+
+    def test_session_with_skill_invocation_excluded(self, isolated_db):
+        # A conversation that DID load a skill is covered by the
+        # invocation-scoped list_candidates and must not double-count here.
+        _seed_skill("alpha")
+        inv = _seed_invocation("alpha")
+        conn = echo_db.get_echo_conn()
+        sess = conn.execute(
+            "SELECT session_id FROM echo_skill_invocation WHERE invocation_id=?",
+            (inv,),
+        ).fetchone()["session_id"]
+        _log_request(sess, "save this", save_intent=True,
+                     invocation_id=inv, skill_id="alpha")
+        assert m1.list_session_candidates() == []
+
+    def test_ordering_most_recent_first(self, isolated_db):
+        echo_db.get_echo_conn()
+        _log_request("old", "save old", save_intent=True)
+        time.sleep(0.01)
+        _log_request("new", "save new", save_intent=True)
+        out = m1.list_session_candidates()
+        assert [c.session_id for c in out] == ["new", "old"]
+
+    def test_limit_applied(self, isolated_db):
+        echo_db.get_echo_conn()
+        for i in range(5):
+            _log_request(f"s{i}", "save it", save_intent=True)
+        out = m1.list_session_candidates(limit=2)
+        assert len(out) == 2
+
+
+class TestSessionCandidatesEndpoint:
+    def test_endpoint_returns_skill_less_candidate(self, client, isolated_db):
+        _log_request("sess-ep", "draft a launch email", save_intent=True)
+        resp = client.get(
+            "/api/plugins/echo_signals/candidates/sessions?limit=10"
+        )
+        assert resp.status_code == 200
+        cands = resp.json()["candidates"]
+        assert len(cands) == 1
+        assert cands[0]["session_id"] == "sess-ep"
+        assert cands[0]["has_save_intent"] is True
+        assert cands[0]["first_message"] == "draft a launch email"
+
+    def test_endpoint_empty(self, client, isolated_db):
+        echo_db.get_echo_conn()
+        resp = client.get("/api/plugins/echo_signals/candidates/sessions")
+        assert resp.status_code == 200
+        assert resp.json()["candidates"] == []
+
+
+class TestSkillLessTurnLogging:
+    """on_pre_llm_call with NO active skill still feeds M1 session candidates."""
+
+    def test_skill_less_turn_logs_and_nominates(self, isolated_db):
+        from plugins.echo_signals import signals as sig
+        from plugins.echo_signals import session_context as sc
+
+        try:
+            # Session context set, but NO skill ever invoked (no bump_use).
+            sc.set_session_context("sess-skill-less", "cli")
+            sig.on_pre_llm_call(
+                user_message="把这个流程保存为技能",
+                session_id="sess-skill-less",
+                platform="cli",
+            )
+            out = m1.list_session_candidates()
+            assert len(out) == 1
+            assert out[0].session_id == "sess-skill-less"
+            assert out[0].has_save_intent is True
+            # No skill → no echo_signal_event row was forged.
+            n_events = echo_db.get_echo_conn().execute(
+                "SELECT COUNT(*) AS n FROM echo_signal_event"
+            ).fetchone()["n"]
+            assert n_events == 0
+        finally:
+            sc.clear_session_context()

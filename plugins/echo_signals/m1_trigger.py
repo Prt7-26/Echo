@@ -157,12 +157,19 @@ def log_user_request(
     skill_id: Optional[str],
     session_id: Optional[str],
     user_message: str,
+    save_intent: bool = False,
+    recurrence_sim: Optional[float] = None,
 ) -> None:
     """Persist this turn's user_message + hashing-embedding for future
     recurrence checks.
 
     Cheap (microseconds + ~1KB BLOB per turn). The row is what
     detect_semantic_recurrence compares against on subsequent turns.
+
+    ``save_intent`` / ``recurrence_sim`` are the per-turn M1 signals; for
+    SKILL-LESS turns (invocation_id/skill_id both None) the row in this
+    table is the ONLY place they can live — echo_signal_event requires a
+    non-NULL invocation. list_session_candidates() reads them back.
     """
     if not user_message or not user_message.strip():
         return
@@ -174,9 +181,11 @@ def log_user_request(
         conn = get_echo_conn()
         conn.execute(
             "INSERT INTO echo_user_request_log "
-            "(invocation_id, skill_id, session_id, user_message, embedding, ts) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (invocation_id, skill_id, session_id, user_message, blob, time.time()),
+            "(invocation_id, skill_id, session_id, user_message, embedding, ts, "
+            " save_intent, recurrence_sim) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (invocation_id, skill_id, session_id, user_message, blob, time.time(),
+             1 if save_intent else 0, recurrence_sim),
         )
         conn.commit()
     except Exception as exc:
@@ -423,6 +432,123 @@ def list_candidates(
         cs = _score_one(r)
         if cs.score >= min_score:
             candidates.append(cs)
+        if len(candidates) >= limit:
+            break
+    return candidates
+
+
+# ---------------------------------------------------------------------------
+# Session-level nomination — SKILL-LESS conversations (proposal §M1's
+# "孵化全新技能" intent). The invocation-scoped list_candidates above can only
+# flag uses of EXISTING skills; a conversation that never loaded any skill has
+# no echo_skill_invocation row, so it can never appear there. This path scores
+# such conversations straight from echo_user_request_log (the one signal store
+# that allows NULL invocation/skill), so a user who drafts an email over many
+# turns — or says "保存为技能" mid-chat — gets nominated to create a NEW skill.
+#
+# Tool-call complexity is intentionally NOT scored here: counting tool calls
+# per skill-less session would need a session-level counter that on_post_tool_call
+# does not currently keep (it gates on an active invocation). The three
+# request-log-derivable conditions (save_intent / recurrence / modification
+# turns) already cover the proposal's motivating cases.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class SessionCandidate:
+    session_id: str
+    score: int
+    reasons: list[str]
+    user_turns: int
+    has_save_intent: bool
+    has_recurrence: bool
+    top_similarity: float
+    first_message: str
+    first_ts: float
+    last_ts: float
+
+
+def list_session_candidates(
+    *,
+    limit: int = 20,
+    min_score: int = SCORE_THRESHOLD,
+    recurrence_threshold: float = RECURRENCE_THRESHOLD,
+) -> list[SessionCandidate]:
+    """Nominate SKILL-LESS conversations as worth turning into a new skill.
+
+    Aggregates echo_user_request_log grouped by session, restricted to
+    sessions that have NO echo_skill_invocation row (a skill having run at
+    any point means the invocation-scoped list_candidates already covers
+    it — we don't want to double-count). Scored with the same weights as
+    the invocation path minus tool complexity.
+    """
+    sql = """
+        SELECT
+            r.session_id                              AS session_id,
+            COUNT(*)                                  AS user_turns,
+            MAX(r.save_intent)                        AS has_save_intent,
+            MAX(COALESCE(r.recurrence_sim, 0.0))      AS top_similarity,
+            MIN(r.ts)                                 AS first_ts,
+            MAX(r.ts)                                 AS last_ts
+        FROM echo_user_request_log r
+        WHERE r.session_id IS NOT NULL
+          AND r.session_id NOT IN (
+              SELECT session_id FROM echo_skill_invocation
+              WHERE session_id IS NOT NULL
+          )
+        GROUP BY r.session_id
+        ORDER BY MAX(r.ts) DESC
+        LIMIT ?
+    """
+    conn = get_echo_conn()
+    rows = conn.execute(sql, (max(limit * 4, 100),)).fetchall()
+
+    candidates: list[SessionCandidate] = []
+    for r in rows:
+        session_id = r["session_id"]
+        user_turns = int(r["user_turns"] or 0)
+        has_save = bool(r["has_save_intent"])
+        top_sim = float(r["top_similarity"] or 0.0)
+        has_recurrence = top_sim >= recurrence_threshold
+
+        score = 0
+        reasons: list[str] = []
+        if has_save:
+            score += WEIGHT_SAVE_INTENT
+            reasons.append("user expressed save intent")
+        if has_recurrence:
+            score += WEIGHT_RECURRENCE
+            reasons.append(
+                f"task pattern recurred (lexical match {top_sim:.2f})"
+            )
+        if user_turns >= THRESHOLD_MODIF_ROUNDS:
+            score += WEIGHT_MODIF_ROUNDS
+            reasons.append(f"high modification investment ({user_turns} turns)")
+
+        if score < min_score:
+            continue
+
+        # First user message of the conversation — the dashboard shows it as
+        # the candidate's human-readable label ("draft a launch email …").
+        first_row = conn.execute(
+            "SELECT user_message FROM echo_user_request_log "
+            "WHERE session_id = ? ORDER BY ts ASC LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        first_message = (first_row["user_message"] if first_row else "") or ""
+
+        candidates.append(SessionCandidate(
+            session_id=session_id,
+            score=score,
+            reasons=reasons,
+            user_turns=user_turns,
+            has_save_intent=has_save,
+            has_recurrence=has_recurrence,
+            top_similarity=top_sim,
+            first_message=first_message,
+            first_ts=float(r["first_ts"] or 0.0),
+            last_ts=float(r["last_ts"] or 0.0),
+        ))
         if len(candidates) >= limit:
             break
     return candidates

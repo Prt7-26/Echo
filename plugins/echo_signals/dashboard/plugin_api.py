@@ -698,6 +698,41 @@ def list_skill_candidates(
     }
 
 
+@router.get("/candidates/sessions")
+def list_session_skill_candidates(
+    limit: int = Query(20, ge=1, le=100),
+    min_score: int = Query(30, ge=0, le=200),
+):
+    """M1 — SKILL-LESS conversations Echo nominates as worth a NEW skill.
+
+    Distinct from /candidates (which flags uses of existing skills): this
+    surfaces conversations that never loaded any skill but show save intent,
+    a recurring task pattern, or heavy iteration — proposal §M1's "孵化全新
+    技能" case. Each row carries the conversation's first user message as a
+    human-readable label and a score breakdown.
+    """
+    from plugins.echo_signals.m1_trigger import list_session_candidates
+
+    candidates = list_session_candidates(limit=limit, min_score=min_score)
+    return {
+        "candidates": [
+            {
+                "session_id": c.session_id,
+                "score": c.score,
+                "reasons": c.reasons,
+                "user_turns": c.user_turns,
+                "has_save_intent": c.has_save_intent,
+                "has_recurrence": c.has_recurrence,
+                "top_similarity": round(c.top_similarity, 3),
+                "first_message": c.first_message,
+                "first_ts": c.first_ts,
+                "last_ts": c.last_ts,
+            }
+            for c in candidates
+        ],
+    }
+
+
 @router.post("/scope")
 def set_scope(payload: ScopePayload):
     """User picks broad or narrow for a previously-pending skill.

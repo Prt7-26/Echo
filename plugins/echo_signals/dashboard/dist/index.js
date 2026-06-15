@@ -578,6 +578,69 @@
   }
 
   // ---------------------------------------------------------------------
+  // Widget 5b — M1 session candidates: SKILL-LESS conversations Echo
+  // nominates as worth turning into a brand-new skill (proposal §M1 孵化).
+  // ---------------------------------------------------------------------
+
+  function SessionCandidateQueue({ refreshKey }) {
+    const [candidates, setCandidates] = useState(null);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+      setError(null);
+      apiGet("/candidates/sessions?limit=10")
+        .then((d) => setCandidates(d.candidates || []))
+        .catch((e) => setError(e.message || String(e)));
+    }, [refreshKey]);
+
+    const body = (() => {
+      if (error) return h(ErrorBlock, { message: error });
+      if (candidates === null) return h(LoadingBlock);
+      if (candidates.length === 0)
+        return h(EmptyBlock, {
+          message:
+            "No new-skill candidates yet. Echo nominates a conversation " +
+            "that never used a skill when the user expresses save intent, " +
+            "repeats a past request, or iterates ≥ 3 turns.",
+        });
+
+      return h("ul", { className: "space-y-2" },
+        candidates.map((c) => h("li", {
+          key: c.session_id,
+          className: "p-3 border border-zinc-800 rounded space-y-1",
+        },
+          h("div", { className: "flex items-center justify-between" },
+            h("div", { className: "flex items-center gap-2" },
+              h("span", {
+                className:
+                  "inline-flex items-center px-2 py-0.5 rounded-full " +
+                  "text-xs font-medium border bg-amber-900/40 text-amber-300 border-amber-700/50",
+              }, "score " + c.score),
+              h("span", { className: "text-sm text-zinc-200 truncate max-w-[20rem]" },
+                c.first_message || "(empty)"),
+            ),
+            h("span", { className: "text-xs text-zinc-500 tabular-nums" },
+              c.session_id),
+          ),
+          h("ul", { className: "text-xs text-zinc-400 list-disc pl-5" },
+            c.reasons.map((r, i) => h("li", { key: i }, r)),
+          ),
+          h("div", { className: "text-xs text-zinc-500 tabular-nums" },
+            "turns: ", c.user_turns,
+            c.has_save_intent ? "  ·  save intent ✓" : "",
+            c.has_recurrence ? "  ·  recurrence " + c.top_similarity : "",
+          ),
+        )),
+      );
+    })();
+
+    return h(C.Card, null,
+      h(C.CardHeader, null, h(C.CardTitle, null, "New-Skill Candidates (M1 · skill-less)")),
+      h(C.CardContent, null, body),
+    );
+  }
+
+  // ---------------------------------------------------------------------
   // Widget 6 — M5 preference library browser (with per-row delete)
   // ---------------------------------------------------------------------
 
@@ -809,6 +872,9 @@
       // Two-column responsive layout for the lower row
       h("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-4" },
         h(CandidateQueue, { refreshKey }),
+        h(SessionCandidateQueue, { refreshKey }),
+      ),
+      h("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-4" },
         h(PreferenceLibrary, { refreshKey }),
       ),
       // Recent invocations full-width at the bottom

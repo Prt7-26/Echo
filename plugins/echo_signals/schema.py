@@ -44,7 +44,16 @@ import sqlite3
 #          content change with NO corresponding skill_manage is attributed
 #          to a manual user edit and the skill is auto-locked (proposal §M4
 #          "用户手动编辑过 → 锁定").
-ECHO_SCHEMA_VERSION = 5
+# v4 → v5: added echo_skill_scope.session_id (M2 scope question binds to
+#          the conversation that created the skill).
+# v5 → v6: added echo_user_request_log.save_intent + recurrence_sim so M1
+#          can nominate brand-new skills from SKILL-LESS conversations.
+#          The request log is the only signal store that allows NULL
+#          invocation_id/skill_id (echo_signal_event requires both NOT
+#          NULL), so it carries the per-turn save-intent flag and top
+#          recurrence similarity for sessions that never invoked any
+#          existing skill. list_session_candidates() aggregates these.
+ECHO_SCHEMA_VERSION = 6
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +223,14 @@ CREATE TABLE IF NOT EXISTS echo_user_request_log (
     session_id      TEXT,
     user_message    TEXT    NOT NULL,
     embedding       BLOB    NOT NULL,
-    ts              REAL    NOT NULL
+    ts              REAL    NOT NULL,
+    -- v6: per-turn M1 signals for SKILL-LESS nomination. save_intent is
+    -- 1 when this turn matched the save-intent regex; recurrence_sim is
+    -- the top cosine similarity this turn had against the prior log (NULL
+    -- if not computed). list_session_candidates() aggregates these for
+    -- sessions that never invoked an existing skill.
+    save_intent     INTEGER NOT NULL DEFAULT 0,
+    recurrence_sim  REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_echo_user_request_ts
@@ -278,6 +294,12 @@ def ensure_echo_schema(conn: sqlite3.Connection) -> None:
     # column added in a later schema version must be ALTERed in explicitly.
     # SQLite has no "ADD COLUMN IF NOT EXISTS", so probe table_info first.
     _add_column_if_missing(cursor, "echo_skill_scope", "session_id", "TEXT")
+    _add_column_if_missing(
+        cursor, "echo_user_request_log", "save_intent", "INTEGER NOT NULL DEFAULT 0"
+    )
+    _add_column_if_missing(
+        cursor, "echo_user_request_log", "recurrence_sim", "REAL"
+    )
 
     # Record / refresh schema version. INSERT on first run, UPDATE later.
     cursor.execute("SELECT version FROM echo_schema_version LIMIT 1")
