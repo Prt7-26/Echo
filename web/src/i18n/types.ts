@@ -150,6 +150,7 @@ export interface Translations {
     noMatch: string;
     startConversation: string;
     noMessages: string;
+    allSessions: string;
     untitledSession: string;
     deleteSession: string;
     confirmDeleteTitle: string;

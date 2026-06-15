@@ -132,6 +132,7 @@ export const ga: Translations = {
     noMatch: "Níl seisiún ar bith ag teacht le do chuardach",
     startConversation: "Tosaigh comhrá chun é a fheiceáil anseo",
     noMessages: "Gan teachtaireachtaí",
+    allSessions: "Gach Seisiún",
     untitledSession: "Seisiún gan teideal",
     deleteSession: "Scrios an seisiún",
     confirmDeleteTitle: "Scrios an seisiún?",

@@ -132,6 +132,7 @@ export const tr: Translations = {
     noMatch: "Aramanızla eşleşen oturum yok",
     startConversation: "Burada görmek için bir konuşma başlatın",
     noMessages: "Mesaj yok",
+    allSessions: "Tüm oturumlar",
     untitledSession: "Başlıksız oturum",
     deleteSession: "Oturumu sil",
     confirmDeleteTitle: "Oturum silinsin mi?",

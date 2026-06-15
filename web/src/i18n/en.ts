@@ -132,6 +132,7 @@ export const en: Translations = {
     noMatch: "No sessions match your search",
     startConversation: "Start a conversation to see it here",
     noMessages: "No messages",
+    allSessions: "All Sessions",
     untitledSession: "Untitled session",
     deleteSession: "Delete session",
     confirmDeleteTitle: "Delete session?",

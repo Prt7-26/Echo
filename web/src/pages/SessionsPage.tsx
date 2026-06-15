@@ -802,49 +802,52 @@ export default function SessionsPage() {
         </Card>
       )}
 
-      {/* Clear visual break between the recent-sessions overview and the
-          full list below, which otherwise blend together. */}
-      {recentSessions.length > 0 && filtered.length > 0 && (
-        <div
-          role="separator"
-          aria-hidden="true"
-          className="my-1 h-0.5 w-full rounded-full bg-border"
-        />
-      )}
-
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-          <Clock className="h-8 w-8 mb-3 opacity-40" />
-          <p className="text-sm font-medium">
-            {search ? t.sessions.noMatch : t.sessions.noSessions}
-          </p>
-          {!search && (
-            <p className="text-xs mt-1 text-muted-foreground/60">
-              {t.sessions.startConversation}
-            </p>
-          )}
-        </div>
-      ) : (
-        <>
-          <div className="flex min-w-0 flex-col gap-1.5">
-            {filtered.map((s) => (
-              <SessionRow
-                key={s.id}
-                session={s}
-                snippet={snippetMap.get(s.id)}
-                searchQuery={search || undefined}
-                isExpanded={expandedId === s.id}
-                onToggle={() =>
-                  setExpandedId((prev) => (prev === s.id ? null : s.id))
-                }
-                onDelete={() => sessionDelete.requestDelete(s.id)}
-                resumeInChatEnabled={resumeInChatEnabled}
-              />
-            ))}
+      {/* Full session list, framed in its own card with a title to mirror
+          the Recent Sessions overview above. */}
+      <Card className="min-w-0 max-w-full overflow-hidden">
+        <CardHeader className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <MessageSquare className="h-5 w-5 shrink-0 text-muted-foreground" />
+            <CardTitle className="min-w-0 truncate text-base">
+              {t.sessions.allSessions}
+            </CardTitle>
           </div>
+        </CardHeader>
 
-          {!searchResults && total > PAGE_SIZE && (
-            <div className="flex items-center justify-between pt-2">
+        <CardContent className="min-w-0">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <Clock className="h-8 w-8 mb-3 opacity-40" />
+              <p className="text-sm font-medium">
+                {search ? t.sessions.noMatch : t.sessions.noSessions}
+              </p>
+              {!search && (
+                <p className="text-xs mt-1 text-muted-foreground/60">
+                  {t.sessions.startConversation}
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="flex min-w-0 flex-col gap-1.5">
+                {filtered.map((s) => (
+                  <SessionRow
+                    key={s.id}
+                    session={s}
+                    snippet={snippetMap.get(s.id)}
+                    searchQuery={search || undefined}
+                    isExpanded={expandedId === s.id}
+                    onToggle={() =>
+                      setExpandedId((prev) => (prev === s.id ? null : s.id))
+                    }
+                    onDelete={() => sessionDelete.requestDelete(s.id)}
+                    resumeInChatEnabled={resumeInChatEnabled}
+                  />
+                ))}
+              </div>
+
+              {!searchResults && total > PAGE_SIZE && (
+                <div className="flex items-center justify-between pt-2">
               <span className="text-xs text-muted-foreground">
                 {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)}{" "}
                 {t.common.of} {total}
@@ -875,8 +878,10 @@ export default function SessionsPage() {
               </div>
             </div>
           )}
-        </>
-      )}
+            </>
+          )}
+        </CardContent>
+      </Card>
       <PluginSlot name="sessions:bottom" />
     </div>
   );

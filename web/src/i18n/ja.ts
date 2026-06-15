@@ -132,6 +132,7 @@ export const ja: Translations = {
     noMatch: "検索条件に一致するセッションはありません",
     startConversation: "会話を開始するとここに表示されます",
     noMessages: "メッセージがありません",
+    allSessions: "すべてのセッション",
     untitledSession: "無題のセッション",
     deleteSession: "セッションを削除",
     confirmDeleteTitle: "セッションを削除しますか？",
