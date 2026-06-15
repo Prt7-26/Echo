@@ -241,6 +241,50 @@ class TestRecentInvocations:
         starts = [i["started_at"] for i in r.json()["invocations"]]
         assert starts == [300.0, 200.0, 100.0]
 
+    def test_rated_flag(self, client):
+        _seed_skill("alpha")
+        rated = _seed_invocation("alpha", started_at=200.0)
+        _seed_event(rated, "alpha", "explicit_positive", layer="B")
+        unrated = _seed_invocation("alpha", started_at=100.0)
+        _seed_event(unrated, "alpha", "user_turn")
+        by_id = {i["invocation_id"]: i for i in
+                 client.get("/api/plugins/echo_signals/invocations/recent").json()["invocations"]}
+        assert by_id[rated]["rated"] == 1
+        assert by_id[unrated]["rated"] == 0
+
+
+# ---------------------------------------------------------------------------
+# GET /invocations/{id}/signals
+# ---------------------------------------------------------------------------
+
+
+class TestInvocationSignals:
+    def test_404_for_unknown(self, client):
+        r = client.get("/api/plugins/echo_signals/invocations/999/signals")
+        assert r.status_code == 404
+
+    def test_returns_events_and_rating(self, client):
+        _seed_skill("alpha")
+        inv = _seed_invocation("alpha")
+        _seed_event(inv, "alpha", "user_turn", layer="A")
+        _seed_event(inv, "alpha", "tool_call", layer="A", value_text="bash")
+        _seed_event(inv, "alpha", "explicit_negative", layer="B",
+                    value_text="not what I wanted")
+        r = client.get(f"/api/plugins/echo_signals/invocations/{inv}/signals")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["invocation"]["skill_id"] == "alpha"
+        assert len(body["events"]) == 3
+        assert body["rating"]["direction"] == "down"
+        assert body["rating"]["reason"] == "not what I wanted"
+
+    def test_no_rating_when_unrated(self, client):
+        _seed_skill("alpha")
+        inv = _seed_invocation("alpha")
+        _seed_event(inv, "alpha", "user_turn")
+        r = client.get(f"/api/plugins/echo_signals/invocations/{inv}/signals")
+        assert r.json()["rating"] is None
+
 
 # ---------------------------------------------------------------------------
 # POST /feedback

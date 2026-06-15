@@ -29,8 +29,9 @@ import { Card } from "@/components/ui/card";
 
 import { ModelPickerDialog } from "@/components/ModelPickerDialog";
 import { ToolCall, type ToolEntry } from "@/components/ToolCall";
+import { SkillCall, type SkillEntry } from "@/components/SkillCall";
 import { GatewayClient, type ConnectionState } from "@/lib/gatewayClient";
-import { HERMES_BASE_PATH } from "@/lib/api";
+import { HERMES_BASE_PATH, fetchJSON } from "@/lib/api";
 
 import { cn } from "@/lib/utils";
 import { AlertCircle, ChevronDown, RefreshCw } from "lucide-react";
@@ -45,7 +46,16 @@ interface SessionInfo {
 
 interface RpcEnvelope {
   method?: string;
-  params?: { type?: string; payload?: unknown };
+  // `session_id` here is the gateway-internal id, NOT the Hermes session the
+  // agent runs under. `session_key` (added by tui_gateway/server.py `_emit`) is
+  // the Hermes session id that skill invocations are attributed to — that's the
+  // correct key for binding Echo's per-conversation rating widget.
+  params?: {
+    type?: string;
+    payload?: unknown;
+    session_id?: string;
+    session_key?: string;
+  };
 }
 
 const TOOL_LIMIT = 20;
@@ -72,9 +82,14 @@ const STATE_TONE: Record<
 interface ChatSidebarProps {
   channel: string;
   className?: string;
+  /** Called with the live PTY conversation session id as soon as the events
+   *  feed reveals it (first emit carrying a session_id). The host page lifts
+   *  this so per-conversation plugin slots (e.g. Echo's chat:bottom thumbs)
+   *  can scope to the right conversation. NOT the sidecar session.create id. */
+  onSessionId?: (id: string) => void;
 }
 
-export function ChatSidebar({ channel, className }: ChatSidebarProps) {
+export function ChatSidebar({ channel, className, onSessionId }: ChatSidebarProps) {
   // `version` bumps on reconnect; gw is derived so we never call setState
   // for it inside an effect (React 19's set-state-in-effect rule). The
   // counter is the dependency on purpose — it's not read in the memo body,
@@ -89,6 +104,11 @@ export function ChatSidebar({ channel, className }: ChatSidebarProps) {
   const [tools, setTools] = useState<ToolEntry[]>([]);
   const [modelOpen, setModelOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The live Hermes conversation id (session_key from the events feed) and
+  // the skills it has invoked, polled from Echo's API. Distinct from the
+  // sidecar `sessionId` above, which only drives the model picker.
+  const [convoSid, setConvoSid] = useState<string | null>(null);
+  const [skills, setSkills] = useState<SkillEntry[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,6 +189,7 @@ export function ChatSidebar({ channel, className }: ChatSidebarProps) {
     // would otherwise look like an unexpected drop.
     const DISCONNECTED = "events feed disconnected — tool calls may not appear";
     let unmounting = false;
+    let lastSid: string | null = null;
     const surface = (msg: string) => !unmounting && setError(msg);
 
     ws.addEventListener("error", () => surface(DISCONNECTED));
@@ -192,6 +213,19 @@ export function ChatSidebar({ channel, className }: ChatSidebarProps) {
 
       if (frame.method !== "event" || !frame.params) {
         return;
+      }
+
+      // Lift the live HERMES conversation session id (session_key) the first
+      // time an emit reveals it (and on any rotation, e.g. context-compression
+      // handoff). NOT session_id, which is the gateway-internal id. Lets the
+      // host scope per-conversation plugin slots. A brand-new chat with no
+      // emits yet never reports a key → downstream widgets stay hidden, which
+      // is exactly the desired "fresh conversation shows nothing" behaviour.
+      const sid = frame.params.session_key;
+      if (sid && sid !== lastSid) {
+        lastSid = sid;
+        setConvoSid(sid);
+        onSessionId?.(sid);
       }
 
       const { type, payload } = frame.params;
@@ -271,7 +305,46 @@ export function ChatSidebar({ channel, className }: ChatSidebarProps) {
       unmounting = true;
       ws.close();
     };
-  }, [channel, version]);
+  }, [channel, version, onSessionId]);
+
+  // Poll Echo's per-conversation skill invocations for the SKILLS panel.
+  // The API already returns newest-first and a `rated` flag (explicit
+  // thumbs on that exact call), so a freshly-rated skill flips to its
+  // "rated" style on the next tick. No conversation bound yet → empty.
+  useEffect(() => {
+    if (!convoSid) {
+      setSkills([]);
+      return;
+    }
+    let cancelled = false;
+    const poll = () => {
+      fetchJSON<{ invocations?: Array<Record<string, unknown>> }>(
+        `/api/plugins/echo_signals/invocations/recent?limit=50&session_id=${encodeURIComponent(
+          convoSid,
+        )}`,
+      )
+        .then((d) => {
+          if (cancelled || !d?.invocations) return;
+          setSkills(
+            d.invocations.map((i) => ({
+              invocation_id: i.invocation_id as number,
+              skill_id: i.skill_id as string,
+              rated: !!i.rated,
+              signal_count: (i.signal_count as number) ?? 0,
+              started_at: i.started_at as number | undefined,
+              task_summary: i.task_summary as string | undefined,
+            })),
+          );
+        })
+        .catch(() => {});
+    };
+    poll();
+    const id = window.setInterval(poll, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [convoSid]);
 
   const reconnect = useCallback(() => {
     setError(null);
@@ -304,7 +377,7 @@ export function ChatSidebar({ channel, className }: ChatSidebarProps) {
   return (
     <aside
       className={cn(
-        "flex h-full w-full min-w-0 shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1 normal-case lg:w-80",
+        "flex h-full w-full min-w-0 shrink-0 flex-col gap-3 overflow-hidden pr-1 normal-case lg:w-80",
         className,
       )}
     >
@@ -356,18 +429,41 @@ export function ChatSidebar({ channel, className }: ChatSidebarProps) {
         </Card>
       )}
 
-      <Card className="flex min-h-0 flex-none flex-col px-2 py-2">
+      {/* TOOLS — capped to its share of the rail; scrolls internally when
+          long. Newest call on top. */}
+      <Card className="flex min-h-0 flex-1 flex-col px-2 py-2">
         <div className="px-1 pb-2 text-xs uppercase tracking-wider text-muted-foreground">
           tools
         </div>
 
-        <div className="flex min-h-0 flex-col gap-1.5">
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden pr-0.5">
           {tools.length === 0 ? (
             <div className="px-2 py-4 text-center text-xs text-muted-foreground">
               no tool calls yet
             </div>
           ) : (
-            tools.map((t) => <ToolCall key={t.id} tool={t} />)
+            tools
+              .slice()
+              .reverse()
+              .map((t) => <ToolCall key={t.id} tool={t} />)
+          )}
+        </div>
+      </Card>
+
+      {/* SKILLS — Echo's per-conversation skill invocations. Same capped +
+          internal-scroll treatment; the API already returns newest-first. */}
+      <Card className="flex min-h-0 flex-1 flex-col px-2 py-2">
+        <div className="px-1 pb-2 text-xs uppercase tracking-wider text-muted-foreground">
+          skills
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden pr-0.5">
+          {skills.length === 0 ? (
+            <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+              no skills used yet
+            </div>
+          ) : (
+            skills.map((s) => <SkillCall key={s.invocation_id} skill={s} />)
           )}
         </div>
       </Card>

@@ -36,11 +36,95 @@
   }
 
   const React = SDK.React;
-  const { useState, useEffect, useCallback } = SDK.hooks;
+  const { useState, useEffect, useCallback, useRef } = SDK.hooks;
   const C = SDK.components;
   const cn = SDK.utils && SDK.utils.cn ? SDK.utils.cn : (...xs) => xs.filter(Boolean).join(" ");
   const fetchJSON = SDK.fetchJSON;
   const h = React.createElement;
+
+  // ---------------------------------------------------------------------
+  // Echo rating buttons — styling
+  //
+  // The chat:bottom thumbs widget can't lean on Tailwind colour classes:
+  // the dashboard's Tailwind JIT only scans web/src, NOT this bundle, so
+  // any `text-teal-400` / `bg-rose-950` we write here never makes it into
+  // the compiled CSS. We therefore inject a small self-contained stylesheet
+  // once and drive the accent per-button via a `--echo-accent` custom prop.
+  // color-mix + custom props are already used by the dashboard's index.css,
+  // so they're safe in every browser the dashboard targets.
+  // ---------------------------------------------------------------------
+  const ECHO_TEAL = "#14b8a6"; // Echo's sonar-teal identity (positive)
+  const ECHO_CORAL = "#f43f5e"; // warm coral (negative) — reads on light + dark
+
+  (function injectRateStyles() {
+    if (typeof document === "undefined") return;
+    if (document.getElementById("echo-rate-style")) return;
+    const css =
+      ".echo-rate-btn{display:inline-grid;place-items:center;width:2.25rem;" +
+      "height:2.25rem;border-radius:.5rem;border:1px solid var(--echo-accent);" +
+      "color:var(--echo-accent);background:color-mix(in srgb,var(--echo-accent) 12%,transparent);" +
+      "box-shadow:0 0 10px -4px var(--echo-accent);cursor:pointer;" +
+      "transition:transform .12s ease,box-shadow .15s ease,background .15s ease;}" +
+      ".echo-rate-btn:hover{background:color-mix(in srgb,var(--echo-accent) 22%,transparent);" +
+      "box-shadow:0 0 16px -2px var(--echo-accent);transform:translateY(-1px);}" +
+      ".echo-rate-btn:active{transform:translateY(0);}" +
+      ".echo-rate-btn:disabled{opacity:.45;cursor:default;box-shadow:none;transform:none;}" +
+      ".echo-rate-btn svg{width:1.2rem;height:1.2rem;display:block;}" +
+      ".echo-rate-chip{display:inline-flex;align-items:center;gap:.3rem;white-space:nowrap;}" +
+      ".echo-rate-chip svg{width:.95rem;height:.95rem;}" +
+      // Secondary (undo / reason / cancel) + accent (submit) mini-buttons and
+      // the single-line reason input — all keep the bar at a constant height.
+      ".echo-mini-btn{display:inline-flex;align-items:center;gap:.25rem;height:1.75rem;" +
+      "padding:0 .6rem;border-radius:.375rem;white-space:nowrap;cursor:pointer;font-size:.75rem;" +
+      "border:1px solid var(--color-border,rgba(255,255,255,.15));" +
+      "color:var(--color-muted-foreground,#9aa);background:transparent;" +
+      "transition:color .15s ease,border-color .15s ease;}" +
+      ".echo-mini-btn:hover{color:var(--color-foreground,#e6fbf7);" +
+      "border-color:color-mix(in srgb,var(--color-foreground,#e6fbf7) 40%,transparent);}" +
+      ".echo-accent-btn{display:inline-flex;align-items:center;height:1.75rem;padding:0 .75rem;" +
+      "border-radius:.375rem;white-space:nowrap;cursor:pointer;font-size:.75rem;" +
+      "border:1px solid var(--echo-accent);color:var(--echo-accent);" +
+      "background:color-mix(in srgb,var(--echo-accent) 12%,transparent);" +
+      "transition:background .15s ease,box-shadow .15s ease;}" +
+      ".echo-accent-btn:hover{background:color-mix(in srgb,var(--echo-accent) 22%,transparent);" +
+      "box-shadow:0 0 12px -3px var(--echo-accent);}" +
+      ".echo-accent-btn:disabled{opacity:.45;cursor:default;box-shadow:none;}" +
+      // color:inherit so the text uses the bar's ambient (theme-correct,
+      // readable) colour instead of --color-foreground, which resolves to a
+      // near-white in the Echo Light theme and made typed text invisible.
+      ".echo-reason-input{height:1.75rem;padding:0 .55rem;border-radius:.375rem;font-size:.75rem;" +
+      "outline:none;border:1px solid var(--color-border,rgba(255,255,255,.15));" +
+      "color:inherit;background:color-mix(in srgb,currentColor 6%,transparent);}" +
+      ".echo-reason-input::placeholder{color:inherit;opacity:.45;}" +
+      ".echo-reason-input:focus{border-color:var(--echo-accent);" +
+      "box-shadow:0 0 0 1px var(--echo-accent);}";
+    const el = document.createElement("style");
+    el.id = "echo-rate-style";
+    el.textContent = css;
+    document.head.appendChild(el);
+  })();
+
+  // Line-art thumb glyph (lucide geometry). `up=false` renders thumbs-down.
+  function thumbIcon(up) {
+    const paths = up
+      ? ["M7 10v12",
+         "M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"]
+      : ["M17 14V2",
+         "M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"];
+    return h("svg", {
+      viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
+      strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round",
+      "aria-hidden": "true",
+    }, paths.map((d, i) => h("path", { key: i, d })));
+  }
+
+  // Small inline accent chip (icon + text) for the rated / reason labels.
+  function thumbChip(up, text) {
+    return h("span", {
+      className: "echo-rate-chip",
+      style: { color: up ? ECHO_TEAL : ECHO_CORAL },
+    }, thumbIcon(up), text);
+  }
 
   // ---------------------------------------------------------------------
   // API helpers
@@ -337,6 +421,8 @@
     // Layer B — NL classifier (Step 7)
     nl_positive: { color: "bg-emerald-900/30 text-emerald-300 border-emerald-700/40", label: "NL positive" },
     nl_negative: { color: "bg-rose-900/30 text-rose-300 border-rose-700/40", label: "NL negative" },
+    // Layer B+ — LLM-scored reason (signed −5..+5 in value_real)
+    reason_score: { color: "bg-sky-900/40 text-sky-300 border-sky-700/50", label: "reason score" },
     // M1 nomination signals (Step 13 + 15)
     m1_save_intent: { color: "bg-amber-900/40 text-amber-300 border-amber-700/50", label: "save intent" },
     m1_semantic_recurrence: { color: "bg-amber-900/30 text-amber-300 border-amber-700/40", label: "task recurrence" },
@@ -735,17 +821,23 @@
   // ---------------------------------------------------------------------
   //
   // Hermes' ChatPage is a PTY/xterm pane — there are no per-message
-  // hooks. Instead we mount a thin status bar at chat:bottom showing
-  // "current skill" + thumbs. "Current" is defined as the most recent
-  // echo_skill_invocation row — Echo's last-skill-wins rule from
-  // session_context applies here too.
+  // hooks. Instead we mount a rating bar at chat:bottom that walks a FIFO
+  // QUEUE of this conversation's un-rated skill invocations, one at a time.
   //
-  // Interaction: tap a thumb to submit ±1 immediately. Long-press (≥500ms)
-  // expands a textarea so the user can attach a free-form reason; submit
-  // sends {rating, reason}. The two-tier design keeps the common path
-  // friction-free while letting users supply richer signal when they care.
+  // Per-item state machine (see ThumbsBar):
+  //   idle   — skill shown with 👍/👎; NO timer; waiting for the user.
+  //   rated  — a thumb was tapped; a RATE_WINDOW_MS countdown runs. The user
+  //            may 撤销 (→ idle, timer stops) or ✎理由 (→ reason, timer stops).
+  //            If the window elapses untouched the rating COMMITS (POSTed) and
+  //            the queue advances to the next invocation.
+  //   reason — textarea open; no timer; submit commits {rating, reason} and
+  //            advances; cancel returns to the rated window.
+  // Both 👍 and 👎 can carry a reason. When the queue drains, the whole bar
+  // fades out; a fresh invocation fades it back in. The rating only reaches
+  // the backend on commit, so undo is purely client-side (no reversal).
 
-  const LONG_PRESS_MS = 500;
+  const RATE_WINDOW_MS = 10000; // 10s undo / add-reason grace per rating
+  const FADE_MS = 320;
   const POLL_INTERVAL_MS = 5000;
 
   // -------------------------------------------------------------------
@@ -807,35 +899,98 @@
     );
   }
 
-  function ThumbsBar() {
-    const [recent, setRecent] = useState(null);
-    const [pendingScope, setPendingScope] = useState(null);
-    const [error, setError] = useState(null);
+  function ThumbsBar(props) {
+    // sessionId: the live PTY conversation id, handed in by ChatPage through
+    // PluginSlot (the host forwards it as a slot prop). It scopes the rating
+    // to THIS conversation. Without it — a fresh chat with no activity yet, or
+    // an older dashboard build that doesn't pass the prop — the widget stays
+    // hidden instead of surfacing a previous conversation's skill.
+    const sessionId =
+      props && props.sessionId ? String(props.sessionId) : null;
+    const [queue, setQueue] = useState([]);   // FIFO of un-rated invocations (oldest-first)
+    const handledRef = useRef(null);
+    if (handledRef.current === null) handledRef.current = new Set();
+    // invocation_id the user explicitly asked to rate next, via the sidebar
+    // SKILLS panel (window 'echo:rate-skill'). Held in a ref so the poll
+    // closure always reads the latest without re-subscribing.
+    const priorityRef = useRef(null);
+    // Float the requested invocation to the queue head so it is what's up for
+    // rating. No-op when the id isn't (or no longer) pending.
+    function floatPriority(arr, pid) {
+      if (pid == null) return arr;
+      const i = arr.findIndex((x) => x.invocation_id === pid);
+      if (i <= 0) return arr;
+      return [arr[i]].concat(arr.slice(0, i)).concat(arr.slice(i + 1));
+    }
+    const [mode, setMode] = useState("idle");  // idle | rated | reason
+    const [rating, setRating] = useState(0);   // +1 / -1 chosen for the head item
+    const [reasonText, setReasonText] = useState("");
+    const [remain, setRemain] = useState(0);   // countdown seconds while in `rated`
+    const [displayItem, setDisplayItem] = useState(null); // what the fading bar renders
+    const [shown, setShown] = useState(false); // opacity target for the fade
     const [submitting, setSubmitting] = useState(false);
-    const [lastSubmit, setLastSubmit] = useState(null);
-    // detailMode is the long-press expansion — {rating, reason} draft.
-    const [detailMode, setDetailMode] = useState(null);
+    const [error, setError] = useState(null);
+    const [pendingScope, setPendingScope] = useState(null);
     // Local ack list of skills the user already answered scope for this
     // session — prevents the question from flashing back if the API
     // poll races the local write.
     const [scopeAnswered, setScopeAnswered] = useState(new Set());
+
+    // The head of the queue is the invocation currently up for rating.
+    const current = queue.length ? queue[0] : null;
+    const currentId = current ? current.invocation_id : null;
 
     // Poll both endpoints. ScopeQuestion takes precedence in the render
     // when pendingScope is non-null.
     useEffect(() => {
       let cancelled = false;
       function tick() {
-        apiGet("/invocations/recent?limit=1")
+        // No conversation bound yet → empty queue, nothing to rate. Keeps a
+        // prior conversation's skill from leaking into a fresh chat.
+        if (!sessionId) {
+          setQueue([]);
+          setPendingScope(null);
+          return;
+        }
+        apiGet(
+          "/invocations/recent?limit=30&session_id=" +
+            encodeURIComponent(sessionId),
+        )
           .then((d) => {
             if (cancelled) return;
             setError(null);
-            setRecent((d.invocations && d.invocations[0]) || null);
+            const handled = handledRef.current;
+            // FIFO queue: oldest-first, minus anything already rated on the
+            // backend or handled locally this session.
+            const pend = (d.invocations || [])
+              .filter(
+                (iv) =>
+                  iv && iv.skill_id && !iv.rated &&
+                  !handled.has(iv.invocation_id),
+              )
+              .sort((a, b) => a.invocation_id - b.invocation_id);
+            setQueue((prev) => {
+              let next = pend;
+              // Keep the live head object if it's still pending, so an
+              // in-flight rating isn't disturbed by the refresh.
+              if (
+                prev.length && pend.length &&
+                prev[0].invocation_id === pend[0].invocation_id
+              ) {
+                next = [prev[0]].concat(pend.slice(1));
+              }
+              // Honor a sidebar "rate this skill" request across refreshes.
+              return floatPriority(next, priorityRef.current);
+            });
           })
           .catch((e) => {
             if (cancelled) return;
             setError(e.message || String(e));
           });
-        apiGet("/scope/pending?limit=1")
+        apiGet(
+          "/scope/pending?limit=1&session_id=" +
+            encodeURIComponent(sessionId),
+        )
           .then((d) => {
             if (cancelled) return;
             const first = (d.pending || []).find(
@@ -848,7 +1003,7 @@
       tick();
       const id = setInterval(tick, POLL_INTERVAL_MS);
       return () => { cancelled = true; clearInterval(id); };
-    }, [scopeAnswered]);
+    }, [scopeAnswered, sessionId]);
 
     // When the user resolves a scope question, dismiss it locally so the
     // poll doesn't re-show it before the backend update propagates.
@@ -861,41 +1016,92 @@
       setPendingScope(null);
     }, []);
 
-    // NOTE: every hook (useState/useEffect/useCallback) MUST run on every
-    // render. `submit` therefore lives ABOVE the conditional early returns
-    // below — moving it under `if (pendingScope) return` would change the
-    // hook count between renders (9 vs 10) the moment a scope question
-    // appears, which makes React throw "rendered fewer hooks than expected"
-    // and unmounts the whole chat-bottom widget. That bug is exactly the
-    // "thumbs never show up after a skill is created" symptom.
-    const submit = useCallback((rating, reason) => {
-      if (!recent || !recent.skill_id || submitting) return;
-      setSubmitting(true);
-      apiPost("/feedback", { skill_id: recent.skill_id, rating, reason: reason || null })
-        .then((res) => {
-          setLastSubmit({
-            ts: Date.now(),
-            ok: res.applied,
-            rating,
-            skill_id: recent.skill_id,
-            reason: res.reason || null,
-          });
-          setDetailMode(null);
-        })
-        .catch((e) => {
-          setLastSubmit({
-            ts: Date.now(),
-            ok: false,
-            rating,
-            skill_id: recent.skill_id,
-            reason: (e && e.message) || String(e),
-          });
-        })
-        .finally(() => setSubmitting(false));
-    }, [recent, submitting]);
+    // Reset the per-item interaction whenever the queue head changes (advance
+    // to the next invocation, or the queue drains to null). Hook — stays above
+    // the early returns so the hook count is stable across renders.
+    useEffect(() => {
+      setMode("idle");
+      setRating(0);
+      setReasonText("");
+      setRemain(0);
+    }, [currentId]);
 
-    // PRIORITY: pending scope wins over thumbs. (Conditional render only —
-    // all hooks above have already run, so the hook count is stable.)
+    // Bridge from the sidebar SKILLS panel: clicking an un-rated skill fires
+    // window 'echo:rate-skill' with its invocation_id. Float it to the head
+    // so the bar jumps straight to rating that exact call.
+    useEffect(() => {
+      function onReq(e) {
+        const id = e && e.detail && e.detail.invocation_id;
+        if (id == null) return;
+        priorityRef.current = id;
+        setQueue((q) => floatPriority(q, id));
+      }
+      window.addEventListener("echo:rate-skill", onReq);
+      return () => window.removeEventListener("echo:rate-skill", onReq);
+    }, []);
+
+    // Fade controller. When a head exists, mount it and fade in; when the
+    // queue drains, fade out then unmount. Keyed on currentId so an
+    // item→item advance is an instant swap, only empty↔non-empty fades.
+    useEffect(() => {
+      if (current) {
+        setDisplayItem(current);
+        const r = window.requestAnimationFrame(() => setShown(true));
+        return () => window.cancelAnimationFrame(r);
+      }
+      setShown(false);
+      const t = setTimeout(() => setDisplayItem(null), FADE_MS);
+      return () => clearTimeout(t);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentId]);
+
+    // Commit the head item's rating to the backend and advance the queue.
+    // The POST only happens here (window expiry or reason submit), so undo is
+    // purely client-side. invocation_id pins the rating to THIS exact call.
+    const commitCurrent = useCallback((rt, reason) => {
+      if (!current) return;
+      const inv = current;
+      handledRef.current.add(inv.invocation_id);
+      if (priorityRef.current === inv.invocation_id) priorityRef.current = null;
+      setSubmitting(true);
+      apiPost("/feedback", {
+        skill_id: inv.skill_id,
+        rating: rt,
+        reason: reason || null,
+        invocation_id: inv.invocation_id,
+      })
+        .catch((e) => setError((e && e.message) || String(e)))
+        .finally(() => setSubmitting(false));
+      setQueue((q) => q.slice(1)); // advance immediately; POST is best-effort
+    }, [current]);
+
+    // Tap a thumb → enter the `rated` window (the timer effect below starts).
+    // Tapping the other thumb just switches the rating, still in `rated`.
+    const choose = useCallback((rt) => {
+      setRating(rt);
+      setMode("rated");
+    }, []);
+
+    // RATE_WINDOW_MS countdown — runs ONLY in `rated`. Undo (→idle) and
+    // ✎理由 (→reason) leave `rated`, which tears the timer down (no commit).
+    // If it elapses untouched, the bare rating commits and the queue advances.
+    useEffect(() => {
+      if (mode !== "rated") { setRemain(0); return; }
+      const deadline = Date.now() + RATE_WINDOW_MS;
+      setRemain(Math.ceil(RATE_WINDOW_MS / 1000));
+      const iv = setInterval(() => {
+        setRemain(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+      }, 500);
+      const to = setTimeout(() => commitCurrent(rating, null), RATE_WINDOW_MS);
+      return () => { clearInterval(iv); clearTimeout(to); };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mode, currentId, rating]);
+
+    // ---- render (all hooks above have already run) ---------------------
+
+    if (!sessionId) return null;
+
+    // Session-scoped scope confirmation takes priority over rating.
     if (pendingScope) {
       return h(ScopeQuestion, {
         skill: pendingScope,
@@ -903,112 +1109,134 @@
       });
     }
 
-    // Long-press tracker — pointer down starts a timer; tap fires submit
-    // unless the timer already opened detail mode.
-    function makePressHandlers(rating) {
-      let timer = null;
-      let openedDetail = false;
-      return {
-        onPointerDown: () => {
-          openedDetail = false;
-          timer = window.setTimeout(() => {
-            openedDetail = true;
-            setDetailMode({ rating, reason: "" });
-          }, LONG_PRESS_MS);
-        },
-        onPointerUp: () => {
-          if (timer) { window.clearTimeout(timer); timer = null; }
-          if (!openedDetail) submit(rating);
-        },
-        onPointerLeave: () => {
-          if (timer) { window.clearTimeout(timer); timer = null; }
-        },
-        onContextMenu: (ev) => ev.preventDefault(),
-      };
+    // Queue empty and fade-out finished → nothing mounted.
+    if (!displayItem) return null;
+
+    // `current` may be null during the fade-out frame; fall back to the
+    // item being faded so the bar still has content to show.
+    const item = current || displayItem;
+
+    const convLabel =
+      (item.session_title && String(item.session_title).trim()) ||
+      (item.session_id ? item.session_id.slice(0, 8) + "…" : "—");
+    const queueTail = Math.max(0, queue.length - 1);
+
+    // Right-side controls depend on the per-item mode.
+    let controls = null;
+    if (mode === "idle") {
+      const thumbBtn = (rt) =>
+        h("button", {
+          className: "echo-rate-btn",
+          style: { "--echo-accent": rt === 1 ? ECHO_TEAL : ECHO_CORAL },
+          title: rt === 1 ? "好评" : "差评",
+          "aria-label": rt === 1 ? "好评" : "差评",
+          onClick: () => choose(rt),
+          disabled: submitting,
+        }, thumbIcon(rt === 1));
+      controls = h("div", { className: "flex items-center gap-2 mr-2 shrink-0" },
+        thumbBtn(1),
+        thumbBtn(-1),
+      );
+    } else if (mode === "rated") {
+      // Order left → right: 理由 · 撤销 · 已评价, so the chip (the persistent
+      // status) anchors the far right and the actions sit beside the content.
+      controls = h("div", { className: "flex items-center gap-2 mr-2 shrink-0" },
+        h("button", {
+          className: "echo-mini-btn",
+          // Open reason → timer stops; commit waits for the user's submit.
+          onClick: () => setMode("reason"),
+        }, "✎ 理由"),
+        h("button", {
+          className: "echo-mini-btn",
+          // Undo → back to idle. Timer stops; nothing reaches the backend.
+          onClick: () => setMode("idle"),
+        }, "撤销" + (remain ? " (" + remain + ")" : "")),
+        thumbChip(rating === 1, "已评价"),
+      );
+    } else if (mode === "reason") {
+      // Reason editor is grouped on the right next to where the ✎理由 button
+      // was — short single-line input + 取消 / 提交, all on the SAME row so the
+      // bar height never changes.
+      controls = h("div", {
+        className: "flex items-center gap-2 mr-2 shrink-0",
+        style: { "--echo-accent": rating === 1 ? ECHO_TEAL : ECHO_CORAL },
+      },
+        h("span", {
+          className: "shrink-0",
+          style: { color: rating === 1 ? ECHO_TEAL : ECHO_CORAL, display: "inline-flex" },
+          title: rating === 1 ? "好评" : "差评",
+        }, thumbIcon(rating === 1)),
+        h("input", {
+          className: "echo-reason-input min-w-0",
+          style: { width: "18rem" },
+          placeholder: "补充理由…",
+          value: reasonText,
+          onChange: (e) => setReasonText(e.target.value),
+          autoFocus: true,
+          onKeyDown: (e) => {
+            if (e.key === "Enter") commitCurrent(rating, reasonText.trim() || null);
+            else if (e.key === "Escape") setMode("rated");
+          },
+        }),
+        h("button", {
+          className: "echo-mini-btn",
+          // Cancel → back to the undo window (rating preserved, timer restarts).
+          onClick: () => setMode("rated"),
+        }, "取消"),
+        h("button", {
+          className: "echo-accent-btn",
+          disabled: submitting,
+          onClick: () => commitCurrent(rating, reasonText.trim() || null),
+        }, "提交"),
+      );
     }
 
-    if (error) {
-      return h("div", {
-        className: "px-3 py-1.5 text-xs text-rose-400 border-t border-zinc-800",
-      }, "Echo: " + error);
-    }
+    // Plain flex spacer keeps the controls right-aligned; the row holds one
+    // fixed height in every mode (the reason input now lives in `controls`).
+    const middle = h("div", { className: "flex-1" });
 
-    // No active invocation — render nothing to avoid clutter when Echo
-    // has no data to act on yet.
-    if (!recent || !recent.skill_id) return null;
+    // The reason input is short and lives on the right now, so the meta can
+    // stay visible in every mode (it truncates if space gets tight).
+    const showMeta = true;
 
     const bar = h("div", {
-      className: "flex items-center gap-3 px-3 py-1.5 text-xs border-t border-zinc-800 bg-zinc-950/60",
+      className: "flex items-center gap-2 px-3 text-xs border-t border-zinc-800 bg-zinc-950/60",
+      style: { height: "3.25rem" },
     },
-      h("span", { className: "text-zinc-500" }, "Echo active skill:"),
-      h("span", { className: "font-mono text-zinc-300" }, recent.skill_id),
-      h("div", { className: "flex-1" }),
-      h("button", Object.assign({
-        className: cn(
-          "px-2 py-1 rounded border border-zinc-800 hover:border-emerald-700 hover:bg-emerald-950/40",
-          submitting && "opacity-50 pointer-events-none",
-        ),
-        title: "Tap to submit. Long-press to add a reason.",
-        disabled: submitting,
-      }, makePressHandlers(1)), "👍"),
-      h("button", Object.assign({
-        className: cn(
-          "px-2 py-1 rounded border border-zinc-800 hover:border-rose-700 hover:bg-rose-950/40",
-          submitting && "opacity-50 pointer-events-none",
-        ),
-        title: "Tap to submit. Long-press to add a reason.",
-        disabled: submitting,
-      }, makePressHandlers(-1)), "👎"),
-      lastSubmit ? h("span", {
-        className: cn(
-          "ml-2 text-xs",
-          lastSubmit.ok ? "text-emerald-400" : "text-amber-400",
-        ),
-      }, lastSubmit.ok
-        ? "✓ recorded"
-        : "skipped (" + (lastSubmit.reason || "unknown") + ")"
-      ) : null,
+      h("span", { className: "text-zinc-600 shrink-0" }, "Echo"),
+      showMeta && h("span", {
+        className: "text-zinc-400 truncate max-w-[24%]",
+        title: item.session_id || "",
+      }, convLabel),
+      showMeta && h("span", { className: "text-zinc-600 shrink-0" }, "—"),
+      h("span", {
+        className: "font-mono text-zinc-300 truncate max-w-[24%]",
+        title: item.skill_id,
+      }, item.skill_id),
+      showMeta && queueTail > 0
+        ? h("span", {
+            className: "text-zinc-600 shrink-0",
+            title: queueTail + " 个待评价",
+          }, "+" + queueTail)
+        : null,
+      middle,
+      error
+        ? h("span", {
+            className: "text-rose-400 shrink-0",
+            title: String(error),
+          }, "⚠")
+        : null,
+      controls,
     );
 
-    // Detail mode: long-press opened a reason field. Render below the bar.
-    if (!detailMode) return bar;
-
-    return h("div", null, bar,
-      h("div", { className: "px-3 py-2 border-t border-zinc-800 bg-zinc-950/60 space-y-2" },
-        h("div", { className: "text-xs text-zinc-400" },
-          "Adding a reason for ",
-          h("span", {
-            className: detailMode.rating === 1 ? "text-emerald-400" : "text-rose-400",
-          }, detailMode.rating === 1 ? "👍 positive" : "👎 negative"),
-          " on ", h("span", { className: "font-mono" }, recent.skill_id),
-        ),
-        h("textarea", {
-          className: "w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 font-mono",
-          rows: 2,
-          placeholder: "What worked / what didn't?",
-          value: detailMode.reason,
-          onChange: (e) => setDetailMode({ ...detailMode, reason: e.target.value }),
-          autoFocus: true,
-        }),
-        h("div", { className: "flex gap-2 justify-end" },
-          h("button", {
-            className: "px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200",
-            onClick: () => setDetailMode(null),
-          }, "Cancel"),
-          h("button", {
-            className: cn(
-              "px-3 py-1 text-xs rounded border",
-              detailMode.rating === 1
-                ? "border-emerald-700 text-emerald-300 hover:bg-emerald-950/40"
-                : "border-rose-700 text-rose-300 hover:bg-rose-950/40",
-              submitting && "opacity-50 pointer-events-none",
-            ),
-            disabled: submitting,
-            onClick: () => submit(detailMode.rating, detailMode.reason.trim() || null),
-          }, "Submit"),
-        ),
+    // Fade wrapper — opacity transition on the whole bar's appear/disappear.
+    return h("div", {
+      className: cn(
+        "transition-opacity ease-in-out",
+        shown ? "opacity-100" : "opacity-0",
       ),
-    );
+      style: { transitionDuration: FADE_MS + "ms" },
+    }, bar);
   }
 
   // ---------------------------------------------------------------------

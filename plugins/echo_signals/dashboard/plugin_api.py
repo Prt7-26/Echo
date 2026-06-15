@@ -33,6 +33,22 @@ from plugins.echo_signals.confidence_actions import apply_signal_event
 router = APIRouter()
 
 
+# The dashboard process mounts these routes but does NOT run the lifecycle
+# register() (that runs in the per-conversation worker), so install_active_encoder()
+# never fired here — leaving the /feedback preference store on the DEFAULT hashing
+# encoder even when neural embeddings are configured. The store path
+# (store_from_turn_cache_by_skill → encode) lives in THIS process, so install the
+# configured encoder at import time. Without this, preferences thumbs-up'd via the
+# dashboard get hashing (256-dim) vectors while the worker retrieves with neural
+# (1024-dim) → dim mismatch → cosine 0 → nothing ever retrieved.
+try:
+    from plugins.echo_signals.embeddings import install_active_encoder as _install_encoder
+    _install_encoder()
+except Exception:
+    # Never let an embedding-config hiccup break the dashboard API import.
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -198,25 +214,114 @@ def get_status_distribution():
 
 
 @router.get("/invocations/recent")
-def list_recent_invocations(limit: int = Query(50, ge=1, le=200)):
+def list_recent_invocations(
+    limit: int = Query(50, ge=1, le=200),
+    session_id: Optional[str] = Query(
+        None,
+        description=(
+            "Scope to one conversation. The chat:bottom thumbs widget passes "
+            "the live PTY session id so a fresh conversation never surfaces a "
+            "prior conversation's skill. Omit for the global recent list."
+        ),
+    ),
+):
     """Most-recent skill invocations with per-row signal counts.
 
     Useful for debugging "why is this skill getting these signals" —
-    drill into a recent invocation to see its time window.
+    drill into a recent invocation to see its time window. When ``session_id``
+    is supplied, the result is bounded to that conversation; each row also
+    carries the conversation ``session_title`` (joined from Hermes' ``sessions``
+    table when present) so the widget can label the rating target as
+    "<conversation> — <skill>".
     """
     conn = echo_db.get_echo_conn()
+
+    # Hermes' sessions table lives in the same DB at runtime, but Echo's
+    # isolated unit-test schema only creates echo_* tables — referencing a
+    # missing table would raise. Probe once and degrade to NULL titles.
+    has_sessions = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='sessions'"
+    ).fetchone() is not None
+    title_expr = (
+        "(SELECT s.title FROM sessions s WHERE s.id = i.session_id)"
+        if has_sessions
+        else "NULL"
+    )
+
+    where = ""
+    params: list = []
+    if session_id:
+        where = "WHERE i.session_id = ? "
+        params.append(session_id)
+    params.append(limit)
+
     rows = conn.execute(
         "SELECT i.invocation_id, i.skill_id, i.session_id, i.platform, "
         "       i.started_at, i.finished_at, i.task_summary, "
+        f"      {title_expr} AS session_title, "
+        "       EXISTS(SELECT 1 FROM echo_signal_event r "
+        "              WHERE r.invocation_id = i.invocation_id "
+        "              AND r.signal_type IN "
+        "                  ('explicit_positive', 'explicit_negative')) AS rated, "
         "       (SELECT COUNT(*) "
         "        FROM echo_signal_event e "
         "        WHERE e.invocation_id = i.invocation_id) AS signal_count "
         "FROM echo_skill_invocation i "
-        "ORDER BY i.started_at DESC, i.invocation_id DESC "
+        + where
+        + "ORDER BY i.started_at DESC, i.invocation_id DESC "
         "LIMIT ?",
-        (limit,),
+        tuple(params),
     ).fetchall()
     return {"invocations": _rows_to_dicts(rows)}
+
+
+@router.get("/invocations/{invocation_id}/signals")
+def get_invocation_signals(invocation_id: int):
+    """Rating detail + full signal stream for ONE skill invocation.
+
+    Powers the expandable skill row in the chat sidebar: a skill the user
+    has rated shows its rating (the explicit thumbs event + any reason text)
+    plus every Layer A/B/C signal collected for that exact call.
+    """
+    conn = echo_db.get_echo_conn()
+    inv = conn.execute(
+        "SELECT invocation_id, skill_id, session_id, platform, "
+        "       started_at, finished_at, task_summary "
+        "FROM echo_skill_invocation WHERE invocation_id = ?",
+        (invocation_id,),
+    ).fetchone()
+    if inv is None:
+        raise HTTPException(
+            status_code=404, detail=f"Invocation not found: {invocation_id}"
+        )
+
+    events = conn.execute(
+        "SELECT event_id, layer, signal_type, value_real, value_int, "
+        "       value_text, metadata, ts "
+        "FROM echo_signal_event "
+        "WHERE invocation_id = ? "
+        "ORDER BY ts ASC, event_id ASC",
+        (invocation_id,),
+    ).fetchall()
+    event_dicts = _rows_to_dicts(events)
+
+    # Surface the explicit rating (if any) as a first-class field so the
+    # widget doesn't have to re-scan the event list.
+    rating = None
+    for e in event_dicts:
+        if e["signal_type"] in ("explicit_positive", "explicit_negative"):
+            rating = {
+                "direction": (
+                    "up" if e["signal_type"] == "explicit_positive" else "down"
+                ),
+                "reason": e.get("value_text"),
+                "ts": e.get("ts"),
+            }
+    return {
+        "invocation": dict(inv),
+        "rating": rating,
+        "events": event_dicts,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +334,16 @@ class FeedbackPayload(BaseModel):
     rating: int = Field(..., description="+1 for thumbs up, -1 for thumbs down")
     reason: Optional[str] = Field(
         None,
-        description="Optional user-provided reason (long-press detail mode).",
+        description="Optional user-provided reason for the rating.",
+    )
+    invocation_id: Optional[int] = Field(
+        None,
+        description=(
+            "The exact skill invocation this rating targets. The chat:bottom "
+            "rating queue passes it so the audit signal_event attaches to the "
+            "invocation the user actually evaluated (not merely the skill's "
+            "most-recent one). Omit to fall back to most-recent attribution."
+        ),
     )
 
 
@@ -283,16 +397,21 @@ def submit_feedback(payload: FeedbackPayload):
     # update above still stands.
     if result.applied:
         try:
-            conn = echo_db.get_echo_conn()
-            inv = conn.execute(
-                "SELECT invocation_id FROM echo_skill_invocation "
-                "WHERE skill_id = ? ORDER BY started_at DESC LIMIT 1",
-                (payload.skill_id,),
-            ).fetchone()
-            if inv is not None:
+            target_invocation = payload.invocation_id
+            if target_invocation is None:
+                conn = echo_db.get_echo_conn()
+                inv = conn.execute(
+                    "SELECT invocation_id FROM echo_skill_invocation "
+                    "WHERE skill_id = ? ORDER BY started_at DESC LIMIT 1",
+                    (payload.skill_id,),
+                ).fetchone()
+                target_invocation = (
+                    inv["invocation_id"] if inv is not None else None
+                )
+            if target_invocation is not None:
                 from plugins.echo_signals.signals import record_signal
                 record_signal(
-                    invocation_id=inv["invocation_id"],
+                    invocation_id=target_invocation,
                     layer="B",
                     signal_type=event,
                     value_text=(payload.reason or None),
@@ -319,6 +438,53 @@ def submit_feedback(payload: FeedbackPayload):
         except Exception:
             # Preference store failures must not break the feedback flow.
             preference_example_id = None
+
+    # Layer B+: if the user wrote a reason, score the WORDS with the auxiliary
+    # LLM and apply a graded same-direction confidence step of magnitude
+    # |score|/5 on top of the base click. The follow-up step follows the LLM
+    # score's SIGN — so a reason that contradicts the click (a 👍 whose text is
+    # a complaint) pulls confidence back proportionally ("trust the words"). The
+    # call is fire-and-forget on a daemon thread; the /feedback response does
+    # not wait on the LLM. Gated on result.applied so we don't spend credit on
+    # locked / unknown skills (where confidence wouldn't move anyway).
+    if result.applied and payload.reason and payload.reason.strip():
+        try:
+            from plugins.echo_signals.reason_scorer import score_reason_async
+            from plugins.echo_signals.signals import record_signal as _rec
+
+            _skill = payload.skill_id
+            _inv = payload.invocation_id
+            _direction = "up" if payload.rating == 1 else "down"
+
+            def _on_reason_score(rs) -> None:
+                # Audit row (Layer B), even for score 0, so the timeline shows
+                # that the reason was scored and what the LLM concluded.
+                if _inv is not None:
+                    try:
+                        _rec(
+                            invocation_id=_inv,
+                            layer="B",
+                            signal_type="reason_score",
+                            value_real=float(rs.score),
+                            value_text=rs.rationale,
+                        )
+                    except Exception:
+                        pass
+                if rs.score == 0:
+                    return  # no clear signal → base click stands, no extra move
+                sev = abs(rs.score) / 5.0
+                ev = (
+                    "explicit_positive" if rs.score > 0 else "explicit_negative"
+                )
+                try:
+                    apply_signal_event(_skill, ev, severity=sev)
+                except Exception:
+                    pass
+
+            score_reason_async(_direction, _skill, payload.reason, _on_reason_score)
+        except Exception:
+            # Reason scoring must never break the feedback response.
+            pass
 
     response = {
         "applied": result.applied,
@@ -466,7 +632,17 @@ def submit_clipboard_signal(payload: ClipboardSignalPayload):
 
 
 @router.get("/scope/pending")
-def list_pending_scopes(limit: int = Query(50, ge=1, le=200)):
+def list_pending_scopes(
+    limit: int = Query(50, ge=1, le=200),
+    session_id: Optional[str] = Query(
+        None,
+        description=(
+            "Scope to the conversation that created the skill. The chat:bottom "
+            "widget passes the live session id so a skill created elsewhere "
+            "never prompts here. Omit for all pending scopes."
+        ),
+    ),
+):
     """Skills whose scope_level is still 'unknown' — needing user input.
 
     Most recent first so the dashboard shows the freshly-created skill
@@ -474,13 +650,19 @@ def list_pending_scopes(limit: int = Query(50, ge=1, le=200)):
     ThumbsBar's "pending scope confirmation" mode (Step 10).
     """
     conn = echo_db.get_echo_conn()
+    where = "WHERE scope_level = 'unknown' "
+    params: list = []
+    if session_id:
+        where += "AND session_id = ? "
+        params.append(session_id)
+    params.append(limit)
     rows = conn.execute(
-        "SELECT skill_id, scope_level, created_at, updated_at "
+        "SELECT skill_id, scope_level, created_at, updated_at, session_id "
         "FROM echo_skill_scope "
-        "WHERE scope_level = 'unknown' "
-        "ORDER BY created_at DESC "
+        + where
+        + "ORDER BY created_at DESC "
         "LIMIT ?",
-        (limit,),
+        tuple(params),
     ).fetchall()
     return {"pending": _rows_to_dicts(rows)}
 
