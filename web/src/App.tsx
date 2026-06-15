@@ -22,7 +22,6 @@ import {
   Code,
   Cpu,
   Database,
-  Download,
   Eye,
   FileText,
   Globe,
@@ -725,13 +724,9 @@ function SidebarSystemActions({ onNavigate }: { onNavigate: () => void }) {
       runningLabel: t.status.restartingGateway,
       spin: true,
     },
-    {
-      action: "update",
-      icon: Download,
-      label: t.status.updateHermes,
-      runningLabel: t.status.updatingHermes,
-      spin: false,
-    },
+    // "Update Hermes" intentionally removed: Echo can't guarantee
+    // compatibility with arbitrary upstream Hermes versions, so we don't
+    // expose a one-click upgrade that could break the install.
   ];
 
   const handleClick = (action: SystemAction) => {
