@@ -56,6 +56,15 @@ EMBEDDING_DIM = 256              # hash bucket count; 256 floats = 1 KB BLOB
 MMR_LAMBDA = 0.7                 # 1.0 = pure relevance, 0.0 = pure diversity
 TOP_K_DEFAULT = 3                # examples injected as few-shots
 RETRIEVAL_CANDIDATES = 20        # top-N pulled before MMR re-rank
+MIN_SIMILARITY_DEFAULT = 0.7     # raw-cosine floor; below this an example is
+                                 # not "about" the query and is not injected.
+                                 # Calibrated for NEURAL embeddings (relevant
+                                 # paraphrases score ~0.85, unrelated ~0.3-0.47).
+                                 # The hashing fallback scores far lower across
+                                 # the board, so under hashing this gate is
+                                 # effectively "inject nothing" — acceptable,
+                                 # since hashing can't do Chinese/paraphrase
+                                 # retrieval meaningfully anyway.
 THUMBS_RATING_DEFAULT = 5        # explicit thumbs-up → preference rating 5
 PREFERENCE_CAPACITY = 2000       # hard cap; LRU-by-composite eviction
 
@@ -350,6 +359,7 @@ def retrieve_topk(
     pool_size: int = RETRIEVAL_CANDIDATES,
     mmr_lambda: float = MMR_LAMBDA,
     min_rating: int = 4,
+    min_similarity: float = MIN_SIMILARITY_DEFAULT,
     confidence_weights: Optional[dict[str, float]] = None,
 ) -> list[PreferenceExample]:
     """Retrieve top-k preference examples for a query.
@@ -371,9 +381,16 @@ def retrieve_topk(
     query_vec = encode(user_message)
 
     # Stage 1: gather (PreferenceExample, vec, sim) over all candidates.
+    # The min_similarity gate is on the RAW cosine (semantic relevance) —
+    # applied BEFORE confidence weighting, so a relevant example for a slightly
+    # degraded skill isn't filtered out by the confidence multiplier. Confidence
+    # then only re-ranks among the already-relevant survivors.
     scored: list[tuple[PreferenceExample, list[float], float]] = []
     for ex, vec in _candidates_with_vectors(min_rating=min_rating):
-        sim = cosine(query_vec, vec)
+        sim_raw = cosine(query_vec, vec)
+        if sim_raw < min_similarity:
+            continue  # not "about" this query → never inject as a past example
+        sim = sim_raw
         if confidence_weights and ex.skill_id and ex.skill_id in confidence_weights:
             sim *= confidence_weights[ex.skill_id]
         scored.append((ex, vec, sim))
@@ -586,19 +603,35 @@ def _active_skill_exclusions() -> tuple[Optional[str], list]:
     since Echo cannot hook Hermes' skill-retrieval path directly.
     """
     try:
-        from .session_context import get_current_invocation_id
+        from .session_context import get_current_invocation_id, get_session_id
 
-        invocation_id = get_current_invocation_id()
-        if invocation_id is None:
-            return None, []
         conn = get_echo_conn()
-        inv = conn.execute(
-            "SELECT skill_id FROM echo_skill_invocation WHERE invocation_id = ?",
-            (invocation_id,),
-        ).fetchone()
-        if inv is None:
+        invocation_id = get_current_invocation_id()
+        if invocation_id is not None:
+            inv = conn.execute(
+                "SELECT skill_id FROM echo_skill_invocation WHERE invocation_id = ?",
+                (invocation_id,),
+            ).fetchone()
+            skill_id = inv["skill_id"] if inv is not None else None
+        else:
+            # The contextvar is None at pre_llm_call time (bump_use runs later in
+            # the turn and the var doesn't survive across turns). Fall back to the
+            # conversation's most-recent skill so a just-used skill's exclusion
+            # caution still reaches subsequent turns — without this the Layer C
+            # judge's exclusion verdict never actually reaches the agent.
+            sid = get_session_id()
+            row0 = (
+                conn.execute(
+                    "SELECT skill_id FROM echo_skill_invocation WHERE session_id = ? "
+                    "ORDER BY started_at DESC, invocation_id DESC LIMIT 1",
+                    (sid,),
+                ).fetchone()
+                if sid
+                else None
+            )
+            skill_id = row0["skill_id"] if row0 is not None else None
+        if not skill_id:
             return None, []
-        skill_id = inv["skill_id"]
         row = conn.execute(
             "SELECT exclusion_conditions FROM echo_skill_scope WHERE skill_id = ?",
             (skill_id,),
@@ -675,6 +708,16 @@ def on_pre_llm_call_inject(
             block = format_for_injection(examples)
             if block:
                 blocks.append(block)
+            # M5 injections are otherwise invisible (the context is ephemeral,
+            # appended to the user message and never persisted). Log when we
+            # actually inject so the loop is observable.
+            logger.info(
+                "Echo M5: injected %d preference example(s) for query %r "
+                "(skills=%s)",
+                len(examples),
+                (user_text or "")[:50],
+                [e.skill_id for e in examples],
+            )
     except Exception as exc:
         logger.debug("on_pre_llm_call_inject retrieval failed: %s", exc, exc_info=True)
 

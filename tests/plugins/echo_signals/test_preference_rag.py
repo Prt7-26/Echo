@@ -247,6 +247,28 @@ class TestRetrieveTopK:
         out = prag.retrieve_topk("anything")
         assert out == []
 
+    def test_min_similarity_gate(self, isolated_db):
+        # Controlled orthogonal encoder: "a…" → axis 0, anything else → axis 1.
+        def enc(text):
+            v = [0.0] * prag.EMBEDDING_DIM
+            v[0 if text.strip().startswith("a") else 1] = 1.0
+            return v
+
+        prag.set_encoder(enc)
+        try:
+            prag.store_preference(
+                task_request="a apple pie recipe", agent_output="x", rating=5,
+            )
+            # Same axis → cosine 1.0 ≥ 0.7 → retrieved.
+            assert len(prag.retrieve_topk("a another query", min_similarity=0.7)) == 1
+            # Orthogonal axis → cosine 0.0 < 0.7 → gated out (no irrelevant
+            # example injected even though it's the only candidate).
+            assert prag.retrieve_topk("b banana", min_similarity=0.7) == []
+            # Lower the floor and the orthogonal one is still 0.0 (not > 0).
+            assert prag.retrieve_topk("b banana", min_similarity=0.0) == []
+        finally:
+            prag.reset_encoder()
+
     def test_returns_most_similar(self, isolated_db):
         prag.store_preference(
             task_request="write a marketing email for a launch",
