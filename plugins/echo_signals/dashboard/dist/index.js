@@ -601,7 +601,7 @@
           message:
             "No new-skill candidates yet. Echo nominates a conversation " +
             "that never used a skill when the user expresses save intent, " +
-            "repeats a past request, or iterates ≥ 3 turns.",
+            "repeats a past request, runs ≥ 5 tool calls, or iterates ≥ 3 turns.",
         });
 
       return h("ul", { className: "space-y-2" },
@@ -627,6 +627,7 @@
           ),
           h("div", { className: "text-xs text-zinc-500 tabular-nums" },
             "turns: ", c.user_turns,
+            "  ·  tool calls: ", c.tool_calls || 0,
             c.has_save_intent ? "  ·  save intent ✓" : "",
             c.has_recurrence ? "  ·  recurrence " + c.top_similarity : "",
           ),

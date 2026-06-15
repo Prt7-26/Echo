@@ -721,6 +721,7 @@ def list_session_skill_candidates(
                 "score": c.score,
                 "reasons": c.reasons,
                 "user_turns": c.user_turns,
+                "tool_calls": c.tool_calls,
                 "has_save_intent": c.has_save_intent,
                 "has_recurrence": c.has_recurrence,
                 "top_similarity": round(c.top_similarity, 3),

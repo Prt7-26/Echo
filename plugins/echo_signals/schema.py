@@ -53,7 +53,13 @@ import sqlite3
 #          NULL), so it carries the per-turn save-intent flag and top
 #          recurrence similarity for sessions that never invoked any
 #          existing skill. list_session_candidates() aggregates these.
-ECHO_SCHEMA_VERSION = 6
+# v6 → v7: added echo_session_tool_count — a per-conversation tool-call
+#          counter for SKILL-LESS sessions. Tool calls during a skilled
+#          invocation are already counted per-invocation in
+#          echo_signal_event; this table covers the no-active-skill case
+#          so M1's tool-complexity condition (≥5 calls) also applies to
+#          new-skill nomination of skill-less conversations.
+ECHO_SCHEMA_VERSION = 7
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +251,17 @@ CREATE TABLE IF NOT EXISTS echo_skill_content_hash (
     hash_updated_at   REAL,
     agent_managed_at  REAL
 );
+
+-- v7: per-conversation tool-call counter for SKILL-LESS sessions. Only
+-- incremented by on_post_tool_call when there is no active invocation
+-- (a skilled invocation's tool calls are already counted per-invocation
+-- in echo_signal_event). list_session_candidates() reads this to apply
+-- M1's tool-complexity condition to new-skill nomination.
+CREATE TABLE IF NOT EXISTS echo_session_tool_count (
+    session_id      TEXT    PRIMARY KEY,
+    tool_calls      INTEGER NOT NULL DEFAULT 0,
+    updated_at      REAL    NOT NULL
+);
 """
 
 
@@ -260,6 +277,7 @@ ECHO_TABLES = (
     "echo_turn_cache",
     "echo_user_request_log",
     "echo_skill_content_hash",
+    "echo_session_tool_count",
 )
 
 

@@ -275,6 +275,33 @@ def record_semantic_recurrence_signal(invocation_id: int, skill_id: str,
         )
 
 
+def record_session_tool_call(session_id: Optional[str]) -> None:
+    """Increment a SKILL-LESS conversation's tool-call counter.
+
+    Called from signals.on_post_tool_call when no skill invocation is
+    active. Tool calls made *during* a skilled invocation are already
+    counted per-invocation in echo_signal_event, so this counter only
+    accrues for conversations with no active skill — exactly the ones
+    list_session_candidates() nominates.
+    """
+    if not session_id:
+        return
+    try:
+        conn = get_echo_conn()
+        now = time.time()
+        conn.execute(
+            "INSERT INTO echo_session_tool_count (session_id, tool_calls, updated_at) "
+            "VALUES (?, 1, ?) "
+            "ON CONFLICT(session_id) DO UPDATE SET "
+            "  tool_calls = tool_calls + 1, "
+            "  updated_at = excluded.updated_at",
+            (session_id, now),
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.debug("record_session_tool_call failed: %s", exc, exc_info=True)
+
+
 def gc_old_requests(retention_days: float = RECURRENCE_LOOKBACK_DAYS * 2) -> int:
     """Delete user_request_log rows older than ``retention_days``.
 
@@ -446,11 +473,10 @@ def list_candidates(
 # that allows NULL invocation/skill), so a user who drafts an email over many
 # turns — or says "保存为技能" mid-chat — gets nominated to create a NEW skill.
 #
-# Tool-call complexity is intentionally NOT scored here: counting tool calls
-# per skill-less session would need a session-level counter that on_post_tool_call
-# does not currently keep (it gates on an active invocation). The three
-# request-log-derivable conditions (save_intent / recurrence / modification
-# turns) already cover the proposal's motivating cases.
+# All four proposal conditions apply here. Tool-call complexity uses the
+# echo_session_tool_count counter (record_session_tool_call), which
+# on_post_tool_call bumps for skill-less turns — the per-invocation tool count
+# in echo_signal_event only exists while a skill is active.
 # ---------------------------------------------------------------------------
 
 
@@ -460,6 +486,7 @@ class SessionCandidate:
     score: int
     reasons: list[str]
     user_turns: int
+    tool_calls: int
     has_save_intent: bool
     has_recurrence: bool
     top_similarity: float
@@ -489,7 +516,11 @@ def list_session_candidates(
             MAX(r.save_intent)                        AS has_save_intent,
             MAX(COALESCE(r.recurrence_sim, 0.0))      AS top_similarity,
             MIN(r.ts)                                 AS first_ts,
-            MAX(r.ts)                                 AS last_ts
+            MAX(r.ts)                                 AS last_ts,
+            COALESCE(
+                (SELECT tc.tool_calls FROM echo_session_tool_count tc
+                 WHERE tc.session_id = r.session_id), 0
+            )                                         AS tool_calls
         FROM echo_user_request_log r
         WHERE r.session_id IS NOT NULL
           AND r.session_id NOT IN (
@@ -507,6 +538,7 @@ def list_session_candidates(
     for r in rows:
         session_id = r["session_id"]
         user_turns = int(r["user_turns"] or 0)
+        tool_calls = int(r["tool_calls"] or 0)
         has_save = bool(r["has_save_intent"])
         top_sim = float(r["top_similarity"] or 0.0)
         has_recurrence = top_sim >= recurrence_threshold
@@ -521,6 +553,9 @@ def list_session_candidates(
             reasons.append(
                 f"task pattern recurred (lexical match {top_sim:.2f})"
             )
+        if tool_calls >= THRESHOLD_TOOL_COUNT:
+            score += WEIGHT_TOOL_COUNT
+            reasons.append(f"high tool-call complexity ({tool_calls} calls)")
         if user_turns >= THRESHOLD_MODIF_ROUNDS:
             score += WEIGHT_MODIF_ROUNDS
             reasons.append(f"high modification investment ({user_turns} turns)")
@@ -542,6 +577,7 @@ def list_session_candidates(
             score=score,
             reasons=reasons,
             user_turns=user_turns,
+            tool_calls=tool_calls,
             has_save_intent=has_save,
             has_recurrence=has_recurrence,
             top_similarity=top_sim,

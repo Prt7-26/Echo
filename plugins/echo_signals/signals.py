@@ -363,6 +363,15 @@ def on_post_tool_call(*, tool_name: str = "", result: Any = _NO_RESULT,
     """
     invocation_id = get_current_invocation_id()
     if invocation_id is None:
+        # No active skill — count this against the conversation instead, so
+        # M1's tool-complexity condition can nominate a SKILL-LESS session as
+        # a new-skill candidate (list_session_candidates reads this counter).
+        try:
+            from . import m1_trigger
+            m1_trigger.record_session_tool_call(get_session_id())
+        except Exception as exc:
+            logger.debug("Echo on_post_tool_call(session count) failed: %s",
+                         exc, exc_info=True)
         return
     try:
         record_signal(

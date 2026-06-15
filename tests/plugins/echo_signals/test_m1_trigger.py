@@ -758,3 +758,56 @@ class TestSkillLessTurnLogging:
             assert n_events == 0
         finally:
             sc.clear_session_context()
+
+
+class TestSessionToolCount:
+    def test_record_increments(self, isolated_db):
+        echo_db.get_echo_conn()
+        for _ in range(3):
+            m1.record_session_tool_call("sess-tc")
+        n = echo_db.get_echo_conn().execute(
+            "SELECT tool_calls FROM echo_session_tool_count WHERE session_id='sess-tc'"
+        ).fetchone()["tool_calls"]
+        assert n == 3
+
+    def test_none_session_no_op(self, isolated_db):
+        echo_db.get_echo_conn()
+        m1.record_session_tool_call(None)
+        m1.record_session_tool_call("")
+        n = echo_db.get_echo_conn().execute(
+            "SELECT COUNT(*) AS n FROM echo_session_tool_count"
+        ).fetchone()["n"]
+        assert n == 0
+
+    def test_tool_count_threshold_alone_qualifies(self, isolated_db):
+        echo_db.get_echo_conn()
+        # One logged user turn (so the session appears) + 5 tool calls.
+        _log_request("sess-tools", "do a multi-step thing")
+        for _ in range(m1.THRESHOLD_TOOL_COUNT):
+            m1.record_session_tool_call("sess-tools")
+        out = m1.list_session_candidates()
+        assert len(out) == 1
+        assert out[0].tool_calls == m1.THRESHOLD_TOOL_COUNT
+        assert out[0].score == m1.WEIGHT_TOOL_COUNT
+
+    def test_tool_count_below_threshold_excluded(self, isolated_db):
+        echo_db.get_echo_conn()
+        _log_request("sess-few", "one thing")
+        for _ in range(m1.THRESHOLD_TOOL_COUNT - 1):
+            m1.record_session_tool_call("sess-few")
+        assert m1.list_session_candidates() == []
+
+    def test_post_tool_call_skill_less_increments_session_counter(self, isolated_db):
+        from plugins.echo_signals import signals as sig
+        from plugins.echo_signals import session_context as sc
+        try:
+            sc.set_session_context("sess-live", "cli")
+            # No invocation active → counted against the conversation.
+            for _ in range(2):
+                sig.on_post_tool_call(tool_name="shell")
+            n = echo_db.get_echo_conn().execute(
+                "SELECT tool_calls FROM echo_session_tool_count WHERE session_id='sess-live'"
+            ).fetchone()["tool_calls"]
+            assert n == 2
+        finally:
+            sc.clear_session_context()
