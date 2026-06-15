@@ -44,7 +44,7 @@ import sqlite3
 #          content change with NO corresponding skill_manage is attributed
 #          to a manual user edit and the skill is auto-locked (proposal §M4
 #          "用户手动编辑过 → 锁定").
-ECHO_SCHEMA_VERSION = 4
+ECHO_SCHEMA_VERSION = 5
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +142,10 @@ CREATE TABLE IF NOT EXISTS echo_skill_scope (
     user_confirmed_at     REAL,
     created_at            REAL    NOT NULL,
     updated_at            REAL    NOT NULL,
+    -- v5: the conversation that created this skill. The dashboard's
+    -- scope-confirmation prompt is bound to this session so a skill created
+    -- in conversation A never pops its question in conversation B.
+    session_id            TEXT,
     FOREIGN KEY (skill_id) REFERENCES echo_skill_confidence(skill_id)
         ON DELETE CASCADE,
     CHECK (scope_level IN ('broad', 'narrow', 'unknown'))
@@ -243,6 +247,18 @@ ECHO_TABLES = (
 )
 
 
+def _add_column_if_missing(
+    cursor: sqlite3.Cursor, table: str, column: str, decl: str
+) -> None:
+    """ALTER TABLE ... ADD COLUMN, but only when the column isn't there yet.
+
+    Idempotent stand-in for SQLite's missing ``ADD COLUMN IF NOT EXISTS``.
+    """
+    cols = {row[1] for row in cursor.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
 def ensure_echo_schema(conn: sqlite3.Connection) -> None:
     """Create all Echo tables and indexes if they don't exist.
 
@@ -256,6 +272,12 @@ def ensure_echo_schema(conn: sqlite3.Connection) -> None:
     """
     cursor = conn.cursor()
     cursor.executescript(ECHO_SCHEMA_SQL)
+
+    # Additive column migrations for DBs created before the column existed.
+    # CREATE TABLE IF NOT EXISTS above is a no-op on an existing table, so a
+    # column added in a later schema version must be ALTERed in explicitly.
+    # SQLite has no "ADD COLUMN IF NOT EXISTS", so probe table_info first.
+    _add_column_if_missing(cursor, "echo_skill_scope", "session_id", "TEXT")
 
     # Record / refresh schema version. INSERT on first run, UPDATE later.
     cursor.execute("SELECT version FROM echo_schema_version LIMIT 1")

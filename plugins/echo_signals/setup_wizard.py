@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 CONFIG_ROOT = "echo"
 KEY_MODE = "aux_mode"
-AUX_TASKS = ("echo_classifier", "echo_judge")
+AUX_TASKS = ("echo_classifier", "echo_judge", "echo_reason_score")
 
 
 def _prompt_helpers():
@@ -137,24 +137,28 @@ def run_aux_provider_setup(config: Dict[str, Any]) -> None:
     config[CONFIG_ROOT][KEY_MODE] = "separate"
 
     same_for_both = p["prompt_yes_no"](
-        "Use the same endpoint for both Layer B classifier and Layer C judge?",
+        "Use the same endpoint for all of Echo's auxiliary tasks "
+        "(Layer B classifier, Layer C judge, reason scorer)?",
         default=True,
     )
 
     if same_for_both:
-        endpoint = _ask_separate_endpoint(p, "Layer B + Layer C (one endpoint)")
+        endpoint = _ask_separate_endpoint(p, "Echo auxiliary tasks (one endpoint)")
         for task in AUX_TASKS:
             section = _ensure_aux_section(config, task)
             section.update(endpoint)
         p["print_success"](
-            f"Configured {AUX_TASKS[0]} and {AUX_TASKS[1]} → {endpoint['base_url']} "
+            f"Configured {', '.join(AUX_TASKS)} → {endpoint['base_url']} "
             f"({endpoint['model']})"
         )
     else:
         clf = _ask_separate_endpoint(p, "Layer B classifier (echo_classifier)")
         jdg = _ask_separate_endpoint(p, "Layer C judge (echo_judge)")
+        rsn = _ask_separate_endpoint(p, "Reason scorer (echo_reason_score)")
         _ensure_aux_section(config, "echo_classifier").update(clf)
         _ensure_aux_section(config, "echo_judge").update(jdg)
+        _ensure_aux_section(config, "echo_reason_score").update(rsn)
         p["print_success"](
-            "Configured both Echo aux tasks (Layer B + Layer C) with separate endpoints."
+            "Configured all three Echo aux tasks (Layer B classifier, "
+            "Layer C judge, reason scorer) with separate endpoints."
         )

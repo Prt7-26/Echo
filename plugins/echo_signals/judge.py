@@ -78,23 +78,36 @@ Recent behavior signals (last {n} invocations):
 
 Confidence is now {confidence:.3f} (threshold for review: 0.30).
 
-Choose EXACTLY one verdict:
+Decide ONE verdict. The crux is WHY the skill is underperforming — read the \
+user comments above, do not guess from the skill's name:
 
-  1. ok — the dip is most likely noise from natural workflow variation.
-     The skill itself is fine; no further action.
+  ok — the dip is most likely noise / natural variation, or there isn't \
+enough concrete negative signal to act on. Default here when unsure.
 
-  2. degraded — the skill has quality problems that the recent signals
-     are accurately revealing. Recommend further confidence reduction.
+  degraded — the skill attempted the RIGHT KIND of task but did it POORLY. \
+The complaints are about OUTPUT QUALITY: inaccurate, low-quality, ugly, buggy, \
+"not good enough", "still needs work", "not realistic enough". The skill's \
+purpose is still valid; it just performed badly. MOST quality complaints are \
+this.
 
-  3. exclusion — the skill is fine for its ORIGINAL purpose but recent
-     signals show it's being applied in a context it wasn't designed
-     for. Name the specific context to exclude.
+  exclusion — the skill is fine at its OWN purpose but was APPLIED TO A \
+DIFFERENT KIND OF TASK it isn't built for (e.g. a CSV-parser used on a PDF, a \
+formal-email skill used for casual chat). Choose this ONLY when the complaint \
+is about FIT/CONTEXT, not quality. The excluded context MUST be DIFFERENT from \
+the skill's own core purpose — excluding a skill from the very thing it exists \
+to do (e.g. excluding an ASCII-art skill from "ASCII/visual art" requests) is \
+ALWAYS WRONG; that case is degraded, not exclusion.
+
+DECISIVE TEST — ask: "Could this skill satisfy the request if it simply did a \
+BETTER job of what it already does?"
+  YES → degraded.   NO, it's genuinely the wrong tool for this task → exclusion.
+When still unsure between degraded and exclusion, choose degraded.
 
 Respond as a single JSON object on one line, no markdown:
 
   {{"verdict": "ok"}}
   {{"verdict": "degraded", "reason": "<one-sentence reason>"}}
-  {{"verdict": "exclusion", "context": "<short context description>"}}
+  {{"verdict": "exclusion", "context": "<task context to exclude, distinct from the skill's own purpose>"}}
 """
 
 
@@ -109,10 +122,11 @@ def _summarize_recent_signals(
 ) -> str:
     """Render the last N invocations' aggregate signal counts as plain text.
 
-    Format is intentionally LLM-friendly: one line per invocation, with
-    counts of each signal type. We don't include free-form value_text
-    here to keep the prompt cheap; the judge decides based on shape, not
-    content.
+    Format is intentionally LLM-friendly: one line per invocation with
+    counts of each signal type, followed by a block of the actual user
+    feedback TEXT (thumb reasons + the LLM reason-score's read). The judge
+    needs the content — not just the shape — to tell a quality complaint
+    (→ degraded) from a wrong-context one (→ exclusion).
     """
     from .db import get_echo_conn
 
@@ -152,6 +166,38 @@ def _summarize_recent_signals(
             )
         )
         lines.append(f"  #{i}: {summary}")
+
+    # Surface the actual user-authored feedback TEXT (the reason the user typed
+    # with a thumb, plus the LLM reason-score's read of it). Without this the
+    # judge sees only signal COUNTS and has to guess WHY from the skill name —
+    # which makes it confuse a quality complaint ("not realistic enough" →
+    # degraded) with a wrong-context one (→ exclusion). The content is what
+    # separates the two verdicts.
+    comments = conn.execute(
+        "SELECT e.signal_type, e.value_text, e.value_real "
+        "FROM echo_signal_event e "
+        "JOIN echo_skill_invocation i ON i.invocation_id = e.invocation_id "
+        "WHERE i.skill_id = ? "
+        "  AND e.signal_type IN "
+        "      ('explicit_positive', 'explicit_negative', 'reason_score') "
+        "  AND e.value_text IS NOT NULL AND TRIM(e.value_text) <> '' "
+        "ORDER BY e.ts DESC LIMIT 8",
+        (skill_id,),
+    ).fetchall()
+    if comments:
+        clines = ["", "Recent user comments (most recent first):"]
+        for c in comments:
+            st = c["signal_type"]
+            txt = str(c["value_text"]).replace("\n", " ").strip()[:140]
+            if st == "explicit_positive":
+                tag = "👍 user reason"
+            elif st == "explicit_negative":
+                tag = "👎 user reason"
+            else:  # reason_score — value_text is the LLM's rationale
+                score = c["value_real"]
+                tag = f"reason-score {int(score):+d}" if score is not None else "reason-score"
+            clines.append(f'  - [{tag}] "{txt}"')
+        return "\n".join(lines) + "\n" + "\n".join(clines)
     return "\n".join(lines)
 
 

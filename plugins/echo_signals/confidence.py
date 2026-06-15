@@ -130,16 +130,18 @@ def _apply_rule(
       g_T(c, s) = c · (1 − β_T · s)        for T ∈ {explicit−, NL−, drift}
       g_T(c, s) = c                        for T = silence
 
-    Severity is consulted for ALL three multiplicative rules. Explicit
-    and NL callers pass severity=1.0 (the default) so it is numerically
-    a no-op there, but the formula structure is preserved — this matters
-    when the simulator or a future caller wants to vary severity per
-    event (e.g. weight explicit_negative by intensity).
+    Severity scales EVERY non-silence rule (additive and multiplicative
+    alike). Ordinary thumb / NL callers pass severity=1.0 (the default) so
+    it is numerically a no-op there. The reason-scorer (reason_scorer.py)
+    passes severity=|llm_score|/5 to apply a *graded* same-direction bump or
+    cut proportional to how strongly the user's written reason endorsed or
+    criticised the skill — that's how the LLM reason score normalises onto
+    confidence.
     """
     if event == "explicit_positive":
-        return min(c + ALPHA_EXPLICIT_POSITIVE, 1.0)
+        return min(c + ALPHA_EXPLICIT_POSITIVE * severity, 1.0)
     if event == "nl_positive":
-        return min(c + ALPHA_NL_POSITIVE, 1.0)
+        return min(c + ALPHA_NL_POSITIVE * severity, 1.0)
     if event == "explicit_negative":
         return max(c * (1.0 - BETA_EXPLICIT_NEGATIVE * severity), 0.0)
     if event == "nl_negative":

@@ -52,6 +52,7 @@ CONFIG_KEY_MODE = "aux_mode"
 # Task names Echo registers via Hermes' auxiliary client.
 TASK_CLASSIFIER = "echo_classifier"
 TASK_JUDGE = "echo_judge"
+TASK_REASON_SCORE = "echo_reason_score"
 
 
 def _load_config() -> dict:
@@ -126,3 +127,7 @@ def classifier_enabled() -> bool:
 
 def judge_enabled() -> bool:
     return aux_enabled_for(TASK_JUDGE)
+
+
+def reason_scorer_enabled() -> bool:
+    return aux_enabled_for(TASK_REASON_SCORE)

@@ -166,10 +166,14 @@ def _record_pending_scope(skill_name: str) -> None:
         (skill_name, initial_c, now, now),
     )
 
+    # Bind the scope question to the conversation that created the skill, so
+    # the dashboard only surfaces it there (not in unrelated conversations).
+    from .session_context import get_session_id
+    creating_session = get_session_id()
     conn.execute(
         "INSERT OR IGNORE INTO echo_skill_scope "
-        "(skill_id, scope_level, created_at, updated_at) "
-        "VALUES (?, 'unknown', ?, ?)",
-        (skill_name, now, now),
+        "(skill_id, scope_level, created_at, updated_at, session_id) "
+        "VALUES (?, 'unknown', ?, ?, ?)",
+        (skill_name, now, now, creating_session),
     )
     conn.commit()

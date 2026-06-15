@@ -124,16 +124,29 @@ class TestRecordSignal:
 
 
 class TestHookShortCircuits:
-    def test_pre_llm_call_non_user_turn_skipped(self, active_invocation):
+    def test_pre_llm_call_assistant_tool_skipped(self, active_invocation):
+        # Explicit non-user tags are still ignored.
         sig.on_pre_llm_call(turn_type="assistant")
         sig.on_pre_llm_call(turn_type="tool")
-        sig.on_pre_llm_call(turn_type="")
+        sig.on_pre_llm_call(turn_type="system")
         conn = echo_db.get_echo_conn()
         n = conn.execute(
             "SELECT COUNT(*) AS n FROM echo_signal_event "
             "WHERE signal_type = 'user_turn'"
         ).fetchone()["n"]
         assert n == 0
+
+    def test_pre_llm_call_untagged_is_user_turn(self, active_invocation):
+        # Live Hermes fires pre_llm_call once per user turn WITHOUT a turn_type
+        # kwarg — that must be treated as a user turn (regression: the old
+        # turn_type=="user" gate suppressed every Layer A/B signal at runtime).
+        sig.on_pre_llm_call(turn_type="")
+        conn = echo_db.get_echo_conn()
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM echo_signal_event "
+            "WHERE signal_type = 'user_turn'"
+        ).fetchone()["n"]
+        assert n == 1
 
     def test_pre_llm_call_user_turn_records(self, active_invocation):
         sig.on_pre_llm_call(turn_type="user")
@@ -151,6 +164,32 @@ class TestHookShortCircuits:
         conn = echo_db.get_echo_conn()
         n = conn.execute("SELECT COUNT(*) AS n FROM echo_signal_event").fetchone()["n"]
         assert n == 0
+
+
+class TestPreLlmCallSetsSessionContext:
+    """Regression: resumed conversations never fire on_session_start, so the
+    session contextvar must be (re)set from pre_llm_call — otherwise bump_use
+    writes invocations with a NULL session_id and the per-conversation rating
+    queue never surfaces them.
+    """
+
+    def test_sets_context_from_session_id(self, isolated_db: Path):
+        sc.clear_session_context()
+        assert sc.get_session_id() is None
+        sig.on_pre_llm_call(session_id="resumed-sess", platform="tui")
+        assert sc.get_session_id() == "resumed-sess"
+        assert sc.get_platform() == "tui"
+
+    def test_runs_before_turn_type_gate(self, isolated_db: Path):
+        # Even a non-user fire (no signal recorded) must still refresh context.
+        sc.clear_session_context()
+        sig.on_pre_llm_call(turn_type="assistant", session_id="sess-A")
+        assert sc.get_session_id() == "sess-A"
+
+    def test_missing_session_id_leaves_context_untouched(self, isolated_db: Path):
+        sc.set_session_context("existing", "cli")
+        sig.on_pre_llm_call(turn_type="assistant")  # no session_id kwarg
+        assert sc.get_session_id() == "existing"
 
     def test_post_tool_call_records_tool_name(self, active_invocation):
         sig.on_post_tool_call(tool_name="execute_bash")

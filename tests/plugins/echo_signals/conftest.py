@@ -29,6 +29,12 @@ def real_judge():
     return None
 
 
+@pytest.fixture
+def real_reason_scorer():
+    """Marker fixture — request this to bypass the reason_scorer stub below."""
+    return None
+
+
 @pytest.fixture(autouse=True)
 def _stub_judge_async(monkeypatch, request):
     """Stub ``judge.start_judge_async`` unless the test requested
@@ -43,4 +49,22 @@ def _stub_judge_async(monkeypatch, request):
         return threading.Thread(target=lambda: None)
 
     monkeypatch.setattr(jdg, "start_judge_async", _noop)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _stub_reason_scorer_async(monkeypatch, request):
+    """Stub ``reason_scorer.score_reason_async`` unless the test requested
+    ``real_reason_scorer`` — so the dashboard /feedback path doesn't spawn a
+    real daemon thread attempting an aux-LLM call when a reason is supplied."""
+    if "real_reason_scorer" in request.fixturenames:
+        yield
+        return
+
+    from plugins.echo_signals import reason_scorer as rs
+
+    def _noop(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(rs, "score_reason_async", _noop)
     yield

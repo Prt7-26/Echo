@@ -27,7 +27,7 @@ import time
 from typing import Any, Optional
 
 from .db import get_echo_conn
-from .session_context import get_current_invocation_id
+from .session_context import get_current_invocation_id, get_session_id
 
 logger = logging.getLogger(__name__)
 
@@ -93,10 +93,35 @@ def record_signal(
 # ---------------------------------------------------------------------------
 
 
+def _recent_invocation_for_session(session_id: Optional[str]) -> Optional[int]:
+    """Most recent skill invocation in a conversation, or None.
+
+    Used to attribute a turn's signals (Layer A user_turn, Layer B NL
+    sentiment, M1) to the conversation's current skill when the per-turn
+    contextvar isn't populated — e.g. a follow-up "太棒了" turn that loads no
+    skill of its own but is clearly feedback on the last skill's output.
+    """
+    if not session_id:
+        return None
+    try:
+        row = get_echo_conn().execute(
+            "SELECT invocation_id FROM echo_skill_invocation "
+            "WHERE session_id = ? ORDER BY started_at DESC, invocation_id DESC "
+            "LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        return int(row["invocation_id"]) if row is not None else None
+    except Exception as exc:
+        logger.debug("Echo _recent_invocation_for_session failed: %s", exc, exc_info=True)
+        return None
+
+
 def on_pre_llm_call(
     *,
     turn_type: str = "",
     user_message: Any = None,
+    session_id: Any = None,
+    platform: Any = None,
     **_kwargs: Any,
 ) -> None:
     """Two-layer record on each fresh user turn.
@@ -107,13 +132,47 @@ def on_pre_llm_call(
                 callback updates confidence with nl_positive /
                 nl_negative when the label is non-neutral.
 
-    Hermes fires pre_llm_call multiple times per turn (context injection,
-    actual API request). Only turn_type='user' is a fresh user
-    utterance — assistant/tool fires are ignored.
+    Hermes' live conversation_loop fires pre_llm_call EXACTLY ONCE per turn,
+    before the tool-calling loop, and does NOT pass a ``turn_type`` kwarg — so
+    every fire we see is a fresh user utterance. We therefore treat a missing/
+    empty turn_type as a user turn and only skip turns a caller explicitly tags
+    as assistant/tool/system. (The earlier ``turn_type != "user"`` gate assumed
+    Hermes tagged each fire; since it doesn't, that gate silently suppressed
+    ALL Layer A / Layer B / M1 signals in the live runtime — they only ever
+    fired in unit tests that passed turn_type="user" by hand.)
     """
-    if turn_type != "user":
+    # Keep the session contextvar fresh so the bump_use wrapper can attribute
+    # the invocation it later writes in this same turn. on_session_start fires
+    # ONLY for brand-new conversations (conversation_loop.py builds the system
+    # prompt from scratch), so a RESUMED conversation would otherwise leave the
+    # context unset → bump_use writes echo_skill_invocation rows with a NULL
+    # session_id + platform='unknown' → the per-conversation rating queue (and
+    # any session-scoped query) never sees them. pre_llm_call fires on EVERY
+    # turn (new and resumed) with the live session id, and runs before the
+    # turn's tool loop where bump_use happens, so refresh it here unconditionally.
+    if session_id:
+        from .session_context import set_session_context
+        set_session_context(str(session_id), (platform or None))
+
+    if turn_type in ("assistant", "tool", "system"):
         return
+    # Resolve which skill invocation this turn's signals attach to.
+    #
+    # The _current_invocation_id contextvar is set by bump_use — but bump_use
+    # runs DURING the tool loop, AFTER pre_llm_call fires, and the contextvar
+    # does not survive across turns (each gateway turn is a fresh context). So
+    # at pre_llm_call time it is almost always None. Relying on it alone meant
+    # this whole block (Layer A user_turn, Layer B NL sentiment, M1 signals)
+    # never ran at runtime.
+    #
+    # Fall back to the most recent invocation in THIS conversation. That is the
+    # skill the user's words are about — crucially, cross-turn appreciation like
+    # a follow-up "太棒了" (no skill loaded that turn) then attributes to the
+    # skill whose output prompted it. None only when no skill has run in this
+    # conversation at all → nothing to attribute to.
     invocation_id = get_current_invocation_id()
+    if invocation_id is None:
+        invocation_id = _recent_invocation_for_session(get_session_id())
     if invocation_id is None:
         return
 
