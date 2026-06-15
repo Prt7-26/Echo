@@ -237,6 +237,14 @@ def on_pre_llm_call(
     # confidence, so they need an attributable invocation. A skill-less turn has
     # nothing to attribute to and stops here — M1 above already captured it.
     if invocation_id is None:
+        # Active M1 nomination: a skill-less conversation that just crossed the
+        # threshold gets a fire-and-forget dedup + ask/inform/create decision.
+        try:
+            from . import m1_nomination
+            m1_nomination.maybe_start_nomination(get_session_id())
+        except Exception as exc:
+            logger.debug("Echo on_pre_llm_call(nomination) failed: %s",
+                         exc, exc_info=True)
         return
 
     # ── Layer A — sync record ─────────────────────────────────────────

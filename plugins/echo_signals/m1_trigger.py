@@ -536,55 +536,108 @@ def list_session_candidates(
 
     candidates: list[SessionCandidate] = []
     for r in rows:
-        session_id = r["session_id"]
-        user_turns = int(r["user_turns"] or 0)
-        tool_calls = int(r["tool_calls"] or 0)
-        has_save = bool(r["has_save_intent"])
-        top_sim = float(r["top_similarity"] or 0.0)
-        has_recurrence = top_sim >= recurrence_threshold
-
-        score = 0
-        reasons: list[str] = []
-        if has_save:
-            score += WEIGHT_SAVE_INTENT
-            reasons.append("user expressed save intent")
-        if has_recurrence:
-            score += WEIGHT_RECURRENCE
-            reasons.append(
-                f"task pattern recurred (lexical match {top_sim:.2f})"
-            )
-        if tool_calls >= THRESHOLD_TOOL_COUNT:
-            score += WEIGHT_TOOL_COUNT
-            reasons.append(f"high tool-call complexity ({tool_calls} calls)")
-        if user_turns >= THRESHOLD_MODIF_ROUNDS:
-            score += WEIGHT_MODIF_ROUNDS
-            reasons.append(f"high modification investment ({user_turns} turns)")
-
-        if score < min_score:
-            continue
-
-        # First user message of the conversation — the dashboard shows it as
-        # the candidate's human-readable label ("draft a launch email …").
-        first_row = conn.execute(
-            "SELECT user_message FROM echo_user_request_log "
-            "WHERE session_id = ? ORDER BY ts ASC LIMIT 1",
-            (session_id,),
-        ).fetchone()
-        first_message = (first_row["user_message"] if first_row else "") or ""
-
-        candidates.append(SessionCandidate(
-            session_id=session_id,
-            score=score,
-            reasons=reasons,
-            user_turns=user_turns,
-            tool_calls=tool_calls,
-            has_save_intent=has_save,
-            has_recurrence=has_recurrence,
-            top_similarity=top_sim,
-            first_message=first_message,
-            first_ts=float(r["first_ts"] or 0.0),
-            last_ts=float(r["last_ts"] or 0.0),
-        ))
+        cand = _build_session_candidate(conn, r, recurrence_threshold, min_score)
+        if cand is not None:
+            candidates.append(cand)
         if len(candidates) >= limit:
             break
     return candidates
+
+
+def _build_session_candidate(conn, r, recurrence_threshold: float,
+                             min_score: int) -> Optional[SessionCandidate]:
+    """Score one aggregate row (from the session-candidate query) into a
+    SessionCandidate, or None if it falls below ``min_score``."""
+    session_id = r["session_id"]
+    user_turns = int(r["user_turns"] or 0)
+    tool_calls = int(r["tool_calls"] or 0)
+    has_save = bool(r["has_save_intent"])
+    top_sim = float(r["top_similarity"] or 0.0)
+    has_recurrence = top_sim >= recurrence_threshold
+
+    score = 0
+    reasons: list[str] = []
+    if has_save:
+        score += WEIGHT_SAVE_INTENT
+        reasons.append("user expressed save intent")
+    if has_recurrence:
+        score += WEIGHT_RECURRENCE
+        reasons.append(f"task pattern recurred (lexical match {top_sim:.2f})")
+    if tool_calls >= THRESHOLD_TOOL_COUNT:
+        score += WEIGHT_TOOL_COUNT
+        reasons.append(f"high tool-call complexity ({tool_calls} calls)")
+    if user_turns >= THRESHOLD_MODIF_ROUNDS:
+        score += WEIGHT_MODIF_ROUNDS
+        reasons.append(f"high modification investment ({user_turns} turns)")
+
+    if score < min_score:
+        return None
+
+    # First user message of the conversation — the dashboard shows it as the
+    # candidate's human-readable label, and the nomination flow uses it as the
+    # representative task text for dedup + the clarify question.
+    first_row = conn.execute(
+        "SELECT user_message FROM echo_user_request_log "
+        "WHERE session_id = ? ORDER BY ts ASC LIMIT 1",
+        (session_id,),
+    ).fetchone()
+    first_message = (first_row["user_message"] if first_row else "") or ""
+
+    return SessionCandidate(
+        session_id=session_id,
+        score=score,
+        reasons=reasons,
+        user_turns=user_turns,
+        tool_calls=tool_calls,
+        has_save_intent=has_save,
+        has_recurrence=has_recurrence,
+        top_similarity=top_sim,
+        first_message=first_message,
+        first_ts=float(r["first_ts"] or 0.0),
+        last_ts=float(r["last_ts"] or 0.0),
+    )
+
+
+def evaluate_session(
+    session_id: str,
+    *,
+    min_score: int = SCORE_THRESHOLD,
+    recurrence_threshold: float = RECURRENCE_THRESHOLD,
+) -> Optional[SessionCandidate]:
+    """Score a SINGLE skill-less conversation. None if it doesn't qualify.
+
+    Used by the active-nomination path (m1_nomination) to decide, right
+    after a turn is logged, whether this conversation has crossed the
+    nomination threshold. Returns None for a session that has invoked any
+    skill (covered by the invocation-scoped path) or scores below threshold.
+    """
+    if not session_id:
+        return None
+    conn = get_echo_conn()
+    skilled = conn.execute(
+        "SELECT 1 FROM echo_skill_invocation WHERE session_id = ? LIMIT 1",
+        (session_id,),
+    ).fetchone()
+    if skilled is not None:
+        return None
+    r = conn.execute(
+        """
+        SELECT
+            ? AS session_id,
+            COUNT(*) AS user_turns,
+            MAX(save_intent) AS has_save_intent,
+            MAX(COALESCE(recurrence_sim, 0.0)) AS top_similarity,
+            MIN(ts) AS first_ts,
+            MAX(ts) AS last_ts,
+            COALESCE(
+                (SELECT tool_calls FROM echo_session_tool_count tc
+                 WHERE tc.session_id = ?), 0
+            ) AS tool_calls
+        FROM echo_user_request_log
+        WHERE session_id = ?
+        """,
+        (session_id, session_id, session_id),
+    ).fetchone()
+    if r is None or int(r["user_turns"] or 0) == 0:
+        return None
+    return _build_session_candidate(conn, r, recurrence_threshold, min_score)

@@ -59,7 +59,13 @@ import sqlite3
 #          echo_signal_event; this table covers the no-active-skill case
 #          so M1's tool-complexity condition (≥5 calls) also applies to
 #          new-skill nomination of skill-less conversations.
-ECHO_SCHEMA_VERSION = 7
+# v7 → v8: added echo_session_nomination — per-conversation state for the
+#          ACTIVE M1 nominator. When a skill-less conversation crosses the
+#          nomination threshold, Echo runs a skill-library dedup check and
+#          records the decision (ask / inform / create / skip) here, so it
+#          asks at most once per conversation and the inject channel knows
+#          what nudge (if any) to append on the next turn.
+ECHO_SCHEMA_VERSION = 8
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +268,26 @@ CREATE TABLE IF NOT EXISTS echo_session_tool_count (
     tool_calls      INTEGER NOT NULL DEFAULT 0,
     updated_at      REAL    NOT NULL
 );
+
+-- v8: active M1 nomination state, one row per skill-less conversation that
+-- crossed the nomination threshold. trigger_kind is 'save_intent' (user said
+-- so explicitly) or 'implicit' (recurrence/tool/modif). state is the decision
+-- after the dedup check: 'pending' (dedup running), 'ask' (clarify the user),
+-- 'inform' (tell the user a similar skill exists), 'create' (nudge creation),
+-- 'skip' (similar skill exists for an implicit trigger — stay silent), or
+-- 'done' (the nudge was already injected). dedup_skill names the existing
+-- skill the dedup check matched, if any.
+CREATE TABLE IF NOT EXISTS echo_session_nomination (
+    session_id      TEXT    PRIMARY KEY,
+    trigger_kind    TEXT    NOT NULL,
+    state           TEXT    NOT NULL DEFAULT 'pending',
+    dedup_skill     TEXT,
+    dedup_reason    TEXT,
+    task_text       TEXT,
+    created_at      REAL    NOT NULL,
+    decided_at      REAL,
+    nudged_at       REAL
+);
 """
 
 
@@ -278,6 +304,7 @@ ECHO_TABLES = (
     "echo_user_request_log",
     "echo_skill_content_hash",
     "echo_session_tool_count",
+    "echo_session_nomination",
 )
 
 

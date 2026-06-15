@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 CONFIG_ROOT = "echo"
 KEY_MODE = "aux_mode"
-AUX_TASKS = ("echo_classifier", "echo_judge", "echo_reason_score")
+AUX_TASKS = ("echo_classifier", "echo_judge", "echo_reason_score", "echo_skill_dedup")
 
 
 def _prompt_helpers():
@@ -155,10 +155,12 @@ def run_aux_provider_setup(config: Dict[str, Any]) -> None:
         clf = _ask_separate_endpoint(p, "Layer B classifier (echo_classifier)")
         jdg = _ask_separate_endpoint(p, "Layer C judge (echo_judge)")
         rsn = _ask_separate_endpoint(p, "Reason scorer (echo_reason_score)")
+        ddp = _ask_separate_endpoint(p, "Skill dedup check (echo_skill_dedup)")
         _ensure_aux_section(config, "echo_classifier").update(clf)
         _ensure_aux_section(config, "echo_judge").update(jdg)
         _ensure_aux_section(config, "echo_reason_score").update(rsn)
+        _ensure_aux_section(config, "echo_skill_dedup").update(ddp)
         p["print_success"](
-            "Configured all three Echo aux tasks (Layer B classifier, "
-            "Layer C judge, reason scorer) with separate endpoints."
+            "Configured all four Echo aux tasks (Layer B classifier, "
+            "Layer C judge, reason scorer, skill dedup) with separate endpoints."
         )
