@@ -185,6 +185,17 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
   const resumeParam = searchParams.get("resume");
   const channel = useMemo(() => generateChannelId(), [resumeParam]);
 
+  // Live PTY session id of the conversation in THIS pane, lifted from the
+  // sidebar's events feed. Handed to per-conversation plugin slots (Echo's
+  // chat:bottom thumbs) so a rating binds to the right conversation rather
+  // than the global most-recent skill. Reset whenever the pane rebinds to a
+  // different conversation (channel regenerates on resume change) so a stale
+  // id from the previous conversation can't leak before the new feed reports.
+  const [convSessionId, setConvSessionId] = useState<string | null>(null);
+  useEffect(() => {
+    setConvSessionId(null);
+  }, [channel]);
+
   // Match the embedded terminal to the active web theme. A light web theme
   // gives the terminal an ivory canvas + the echo-light TUI skin; switching
   // theme changes `isLightTerminal`, which is part of the PTY identity below
@@ -816,7 +827,7 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
               "border-t border-current/10",
             )}
           >
-            <ChatSidebar channel={channel} />
+            <ChatSidebar channel={channel} onSessionId={setConvSessionId} />
           </div>
         </div>
       </>,
@@ -883,12 +894,15 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
             className="flex min-h-0 shrink-0 flex-col overflow-hidden lg:h-full lg:w-80"
           >
             <div className="min-h-0 flex-1 overflow-hidden">
-              <ChatSidebar channel={channel} />
+              <ChatSidebar channel={channel} onSessionId={setConvSessionId} />
             </div>
           </div>
         )}
       </div>
-      <PluginSlot name="chat:bottom" />
+      <PluginSlot
+        name="chat:bottom"
+        sessionId={convSessionId ?? resumeParam ?? undefined}
+      />
     </div>
   );
 }

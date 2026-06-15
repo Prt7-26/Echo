@@ -384,6 +384,19 @@ def write_json(obj: dict) -> bool:
 
 def _emit(event: str, sid: str, payload: dict | None = None):
     params = {"type": event, "session_id": sid}
+    # Echo addition: surface the Hermes session id (what skill invocations are
+    # attributed to) alongside the gateway-internal sid, so the dashboard's
+    # per-conversation rating widget can scope to the right conversation. The
+    # events' session_id IS the gateway _sessions key, not the Hermes session.
+    # Prefer the agent's live session_id (stays correct across context-
+    # compression rotations); fall back to the session_key.
+    try:
+        _s = _sessions.get(sid) or {}
+        _hkey = getattr(_s.get("agent"), "session_id", None) or _s.get("session_key")
+        if _hkey:
+            params["session_key"] = _hkey
+    except Exception:
+        pass
     if payload is not None:
         params["payload"] = payload
     write_json({"jsonrpc": "2.0", "method": "event", "params": params})

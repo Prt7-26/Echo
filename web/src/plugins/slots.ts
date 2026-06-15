@@ -168,13 +168,19 @@ interface PluginSlotProps {
   /** Optional content rendered when no plugins have claimed the slot.
    *  Useful for built-in defaults the plugin would replace. */
   fallback?: React.ReactNode;
+  /** Any other props are forwarded verbatim to every slot component, letting
+   *  a host page hand the slot live context. The chat:bottom thumbs widget
+   *  relies on this to receive the current conversation's `sessionId` so a
+   *  rating binds to the right conversation instead of the global most-recent
+   *  skill. Slot components that don't declare the prop simply ignore it. */
+  [key: string]: unknown;
 }
 
 /** Render all components registered for a given slot, stacked in order.
  *
  *  Component re-renders when the slot registry changes so plugins that
  *  arrive after initial mount show up without a manual refresh. */
-export function PluginSlot({ name, fallback }: PluginSlotProps) {
+export function PluginSlot({ name, fallback, ...slotProps }: PluginSlotProps) {
   const [entries, setEntries] = useState<SlotEntry[]>(() => getSlotEntries(name));
 
   useEffect(() => {
@@ -193,7 +199,10 @@ export function PluginSlot({ name, fallback }: PluginSlotProps) {
     Fragment,
     null,
     ...entries.map((entry) =>
-      React.createElement(entry.component, { key: entry.plugin }),
+      React.createElement(
+        entry.component as React.ComponentType<Record<string, unknown>>,
+        { key: entry.plugin, ...slotProps },
+      ),
     ),
   );
 }
