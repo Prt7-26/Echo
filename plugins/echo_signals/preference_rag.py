@@ -215,6 +215,32 @@ def store_preference(
     now = time.time()
 
     conn = get_echo_conn()
+
+    # Dedup: repeated thumbs-up on the same turn (or re-rating it) would
+    # otherwise insert a fresh near-identical row every time, bloating the
+    # corpus and injecting the same example two or three times. If an example
+    # with the same (skill_id, task_request) already exists, refresh it in
+    # place — keep the higher rating, refresh recency/output — instead of
+    # inserting a duplicate.
+    existing = conn.execute(
+        "SELECT example_id, rating FROM echo_preference_example "
+        "WHERE task_request = ? AND skill_id IS ?",
+        (task_request, skill_id),
+    ).fetchone()
+    if existing is not None:
+        eid = int(existing["example_id"])
+        new_rating = max(int(existing["rating"]), rating)
+        conn.execute(
+            "UPDATE echo_preference_example "
+            "SET rating = ?, agent_output = ?, task_embedding = ?, "
+            "    last_used_at = ?, composite_score = ? "
+            "WHERE example_id = ?",
+            (new_rating, agent_output, blob, now,
+             _composite_score(new_rating, now, 0), eid),
+        )
+        conn.commit()
+        return eid
+
     cur = conn.execute(
         "INSERT INTO echo_preference_example "
         "(task_request, task_embedding, agent_output, rating, skill_id, "

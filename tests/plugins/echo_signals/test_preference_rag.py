@@ -139,6 +139,39 @@ class TestCosine:
 
 
 class TestStorePreference:
+    def test_dedup_same_skill_and_request(self, isolated_db):
+        # Repeated thumbs-up on the same turn must NOT pile up duplicate rows.
+        eid1 = prag.store_preference(
+            task_request="画个微服务架构图", agent_output="v1",
+            rating=4, skill_id="arch",
+        )
+        eid2 = prag.store_preference(
+            task_request="画个微服务架构图", agent_output="v2",
+            rating=5, skill_id="arch",
+        )
+        assert eid2 == eid1  # updated in place, not a new row
+        conn = echo_db.get_echo_conn()
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM echo_preference_example "
+            "WHERE task_request='画个微服务架构图' AND skill_id='arch'"
+        ).fetchone()["n"]
+        assert n == 1
+        row = conn.execute(
+            "SELECT rating, agent_output FROM echo_preference_example WHERE example_id=?",
+            (eid1,),
+        ).fetchone()
+        assert row["rating"] == 5          # keeps the higher rating
+        assert row["agent_output"] == "v2"  # refreshes the output
+
+    def test_dedup_distinct_skills_kept_separate(self, isolated_db):
+        a = prag.store_preference(
+            task_request="同一个请求", agent_output="x", rating=5, skill_id="skill-a",
+        )
+        b = prag.store_preference(
+            task_request="同一个请求", agent_output="y", rating=5, skill_id="skill-b",
+        )
+        assert a != b  # same request, different skill → two rows
+
     def test_inserts_row(self, isolated_db):
         eid = prag.store_preference(
             task_request="write a summary",
