@@ -711,20 +711,10 @@ def on_pre_llm_call_inject(
 
     blocks: list = []
 
-    # (c) Active M1 nomination nudge — the ask/inform/create directive for a
-    # skill-less conversation that crossed the threshold. Injected at most once
-    # per conversation (consume_nudge marks it consumed). Placed first so the
-    # agent sees the instruction clearly.
-    try:
-        from . import m1_nomination
-        from .session_context import get_session_id
-        sid = _kwargs.get("session_id") or get_session_id()
-        nudge = m1_nomination.consume_nudge(str(sid) if sid else None)
-        if nudge:
-            blocks.append(nudge)
-            logger.info("Echo M1: injected nomination nudge for session %r", sid)
-    except Exception as exc:
-        logger.debug("nomination nudge injection failed: %s", exc, exc_info=True)
+    # (M1 nomination nudge is injected by signals.on_pre_llm_call instead — it
+    # decides synchronously and returns the directive as context on the SAME
+    # turn the session qualifies, so a user who stops at the threshold turn is
+    # still asked. Injecting it here would lag a turn.)
 
     # (M2 scope is no longer injected here — the agent asks it in-turn right
     # after creating the skill, driven by the m1_nomination directive, and

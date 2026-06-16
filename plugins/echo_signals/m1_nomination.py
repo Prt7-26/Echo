@@ -30,7 +30,6 @@ the user is never re-asked about the same chat.
 from __future__ import annotations
 
 import logging
-import threading
 import time
 from typing import Optional
 
@@ -65,9 +64,15 @@ _SCOPE_ASK_SUFFIX = (
 
 def maybe_start_nomination(session_id: Optional[str]) -> None:
     """If this skill-less conversation now qualifies and hasn't been handled,
-    record a pending nomination and kick off the async dedup + decision.
+    record the nomination and run the dedup + decision SYNCHRONOUSLY.
 
-    Idempotent: a session that already has a nomination row is left alone.
+    Synchronous (not a daemon thread) on purpose: the decision must land within
+    THIS pre_llm_call so signals.on_pre_llm_call can inject the ask directive on
+    the SAME turn. The old async path left the decision until ~1s later, after
+    the turn's inject had already run, so the directive only went out on the
+    NEXT turn — and a user who stopped right at the threshold turn never got
+    asked at all. Cost: one dedup aux-LLM call (~1-2s, fail-soft) on the single
+    turn a conversation first qualifies. Idempotent (one nomination per chat).
     """
     if not session_id:
         return
@@ -96,26 +101,15 @@ def maybe_start_nomination(session_id: Optional[str]) -> None:
             (session_id, trigger_kind, task_text, now),
         )
         conn.commit()
-        _start_dedup_async(session_id, task_text, trigger_kind)
+        # Decide now (sync) so consume_nudge can fire this same turn.
+        decide_nomination(session_id, task_text, trigger_kind)
     except Exception as exc:
         logger.debug("maybe_start_nomination failed: %s", exc, exc_info=True)
 
 
 # ---------------------------------------------------------------------------
-# Async dedup + decision
+# Dedup + decision (synchronous — see maybe_start_nomination)
 # ---------------------------------------------------------------------------
-
-
-def _start_dedup_async(session_id: str, task_text: str, trigger_kind: str) -> None:
-    """Spawn the dedup+decide work on a daemon thread. Test seam: conftest
-    stubs this so unit tests don't spawn threads / hit a real LLM; the tests
-    that exercise the decision proper call ``decide_nomination`` directly."""
-    t = threading.Thread(
-        target=decide_nomination,
-        args=(session_id, task_text, trigger_kind),
-        daemon=True,
-    )
-    t.start()
 
 
 def decide_nomination(session_id: str, task_text: str, trigger_kind: str) -> str:

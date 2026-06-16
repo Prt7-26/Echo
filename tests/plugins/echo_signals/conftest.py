@@ -83,20 +83,19 @@ def _stub_reason_scorer_async(monkeypatch, request):
 
 
 @pytest.fixture(autouse=True)
-def _stub_nomination_async(monkeypatch, request):
-    """Stub ``m1_nomination._start_dedup_async`` unless the test requested
-    ``real_nomination`` — so a skill-less turn crossing the M1 threshold
-    doesn't spawn a real daemon thread hitting the dedup aux-LLM at test time."""
+def _stub_nomination_dedup(monkeypatch, request):
+    """Stub ``skill_dedup.check_duplicate`` unless the test requested
+    ``real_nomination``. maybe_start_nomination now decides SYNCHRONOUSLY, so a
+    skill-less turn crossing the M1 threshold would otherwise hit the real dedup
+    aux-LLM at test time. Default → no-match (so the decision is deterministic);
+    tests that need a match monkeypatch check_duplicate themselves."""
     if "real_nomination" in request.fixturenames:
         yield
         return
 
-    from plugins.echo_signals import m1_nomination as nom
+    from plugins.echo_signals import skill_dedup as sd
 
-    def _noop(*_a, **_kw):
-        return None
-
-    monkeypatch.setattr(nom, "_start_dedup_async", _noop)
+    monkeypatch.setattr(sd, "check_duplicate", lambda *_a, **_kw: sd.DedupResult(match=None))
     yield
 
 

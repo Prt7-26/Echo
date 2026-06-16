@@ -322,10 +322,19 @@ def on_pre_llm_call(
                          exc, exc_info=True)
 
         # Active M1 nomination: a skill-less conversation that just crossed the
-        # threshold gets a fire-and-forget dedup + ask/inform/create decision.
+        # threshold gets a (synchronous) dedup + ask/inform/create decision, and
+        # the ask directive is injected on THIS SAME turn — we return it as
+        # {"context": ...} (this hook is registered as pre_llm_call, whose
+        # return value Hermes appends to the user message). Doing it here, in
+        # the same turn the session qualifies, means a user who stops right at
+        # the threshold turn still gets asked.
         try:
             from . import m1_nomination
-            m1_nomination.maybe_start_nomination(get_session_id())
+            sid = get_session_id()
+            m1_nomination.maybe_start_nomination(sid)
+            nudge = m1_nomination.consume_nudge(sid)
+            if nudge:
+                return {"context": nudge}
         except Exception as exc:
             logger.debug("Echo on_pre_llm_call(nomination) failed: %s",
                          exc, exc_info=True)

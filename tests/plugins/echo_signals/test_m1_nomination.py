@@ -49,43 +49,43 @@ class TestMaybeStart:
         nom.maybe_start_nomination("s1")
         assert _row("s1") is None
 
-    def test_qualifying_inserts_pending(self, isolated_db, monkeypatch):
+    def test_qualifying_decides_in_turn(self, isolated_db):
+        # check_duplicate is stubbed no-match (conftest) → save_intent+miss=create,
+        # decided synchronously within maybe_start_nomination.
         echo_db.get_echo_conn()
-        called = {}
-        monkeypatch.setattr(nom, "_start_dedup_async",
-                            lambda *a: called.setdefault("args", a))
         _log("s2", "draft a launch email", save_intent=True)
         nom.maybe_start_nomination("s2")
         r = _row("s2")
         assert r is not None
-        assert r["state"] == "pending"
         assert r["trigger_kind"] == "save_intent"
-        assert called["args"][0] == "s2"
+        assert r["state"] == "create"  # no longer left at 'pending'
 
-    def test_implicit_trigger_kind(self, isolated_db, monkeypatch):
+    def test_implicit_trigger_kind(self, isolated_db):
         echo_db.get_echo_conn()
-        monkeypatch.setattr(nom, "_start_dedup_async", lambda *a: None)
         for i in range(m1.THRESHOLD_MODIF_ROUNDS):
             _log("s3", f"iterate {i}")
         nom.maybe_start_nomination("s3")
-        assert _row("s3")["trigger_kind"] == "implicit"
+        r = _row("s3")
+        assert r["trigger_kind"] == "implicit"
+        assert r["state"] == "ask"  # implicit + no-match → ask
 
-    def test_idempotent(self, isolated_db, monkeypatch):
+    def test_idempotent(self, isolated_db):
         echo_db.get_echo_conn()
-        calls = []
-        monkeypatch.setattr(nom, "_start_dedup_async", lambda *a: calls.append(a))
         _log("s4", "save as skill", save_intent=True)
         nom.maybe_start_nomination("s4")
-        nom.maybe_start_nomination("s4")  # second time: no-op
-        assert len(calls) == 1
+        first = _row("s4")["created_at"]
+        nom.maybe_start_nomination("s4")  # second time: no-op (row already exists)
+        assert _row("s4")["created_at"] == first
+        assert echo_db.get_echo_conn().execute(
+            "SELECT COUNT(*) FROM echo_session_nomination WHERE session_id='s4'"
+        ).fetchone()[0] == 1
 
-    def test_skilled_session_excluded(self, isolated_db, monkeypatch):
+    def test_skilled_session_excluded(self, isolated_db):
         conn = echo_db.get_echo_conn()
         now = time.time()
         conn.execute("INSERT INTO echo_skill_confidence (skill_id, created_at, updated_at) VALUES ('a', ?, ?)", (now, now))
         conn.execute("INSERT INTO echo_skill_invocation (skill_id, session_id, platform, started_at) VALUES ('a','s5','cli',?)", (now,))
         conn.commit()
-        monkeypatch.setattr(nom, "_start_dedup_async", lambda *a: None)
         _log("s5", "save as skill", save_intent=True)
         nom.maybe_start_nomination("s5")
         assert _row("s5") is None  # skilled → invocation-scoped path covers it
@@ -208,28 +208,31 @@ class TestConsumeNudge:
 
 
 class TestIntegration:
-    def test_skill_less_qualifying_turn_starts_nomination(self, isolated_db, monkeypatch):
+    def test_skill_less_qualifying_turn_asks_in_turn(self, isolated_db):
         from plugins.echo_signals import signals as sig
         from plugins.echo_signals import session_context as sc
 
-        started = {}
-        monkeypatch.setattr(nom, "_start_dedup_async",
-                            lambda *a: started.setdefault("args", a))
+        # check_duplicate stubbed no-match (conftest) → save_intent+miss=create.
         try:
             sc.set_session_context("live-nom", "cli")
-            sig.on_pre_llm_call(
+            out = sig.on_pre_llm_call(
                 user_message="把这个流程保存为技能",
                 session_id="live-nom", platform="cli",
             )
             r = _row("live-nom")
             assert r is not None
             assert r["trigger_kind"] == "save_intent"
-            assert started["args"][0] == "live-nom"
+            # Decided + nudge injected on THIS same turn (returned as context).
+            assert r["state"] == "create"
+            assert r["nudge_count"] == 1
+            assert out is not None and "Echo" in out["context"]
         finally:
             sc.clear_session_context()
 
-    def test_nudge_reaches_inject_context(self, isolated_db):
-        from plugins.echo_signals import preference_rag as prag
+    def test_nudge_returned_by_signals_for_existing_ask(self, isolated_db):
+        # An already-decided 'ask' nomination → signals.on_pre_llm_call returns
+        # the directive as context on a skill-less turn (re-injection path).
+        from plugins.echo_signals import signals as sig
         from plugins.echo_signals import session_context as sc
 
         conn = echo_db.get_echo_conn()
@@ -242,13 +245,11 @@ class TestIntegration:
         conn.commit()
         try:
             sc.set_session_context("inj-1", "cli")
-            out = prag.on_pre_llm_call_inject(
-                user_message="随便问点什么", session_id="inj-1",
+            out = sig.on_pre_llm_call(
+                user_message="随便问点什么", session_id="inj-1", platform="cli",
             )
-            assert out is not None
-            assert "Echo" in out["context"]
-            # one nudge emitted; still live (re-injects up to the cap) until a
-            # skill is created or MAX_NUDGES is reached.
+            assert out is not None and "Echo" in out["context"]
+            # re-injected; still live until a skill is created or the cap is hit.
             assert _row("inj-1")["nudge_count"] == 1
             assert _row("inj-1")["state"] == "ask"
         finally:
