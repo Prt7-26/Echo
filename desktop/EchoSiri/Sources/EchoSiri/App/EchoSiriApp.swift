@@ -1,9 +1,11 @@
 import SwiftUI
+import AppKit
 import EchoSiriKit
 
 @main
 struct EchoSiriApp: App {
-    @State private var app = AppState.mock()   // Phase 3: 改为接 GatewayClient
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @State private var app = AppState.mock()   // ECHOSIRI_CONNECT=1 时切真后端
 
     var body: some Scene {
         WindowGroup {
@@ -20,6 +22,16 @@ struct EchoSiriApp: App {
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands { ConversationCommands(app: app) }
     }
+}
+
+/// 经 `swift run` 启动的 SPM 可执行程序没有 .app bundle/Info.plist，默认不会
+/// 前台化、无 dock 图标。在此把激活策略设为 .regular 并激活，确保窗口弹出。
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
 
 /// 菜单栏 Conversation 菜单（线框图 W1 菜单栏）。
