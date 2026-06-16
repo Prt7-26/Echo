@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 # config.yaml when the rest of the engine does.
 # ---------------------------------------------------------------------------
 
-N_WARM = 20                  # require this many samples before drift detection
+N_WARM = 8                   # require this many samples before drift detection
 DRIFT_THRESHOLD_Z = 2.0      # |z| above this is "drift"
 SEVERITY_CAP = 3.0           # one drift never multiplies confidence-loss past this
 
