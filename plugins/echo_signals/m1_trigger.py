@@ -61,10 +61,9 @@ WEIGHT_SAVE_INTENT = 100
 WEIGHT_TOOL_COUNT = 30
 WEIGHT_MODIF_ROUNDS = 30
 WEIGHT_RECURRENCE = 50
-# Thresholds use >= comparison, so "more than 10 tool calls" → 11 and "more
-# than 4 modification rounds" → 5 (maintainer's tuning — keep the nominator
-# from firing on light tasks).
-THRESHOLD_TOOL_COUNT = 11
+# Thresholds use >= comparison (maintainer's tuning — keep the nominator from
+# firing on light tasks): ≥20 tool calls, ≥5 modification rounds.
+THRESHOLD_TOOL_COUNT = 20
 THRESHOLD_MODIF_ROUNDS = 5
 SCORE_THRESHOLD = 30
 
