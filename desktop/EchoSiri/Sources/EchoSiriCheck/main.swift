@@ -11,5 +11,6 @@ runner.check("kit version is set") {
 }
 
 registerProtocolChecks(runner)
+registerServiceChecks(runner)
 
-runner.run()
+await runner.run()

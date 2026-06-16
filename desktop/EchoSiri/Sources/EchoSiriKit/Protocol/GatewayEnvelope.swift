@@ -19,7 +19,7 @@ public struct RPCRequest<P: Encodable>: Encodable {
 }
 
 /// 无参请求的占位 params。
-public struct EmptyParams: Encodable { public init() {} }
+public struct EmptyParams: Encodable, Sendable { public init() {} }
 
 // MARK: - 入站响应
 
