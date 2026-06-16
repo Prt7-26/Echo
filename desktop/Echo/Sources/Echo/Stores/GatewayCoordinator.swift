@@ -124,9 +124,9 @@ final class GatewayCoordinator {
                     .map { RatingItem(id: $0.id, skillName: $0.skillName ?? "skill") }
                 self.app?.ratingQueue = items
             }
-            if let pending = try? await self.echo.pendingScope(sessionId: key), let first = pending.first {
-                self.app?.scopeQuestion = .init(id: first.skillId, skillName: first.skillName ?? "skill")
-            }
+            // M2 scope 不再走 /scope/pending 二元小卡：Step 27 起 scope 由 agent
+            // 在对话内通过 clarify 工具询问（带 2-4 个技能特定选项），原生侧统一渲染为
+            // ClarifyCard（与 M1 提名同一通道），避免与 clarify 重复提示。
         }
     }
 
