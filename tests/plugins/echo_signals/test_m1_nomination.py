@@ -235,3 +235,26 @@ class TestIntegration:
             assert _row("inj-1")["state"] == "done"
         finally:
             sc.clear_session_context()
+
+
+class TestScopeAskBundled:
+    """The create-leading directives must instruct the agent to ask scope
+    in-turn (so it's not stranded waiting for a next turn that never comes)."""
+
+    def _seed(self, session_id, state, **extra):
+        conn = echo_db.get_echo_conn()
+        conn.execute(
+            "INSERT INTO echo_session_nomination "
+            "(session_id, trigger_kind, state, task_text, dedup_skill, dedup_reason, created_at) "
+            "VALUES (?, 'implicit', ?, 'do a thing', ?, ?, ?)",
+            (session_id, state, extra.get("dedup_skill"), extra.get("dedup_reason"), time.time()),
+        )
+        conn.commit()
+
+    @pytest.mark.parametrize("state", ["ask", "create", "inform"])
+    def test_directive_includes_scope_ask(self, isolated_db, state):
+        self._seed("sc", state, dedup_skill="x", dedup_reason="y")
+        text = nom.consume_nudge("sc")
+        assert text is not None
+        assert "适用范围" in text  # the scope question marker
+        assert "clarify" in text

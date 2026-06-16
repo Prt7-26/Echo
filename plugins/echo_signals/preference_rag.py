@@ -726,19 +726,10 @@ def on_pre_llm_call_inject(
     except Exception as exc:
         logger.debug("nomination nudge injection failed: %s", exc, exc_info=True)
 
-    # (c2) M2 scope question — once the aux LLM has generated the 2-4
-    # applicability options for a just-created skill, nudge the agent to ask
-    # the user via clarify. At most once per skill (state→'asked').
-    try:
-        from . import scope_clarify
-        from .session_context import get_session_id
-        sid2 = _kwargs.get("session_id") or get_session_id()
-        scope_nudge = scope_clarify.consume_scope_nudge(str(sid2) if sid2 else None)
-        if scope_nudge:
-            blocks.append(scope_nudge)
-            logger.info("Echo M2: injected scope question for session %r", sid2)
-    except Exception as exc:
-        logger.debug("scope nudge injection failed: %s", exc, exc_info=True)
+    # (M2 scope is no longer injected here — the agent asks it in-turn right
+    # after creating the skill, driven by the m1_nomination directive, and
+    # scope_clarify.capture_scope_from_history records the answer. The old
+    # next-turn inject depended on a turn the user usually never sends.)
 
     # (a) Exclusion caution for the active skill — makes the Layer C judge's
     # exclusion verdict actually reach the agent.

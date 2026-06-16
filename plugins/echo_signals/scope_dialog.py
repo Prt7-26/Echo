@@ -111,19 +111,13 @@ def on_post_tool_call(
             "scope_dialog._record_pending_scope(%s) failed: %s",
             skill_name, exc, exc_info=True,
         )
-        return
 
-    # M2 (v9): kick off async generation of the 2-4 applicability options. The
-    # inject channel asks the user via clarify once they're ready. Fire-and-
-    # forget — option generation hitting the aux LLM must not block the tool.
-    try:
-        from . import scope_clarify
-        scope_clarify.start_scope_options_async(skill_name)
-    except Exception as exc:
-        logger.debug(
-            "scope_dialog: start_scope_options_async(%s) failed: %s",
-            skill_name, exc, exc_info=True,
-        )
+    # M2 scope confirmation is asked IN-TURN by the agent (driven by the
+    # m1_nomination directive's _SCOPE_ASK_SUFFIX), then captured from
+    # conversation_history by scope_clarify.capture_scope_from_history. We no
+    # longer pre-generate options here / inject a next-turn nudge: that path
+    # depended on the user sending another turn, which they usually don't right
+    # after creating a skill, so the question never got asked.
 
 
 # How far back (seconds) to look for an m1_save_intent signal when

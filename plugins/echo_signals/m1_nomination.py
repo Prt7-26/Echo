@@ -43,6 +43,21 @@ logger = logging.getLogger(__name__)
 _NUDGE_STATES = ("ask", "inform", "create")
 
 
+# Appended to every directive that may lead to skill creation. The scope
+# question MUST be asked in the SAME turn, right after creating — Echo's M2
+# scope confirmation otherwise depends on the user sending another turn, which
+# they usually don't after "save it". The agent summarizes the options itself
+# (the just-created skill's content isn't available to Echo's aux LLM in-turn).
+# The question text is required to contain "适用范围" so Echo's
+# scope_clarify.capture_scope_from_history can recognize and record the answer.
+_SCOPE_ASK_SUFFIX = (
+    "技能创建成功后，请**紧接着在同一轮里再用一次 clarify 工具**确认这个技能的适用范围："
+    "问题文本必须包含「适用范围」四个字（例如『这个技能以后的适用范围是什么？』），"
+    "并由你根据技能内容总结 2–4 个由窄到宽的中文选项让用户选择"
+    "（从「只用于当前这种具体任务」到「适用于更通用的一类任务」）。"
+)
+
+
 # ---------------------------------------------------------------------------
 # Entry point — called from signals.on_pre_llm_call after a turn is logged
 # ---------------------------------------------------------------------------
@@ -149,7 +164,7 @@ def _build_nudge(state: str, task_text: str, dedup_skill: Optional[str],
             "而技能库里还没有类似的技能。请在回答完用户当前的问题之后，"
             "使用 clarify 工具询问用户是否要把这个流程保存成一个新技能"
             "（选项例如：是，保存为技能 / 不用了）。如果用户选择「是」，"
-            "请用 skill_manage 工具（action=create）创建这个技能。"
+            "请用 skill_manage 工具（action=create）创建这个技能。" + _SCOPE_ASK_SUFFIX +
             "如果用户当前的话与保存技能无关，正常回答即可。"
         )
     if state == "inform":
@@ -160,13 +175,14 @@ def _build_nudge(state: str, task_text: str, dedup_skill: Optional[str],
             f"功能类似的技能「{sk}」{why}。请先告知用户已存在「{sk}」，"
             f"再用 clarify 工具询问：直接复用现有的「{sk}」，还是仍要新建一个"
             f"（选项例如：复用现有 / 新建一个）。如果用户选择新建，"
-            f"请用 skill_manage 工具（action=create）创建。"
+            f"请用 skill_manage 工具（action=create）创建。" + _SCOPE_ASK_SUFFIX
         )
     if state == "create":
         return (
             "[Echo 提示] 用户明确希望把这个流程保存为技能，且技能库里没有"
             "功能类似的技能。请用 skill_manage 工具（action=create）把它"
             "创建为一个新技能；创建前可以简要和用户确认一下技能名称。"
+            + _SCOPE_ASK_SUFFIX
         )
     return None
 

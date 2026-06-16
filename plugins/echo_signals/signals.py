@@ -303,6 +303,24 @@ def on_pre_llm_call(
     # confidence, so they need an attributable invocation. A skill-less turn has
     # nothing to attribute to and stops here — M1 above already captured it.
     if invocation_id is None:
+        # Reliable skill-less tool count: derive it from conversation_history
+        # (every tool-result is a role='tool' message). The per-post_tool_call
+        # counter misses tools run in worker threads where the session contextvar
+        # isn't propagated, so it undercounts badly — history is authoritative.
+        try:
+            from . import m1_trigger
+            hist = _kwargs.get("conversation_history")
+            if isinstance(hist, (list, tuple)):
+                n_tools = sum(
+                    1 for m in hist
+                    if isinstance(m, dict) and m.get("role") == "tool"
+                )
+                if n_tools:
+                    m1_trigger.set_session_tool_count(get_session_id(), n_tools)
+        except Exception as exc:
+            logger.debug("Echo on_pre_llm_call(tool count) failed: %s",
+                         exc, exc_info=True)
+
         # Active M1 nomination: a skill-less conversation that just crossed the
         # threshold gets a fire-and-forget dedup + ask/inform/create decision.
         try:

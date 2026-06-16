@@ -1,22 +1,27 @@
 """M2 scope confirmation via an in-conversation clarify question.
 
 Replaces the old dashboard ThumbsBar scope widget (binary "reuse the whole
-approach / only the general idea", which users found hard to read). Now, when
-a skill is created, Echo:
+approach / only the general idea", which users found hard to read).
 
-  1. reads the new skill and asks its auxiliary LLM (echo_scope task) to
-     summarize 2-4 concrete applicability scopes, ordered narrow → broad;
-  2. nudges the agent (via the cache-safe inject channel) to ask the user with
-     Hermes' clarify tool, using exactly those options;
-  3. captures the user's pick from the clarify result that lands in the next
-     turn's conversation_history (clarify bypasses post_tool_call, but its
-     result IS appended to the message list), and stores it on echo_skill_scope.
+ACTIVE design (the one wired in): the agent asks the scope question IN-TURN,
+right after creating the skill — driven by m1_nomination's _SCOPE_ASK_SUFFIX,
+which tells the agent to summarize 2-4 narrow→broad options itself and ask via
+Hermes' clarify tool with a question containing "适用范围". This module's job
+is then just to CAPTURE the answer: capture_scope_from_history scans the next
+pre_llm_call's conversation_history for that scope clarify result (clarify
+bypasses post_tool_call, but its result IS appended to the message list) and
+records the user's pick on echo_skill_scope.
 
-State machine on echo_skill_scope.scope_state:
-  pending → options_ready → asked → confirmed
+Why the agent generates the options, not Echo: the scope question must be asked
+in the SAME turn as creation (the user usually doesn't send another turn after
+"save it"), but Echo's aux LLM can't see the just-created skill in time to feed
+options into that turn. So the agent — which just created it — summarizes them.
 
-Same aux pattern as judge / skill_dedup: fire-and-forget, aux_config-gated,
-fail-soft, test-injectable via set_options_impl.
+The option-generation helpers below (generate_scope_options / generate_and_store
+/ consume_scope_nudge, the echo_scope aux task) are NOT in the active path; they
+remain as a tested building block in case a next-turn Echo-driven variant is
+wanted later. scope_state ('pending'→'confirmed') is set by scope_dialog (on
+create) and this module (on capture).
 """
 
 from __future__ import annotations
@@ -344,53 +349,61 @@ def _match_choice(user_response: str, options: List[ScopeOption]) -> Optional[st
     return None
 
 
+# Markers that identify the scope clarify question (the m1_nomination directive
+# requires the agent to put "适用范围" in the question; we also accept a few
+# synonyms / the English word for robustness).
+_SCOPE_QUESTION_MARKERS = ("适用范围", "适用到什么", "适用于什么", "scope", "applicab")
+
+
+def _looks_like_scope_question(question: str) -> bool:
+    q = (question or "").lower()
+    raw = question or ""
+    return any(m in raw for m in ("适用范围", "适用到什么", "适用于什么")) or \
+        any(m in q for m in ("scope", "applicab"))
+
+
 def capture_scope_from_history(session_id: Optional[str], conversation_history) -> bool:
-    """If this session has a skill awaiting a scope answer, look for the
-    clarify result in history and record the user's pick. Returns True on
-    capture. Idempotent (only acts on scope_state='asked')."""
+    """If this session created a skill whose scope isn't confirmed yet, look for
+    the agent's scope clarify result in history and record the user's pick.
+
+    The scope question is asked IN-TURN by the agent (driven by the
+    m1_nomination directive), so the answer lands in conversation_history. We
+    identify it by the question marker ("适用范围") — NOT by matching options,
+    since the agent now summarizes the options itself. Idempotent (acts only on
+    a non-'confirmed' scope row). Returns True on capture."""
     if not session_id:
         return False
     try:
         conn = get_echo_conn()
         row = conn.execute(
             "SELECT skill_id, scope_options FROM echo_skill_scope "
-            "WHERE session_id = ? AND scope_state = 'asked' "
+            "WHERE session_id = ? AND scope_state != 'confirmed' "
             "ORDER BY updated_at DESC LIMIT 1",
             (session_id,),
         ).fetchone()
         if row is None:
             return False
-        options = _load_options(row["scope_options"])
-        clarifies = _iter_clarify_results(conversation_history)
-        if not clarifies:
-            return False
-        # Prefer the clarify whose offered choices overlap our options; fall
-        # back to the most recent clarify (scope is the latest question asked).
-        option_labels = {o.label.strip() for o in options}
-        chosen_payload = None
-        for c in clarifies:
-            offered = c.get("choices_offered") or []
-            if isinstance(offered, list) and option_labels & {
-                str(x).strip() for x in offered
-            }:
-                chosen_payload = c
-        if chosen_payload is None:
-            chosen_payload = clarifies[-1]
 
-        user_response = str(chosen_payload.get("user_response") or "").strip()
+        # Find the most recent clarify whose question is a scope question.
+        chosen = None
+        for c in _iter_clarify_results(conversation_history):
+            if _looks_like_scope_question(str(c.get("question") or "")):
+                chosen = c  # keep the latest match
+        if chosen is None:
+            return False
+
+        user_response = str(chosen.get("user_response") or "").strip()
         if not user_response:
             return False
-        matched = _match_choice(user_response, options) or user_response
 
-        # Map to the legacy scope_level enum when the chosen option's breadth
-        # is unambiguous; otherwise leave it 'unknown'.
+        # If Echo happened to also store options (legacy / fallback), use them
+        # to derive the legacy broad/narrow level; otherwise leave 'unknown'.
+        options = _load_options(row["scope_options"])
+        matched = _match_choice(user_response, options) or user_response
         level = "unknown"
         for o in options:
             if o.label == matched:
-                if o.breadth == "broad":
-                    level = "broad"
-                elif o.breadth == "narrow":
-                    level = "narrow"
+                level = o.breadth if o.breadth in ("broad", "narrow") else "unknown"
                 break
 
         conn.execute(

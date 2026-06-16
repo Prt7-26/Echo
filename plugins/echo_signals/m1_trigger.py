@@ -305,6 +305,34 @@ def record_session_tool_call(session_id: Optional[str]) -> None:
         logger.debug("record_session_tool_call failed: %s", exc, exc_info=True)
 
 
+def set_session_tool_count(session_id: Optional[str], count: int) -> None:
+    """Set a SKILL-LESS conversation's tool-call counter to at least ``count``.
+
+    The increment-on-each-post_tool_call path (record_session_tool_call) relies
+    on the session contextvar being set when the tool finishes — but Hermes runs
+    tools in worker threads where that contextvar isn't propagated, so most
+    calls are lost. conversation_history (passed to pre_llm_call) carries every
+    tool-result message authoritatively, so signals.on_pre_llm_call counts those
+    and calls this. Monotonic (max) so a later turn never shrinks the count.
+    """
+    if not session_id or count <= 0:
+        return
+    try:
+        conn = get_echo_conn()
+        now = time.time()
+        conn.execute(
+            "INSERT INTO echo_session_tool_count (session_id, tool_calls, updated_at) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(session_id) DO UPDATE SET "
+            "  tool_calls = MAX(tool_calls, excluded.tool_calls), "
+            "  updated_at = excluded.updated_at",
+            (session_id, count, now),
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.debug("set_session_tool_count failed: %s", exc, exc_info=True)
+
+
 def gc_old_requests(retention_days: float = RECURRENCE_LOOKBACK_DAYS * 2) -> int:
     """Delete user_request_log rows older than ``retention_days``.
 

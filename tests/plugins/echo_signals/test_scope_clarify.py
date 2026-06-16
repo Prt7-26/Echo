@@ -170,46 +170,53 @@ def _clarify_msg(question, choices, response):
 class TestCaptureScope:
     OPTS = [{"label": "只写中文演讲稿", "breadth": "narrow"},
             {"label": "各类中文文稿", "breadth": "broad"}]
+    # The agent now generates its own options + asks in-turn; capture keys off
+    # the question containing "适用范围", not the offered choices.
+    Q = "这个技能以后的适用范围是什么？"
 
-    def test_exact_choice_captured(self, isolated_db):
-        _seed_scope("speech", "s1", state="asked", options=self.OPTS)
+    def test_scope_question_captured(self, isolated_db):
+        # No Echo options stored (agent generated them) → level stays unknown.
+        _seed_scope("speech", "s1", state="pending")
         history = [
             {"role": "user", "content": "..."},
-            _clarify_msg("适用范围?", ["只写中文演讲稿", "各类中文文稿"], "各类中文文稿"),
+            _clarify_msg(self.Q, ["只写中文演讲稿", "各类中文文稿"], "各类中文文稿"),
         ]
         assert scl.capture_scope_from_history("s1", history) is True
         row = _scope_row("speech")
         assert row["scope_choice"] == "各类中文文稿"
         assert row["scope_state"] == "confirmed"
-        assert row["scope_level"] == "broad"
 
-    def test_no_clarify_no_capture(self, isolated_db):
-        _seed_scope("speech", "s1", state="asked", options=self.OPTS)
-        assert scl.capture_scope_from_history("s1", [{"role": "user", "content": "hi"}]) is False
-        assert _scope_row("speech")["scope_state"] == "asked"
-
-    def test_not_in_asked_state_ignored(self, isolated_db):
+    def test_captures_in_options_ready_state(self, isolated_db):
+        # Any non-confirmed state qualifies (was previously gated to 'asked').
         _seed_scope("speech", "s1", state="options_ready", options=self.OPTS)
-        history = [_clarify_msg("q", ["只写中文演讲稿"], "只写中文演讲稿")]
+        history = [_clarify_msg(self.Q, ["只写中文演讲稿", "各类中文文稿"], "各类中文文稿")]
+        assert scl.capture_scope_from_history("s1", history) is True
+        assert _scope_row("speech")["scope_level"] == "broad"  # derived from opts
+
+    def test_non_scope_clarify_ignored(self, isolated_db):
+        # The save?/yes-no clarify must NOT be mistaken for the scope answer.
+        _seed_scope("speech", "s1", state="pending")
+        history = [_clarify_msg("要把这个流程保存为技能吗？", ["是", "不用了"], "是")]
         assert scl.capture_scope_from_history("s1", history) is False
+        assert _scope_row("speech")["scope_state"] == "pending"
 
-    def test_freetext_other_response_stored_raw(self, isolated_db):
-        _seed_scope("speech", "s1", state="asked", options=self.OPTS)
-        # User typed a custom "Other" answer not among the options.
-        history = [_clarify_msg("q", ["只写中文演讲稿", "各类中文文稿"], "只用于毕业致辞")]
+    def test_picks_scope_clarify_among_several(self, isolated_db):
+        # Both the save question and the scope question are in history.
+        _seed_scope("speech", "s1", state="pending")
+        history = [
+            _clarify_msg("要保存为技能吗？", ["是", "否"], "是"),
+            _clarify_msg(self.Q, ["只写中文演讲稿", "各类中文文稿"], "只写中文演讲稿"),
+        ]
         assert scl.capture_scope_from_history("s1", history) is True
-        assert _scope_row("speech")["scope_choice"] == "只用于毕业致辞"
-        assert _scope_row("speech")["scope_level"] == "unknown"
+        assert _scope_row("speech")["scope_choice"] == "只写中文演讲稿"
 
-    def test_prefixed_response_matched(self, isolated_db):
-        _seed_scope("speech", "s1", state="asked", options=self.OPTS)
-        history = [_clarify_msg("q", ["只写中文演讲稿", "各类中文文稿"], "A · 各类中文文稿")]
-        assert scl.capture_scope_from_history("s1", history) is True
-        assert _scope_row("speech")["scope_choice"] == "各类中文文稿"
+    def test_no_scope_question_no_capture(self, isolated_db):
+        _seed_scope("speech", "s1", state="pending")
+        assert scl.capture_scope_from_history("s1", [{"role": "user", "content": "hi"}]) is False
+        assert _scope_row("speech")["scope_state"] == "pending"
 
     def test_idempotent_after_confirm(self, isolated_db):
-        _seed_scope("speech", "s1", state="asked", options=self.OPTS)
-        history = [_clarify_msg("q", ["各类中文文稿"], "各类中文文稿")]
+        _seed_scope("speech", "s1", state="pending")
+        history = [_clarify_msg(self.Q, ["各类中文文稿"], "各类中文文稿")]
         assert scl.capture_scope_from_history("s1", history) is True
-        # second call: already confirmed → no-op
-        assert scl.capture_scope_from_history("s1", history) is False
+        assert scl.capture_scope_from_history("s1", history) is False  # confirmed
