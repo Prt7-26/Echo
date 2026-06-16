@@ -154,7 +154,12 @@ def make_agent() -> _BaseClient:
     base = model_cfg.get("base_url", "https://token-plan-cn.xiaomimimo.com/v1")
     model = model_cfg.get("default", "mimo-v2.5")
     key = os.environ.get("XIAOMI_API_KEY") or model_cfg.get("api_key", "")
-    return _BaseClient("agent(mimo)", key, base, model)
+    # mimo-v2.5 is a reasoning model; left on, its chain-of-thought eats the
+    # token budget and the actual answer can come back empty/truncated. We
+    # disable thinking so it answers directly. The same config is used for ALL
+    # conditions, so the Echo-vs-baseline comparison stays fair.
+    return _BaseClient("agent(mimo)", key, base, model,
+                       extra_body={"thinking": {"type": "disabled"}})
 
 
 if __name__ == "__main__":

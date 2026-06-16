@@ -1,0 +1,222 @@
+{
+  "personamem": {
+    "accuracy": {
+      "no_mem": 0.4889,
+      "full_hist": 0.5444,
+      "echo_m5": 0.6444
+    },
+    "avg_inject_chars": {
+      "no_mem": 0.0,
+      "full_hist": 8279.2,
+      "echo_m5": 2648.5
+    },
+    "n": 180
+  },
+  "prefeval": {
+    "adherence": {
+      "no_pref": 0.16,
+      "echo_m5": 0.86,
+      "oracle": 0.93
+    },
+    "n": 100
+  },
+  "metric1_satisfaction": {
+    "curve": {
+      "A": {
+        "turns": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "mean": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.3333333333333333,
+          1.1666666666666667,
+          1.0,
+          1.1666666666666667,
+          1.0
+        ]
+      },
+      "B": {
+        "turns": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "mean": [
+          1.0,
+          1.1666666666666667,
+          1.0,
+          1.0,
+          1.0,
+          1.1666666666666667,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "echo": {
+        "turns": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "mean": [
+          1.0,
+          1.6666666666666667,
+          2.3333333333333335,
+          2.3333333333333335,
+          2.3333333333333335,
+          2.3333333333333335,
+          1.8333333333333333,
+          2.3333333333333335,
+          2.5,
+          2.3333333333333335
+        ]
+      }
+    },
+    "overall_mean": {
+      "A": 1.0666666666666667,
+      "B": 1.0333333333333334,
+      "echo": 2.1
+    },
+    "late_mean_turns>=half": {
+      "A": 1.1111111111111112,
+      "B": 1.0277777777777777,
+      "echo": 2.2777777777777777
+    },
+    "echo_vs_A": {
+      "n_pairs": 60,
+      "mean_1": 2.1,
+      "mean_2": 1.0666666666666667,
+      "cliffs_delta": 0.2627777777777778,
+      "wilcoxon_p": 8.771116046234339e-05
+    },
+    "echo_vs_B": {
+      "n_pairs": 60,
+      "mean_1": 2.1,
+      "mean_2": 1.0333333333333334,
+      "cliffs_delta": 0.27555555555555555,
+      "wilcoxon_p": 6.887215595255096e-05
+    }
+  },
+  "metric2_error_propagation": {
+    "closedloop_bad_used_turns_mean": {
+      "A": 0.0,
+      "B": 5.0,
+      "echo": 2.0
+    },
+    "deterministic": {
+      "echo_caught": "3/3",
+      "baseline_b_caught": "0/3",
+      "echo_mean_conf_bad": 0.07112087856808602
+    }
+  },
+  "metric3_overhead": {
+    "mean_agent_tokens": {
+      "A": 2184.0,
+      "B": 13641.666666666666,
+      "echo": 4368.333333333333
+    },
+    "mean_signal_tokens": {
+      "A": 0.0,
+      "B": 0.0,
+      "echo": 4842.166666666667
+    },
+    "echo_overhead_pct_vs_A": 321.7261904761905
+  },
+  "micrometrics": {
+    "M1_trigger": {
+      "echo_precision": 1.0,
+      "echo_recall": 0.6666666666666666,
+      "hermes_precision": 1.0,
+      "hermes_recall": 0.6666666666666666,
+      "n_relevant": 3,
+      "n_echo_flagged": 2,
+      "n_hermes_flagged": 2
+    },
+    "M3_drift": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "tn": 20,
+      "excluded_warmup": 9
+    },
+    "M4_confidence": {
+      "spearman_rho": 0.6708203932499369,
+      "n_pairs": 5,
+      "pairs": [
+        {
+          "skill_id": "marketing-email-1",
+          "confidence": 0.5,
+          "true_usefulness": 0.8
+        },
+        {
+          "skill_id": "marketing-email-2",
+          "confidence": 0.55,
+          "true_usefulness": 0.9
+        },
+        {
+          "skill_id": "ci-setup",
+          "confidence": 0.5,
+          "true_usefulness": 0.7
+        },
+        {
+          "skill_id": "data-cleaning",
+          "confidence": 0.2975,
+          "true_usefulness": 0.55
+        },
+        {
+          "skill_id": "quick-qa",
+          "confidence": 0.5,
+          "true_usefulness": 0.5
+        }
+      ]
+    },
+    "M5_retrieval": {
+      "recall_with_confidence_weights": 0.375,
+      "recall_no_weights": 0.375,
+      "uplift": 0.0
+    },
+    "Metric2_error_propagation": {
+      "n_bad": 3,
+      "n_good": 2,
+      "echo_bad_caught": 3,
+      "echo_catch_rate": 1.0,
+      "echo_good_false_positives": 0,
+      "baseline_b_bad_caught": 0,
+      "baseline_b_catch_rate": 0.0,
+      "echo_mean_conf_bad": 0.07112087856808602,
+      "echo_mean_conf_good": 1.0
+    }
+  }
+}
