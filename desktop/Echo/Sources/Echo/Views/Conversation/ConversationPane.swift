@@ -10,6 +10,9 @@ struct ConversationPane: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
                     ConversationTopBar(app: app)
+                    if app.connection != .online {
+                        ConnectionBanner(state: app.connection)
+                    }
                     if let status = app.statusLine {
                         StatusStrip(text: status)
                     }
@@ -74,6 +77,24 @@ struct StatusStrip: View {
     }
 }
 
+/// 连接状态细横幅（offline/connecting 时显示；online 不显示）。
+/// 后端冷启动（重型 import 可达数十秒）或断线重连期间给用户明确反馈。
+struct ConnectionBanner: View {
+    let state: AppState.Connection
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: state == .connecting ? "circle.dotted" : "wifi.slash")
+                .symbolEffect(.pulse, isActive: state == .connecting)
+            Text(state == .connecting ? "正在连接 Echo 后端…" : "后端未连接")
+                .font(Tokens.Typeface.meta)
+            Spacer()
+        }
+        .foregroundStyle(state == .connecting ? Theme.accent : Theme.Signal.negative)
+        .padding(.horizontal, Tokens.Spacing.content)
+        .padding(.vertical, 5)
+    }
+}
+
 /// transcript 滚动区。
 struct TranscriptScroll: View {
     @Bindable var app: AppState
@@ -96,6 +117,10 @@ struct TranscriptScroll: View {
             }
             .onChange(of: app.transcript.count) {
                 withAnimation(.smooth) { proxy.scrollTo("bottom-spacer", anchor: .bottom) }
+            }
+            // 流式增长时跟随到底部：transcript 条数不变，靠 streamTick 触发（即时、不加动画，避免逐刷排队）。
+            .onChange(of: app.streamTick) {
+                proxy.scrollTo("bottom-spacer", anchor: .bottom)
             }
         }
     }

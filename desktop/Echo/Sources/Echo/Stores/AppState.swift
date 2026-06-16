@@ -20,6 +20,9 @@ final class AppState {
     var statusLine: String?          // 顶部状态条（Thinking…/Running tool…）
     var isResponding = false
     var composerText = ""
+    /// 流式刷新计数：每次把累积态写进 transcript 时 +1，供滚动区跟随到底部
+    /// （流式只替换同一条消息、transcript.count 不变，故不能只靠条数变化触发滚动）。
+    private(set) var streamTick = 0
 
     // Echo 信号
     var ratingQueue: [RatingItem] = []
@@ -45,6 +48,8 @@ final class AppState {
     private var streamingText = ""
     private var streamingTools: [ToolActivity] = []
     private var streamingReasoning = ""
+    /// 合批刷新：delta 高频到达时，最多每 ~16ms 才把累积态写进 transcript（避免逐字 diff 抖动）。
+    private var flushScheduled = false
 
     init() {}
 
@@ -216,7 +221,7 @@ final class AppState {
         case .messageDelta(let d):
             streamingText += d.text
             isResponding = true
-            refreshStreamingMessage()
+            scheduleStreamFlush()          // 合批到 ~16ms 一刷，高频流式不抖
         case .messageComplete(let c):
             completeAssistantTurn(text: c.text, usage: c.usage, reasoning: c.reasoning)
         case .statusUpdate(let s):
@@ -231,7 +236,7 @@ final class AppState {
                              durationS: t.durationS, summary: t.summary ?? t.error))
         case .reasoningDelta(let d), .thinkingDelta(let d):
             streamingReasoning += d.text
-            refreshStreamingMessage()
+            scheduleStreamFlush()
         case .clarifyRequest(let c):
             clarifyPrompt = .init(id: c.requestId, question: c.question, choices: c.choices)
         case .error(let e):
@@ -248,6 +253,19 @@ final class AppState {
         isResponding = true
         statusLine = statusLine ?? "Thinking…"
         refreshStreamingMessage()
+    }
+
+    /// 合批：把一帧内的多条 delta 合成一次 transcript 刷新（~16ms 节拍，对齐 Tokens.Timing.streamFlush）。
+    /// 多次调用只排一个待刷任务；message.complete 把 streamingId 清空后，迟到的 flush 会自然 no-op。
+    private func scheduleStreamFlush() {
+        guard !flushScheduled else { return }
+        flushScheduled = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 16_000_000)
+            guard let self else { return }
+            self.flushScheduled = false
+            self.refreshStreamingMessage()
+        }
     }
 
     private func upsertTool(_ tool: ToolActivity) {
@@ -271,6 +289,7 @@ final class AppState {
         } else {
             transcript.append(.assistant(msg))
         }
+        streamTick &+= 1
     }
 
     private func completeAssistantTurn(text: String, usage: Usage?, reasoning: String?) {
@@ -291,6 +310,7 @@ final class AppState {
         streamingId = nil; streamingText = ""; streamingReasoning = ""; streamingTools = []
         isResponding = false
         statusLine = nil
+        streamTick &+= 1
         // Phase 4: 拉 /invocations/recent 显示评分
         coordinator?.refreshRatingQueue()
     }
