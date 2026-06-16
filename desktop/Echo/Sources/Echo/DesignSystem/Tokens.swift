@@ -47,6 +47,7 @@ enum Tokens {
     enum Typeface {
         static let body = Font.system(size: 15)              // 对话正文（默认 ~13 → 15）
         static let callout = Font.system(size: 14)
+        static let navTitle = Font.system(size: 17, weight: .semibold)   // 对话区顶栏标题
         static let cardTitle = Font.system(size: 15, weight: .semibold)
         static let cardPreview = Font.system(size: 13)       // 卡片摘要（原 .caption ~11 → 13）
         static let cardTimestamp = Font.system(size: 12)

@@ -30,7 +30,7 @@ struct ConversationTopBar: View {
     var body: some View {
         HStack(spacing: 10) {
             Text(app.selectedConversation?.title ?? "New Conversation")
-                .font(.headline)
+                .font(Tokens.Typeface.navTitle)
                 .lineLimit(1)
             Spacer()
             Button {} label: { Image(systemName: "magnifyingglass") }
