@@ -37,9 +37,10 @@ The repository already contains substantial design documentation. Read before gu
 - `DevPlan/` — design docs, the proposal, schema specs
 - `tests/plugins/echo_signals/` — unit tests
 - `docs/hermes-architecture.html` — onboarding aid
-- `tauri-shell/` — Rust/Tauri desktop wrapper around the dashboard (Step 17)
 - `desktop/EchoSiri/` — native macOS SwiftUI app (Liquid Glass / new-Siri look), SPM-built,
-  front-end onto the Echo Agent Harness via `tui_gateway` WS + `echo_signals` REST (Step 26).
+  front-end onto the Echo Agent Harness by spawning `python -m tui_gateway.entry` as a stdio
+  subprocess (chat) + `echo_signals` REST (signals) (Step 26 — supersedes the deleted `tauri-shell/`,
+  whose clipboard/window-focus capture EchoSiri now does natively via NSPasteboard/NSApplication).
   Plans: `DevPlan/siri-app-ui-plan.md`, `desktop-app-dev-plan.md`, `siri-app-wireframes.md`.
 - `scripts/verify_echo.py` — end-to-end smoke check
 - `scripts/eval/` — evaluation harness, four metric scripts, hyperparameter sweep (Step 19)

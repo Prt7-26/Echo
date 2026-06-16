@@ -87,10 +87,6 @@ COMMANDS
   tui [args]     Hermes full-screen TUI.
   dash [args]    Hermes Web Dashboard (foreground).  Browser opens to /echo.
                  Extra args forwarded to `hermes dashboard`.
-  tauri          Tauri desktop shell.  Auto-starts the dashboard in the
-                 background if it isn't already up.
-  full           Dashboard in background + Tauri shell in foreground.
-                 Stops the background dashboard on exit.
   app [--connect] Native macOS app (EchoSiri, Liquid Glass / new-Siri look).
                  Default = mock walkthrough; --connect spawns the live gateway.
   app-check      Run EchoSiri's self-check harness (swift run echosiri-check).
@@ -106,7 +102,7 @@ ENV VARS
 EXAMPLES
   ./echo chat                       # quick chat session
   ./echo dash                       # open the dashboard
-  ./echo full                       # dashboard + tauri together
+  ./echo app                        # native macOS app (mock walkthrough)
   ECHO_DASH_PORT=9200 ./echo dash   # use a different port
   ./echo verify                     # confirm Echo is healthy
 EOF
@@ -158,15 +154,6 @@ stop_dashboard_bg() {
   fi
 }
 
-ensure_tauri_deps() {
-  if [[ ! -d tauri-shell/node_modules ]]; then
-    echo "Installing tauri-shell node deps (first run) ..."
-    ( cd tauri-shell && npm install )
-  fi
-  if ! command -v cargo >/dev/null 2>&1; then
-    c_warn "cargo not on PATH — Tauri needs a Rust toolchain (https://rustup.rs)."
-  fi
-}
 
 # Install Echo's skin into <hermes_home>/skins/ and make it the default —
 # but only when display.skin is still "default" (i.e. the user never chose
@@ -220,20 +207,6 @@ case "$cmd" in
   dash|dashboard)
     install_echo_skin
     exec "$PYBIN" -m hermes_cli.main dashboard --host "$DASH_HOST" --port "$DASH_PORT" "$@"
-    ;;
-  tauri)
-    install_echo_skin
-    start_dashboard_bg
-    ensure_tauri_deps
-    cd tauri-shell
-    exec npm run dev
-    ;;
-  full)
-    install_echo_skin
-    trap stop_dashboard_bg EXIT INT TERM
-    start_dashboard_bg
-    ensure_tauri_deps
-    ( cd tauri-shell && npm run dev )
     ;;
   app)
     # 原生 macOS App (EchoSiri, Liquid Glass)。默认 mock 走查；
