@@ -5,21 +5,25 @@ struct ConversationPane: View {
     @Bindable var app: AppState
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            VStack(spacing: 0) {
-                ConversationTopBar(app: app)
-                if let status = app.statusLine {
-                    StatusStrip(text: status)
+        // transcript 充满全区，内容滚到顶栏「下方」（safeAreaInset），上缘由 scrim 渐隐。
+        TranscriptScroll(app: app)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 0) {
+                    ConversationTopBar(app: app)
+                    if let status = app.statusLine {
+                        StatusStrip(text: status)
+                    }
                 }
-                TranscriptScroll(app: app)
+                .topBarScrim()
             }
-            // 浮起输入条 + 其上方的 Echo 信号卡
-            VStack(spacing: 8) {
-                EchoSignalOverlay(app: app)
-                ComposerBar(app: app)
+            .overlay(alignment: .bottom) {
+                // 浮起输入条 + 其上方的 Echo 信号卡
+                VStack(spacing: 8) {
+                    EchoSignalOverlay(app: app)
+                    ComposerBar(app: app)
+                }
             }
-        }
-        .background(Theme.contentBackground.ignoresSafeArea())
+            .background(Theme.contentBackground.ignoresSafeArea())
     }
 }
 

@@ -5,22 +5,23 @@ struct ConversationGallery: View {
     @Bindable var app: AppState
 
     var body: some View {
-        VStack(spacing: 0) {
-            SidebarToolbar(app: app)
-            ScrollView {
-                MasonryLayout(columns: 2, spacing: Tokens.Spacing.cardGutter) {
-                    ForEach(sortedConversations) { conv in
-                        ConversationCard(summary: conv,
-                                         isSelected: conv.id == app.selectedConversationId)
-                            .onTapGesture { app.selectConversation(conv.id) }
-                            .contextMenu { menu(for: conv) }
-                    }
+        // 卡片滚到工具栏「下方」（safeAreaInset），上缘由 scrim 渐隐。
+        ScrollView {
+            MasonryLayout(columns: 2, spacing: Tokens.Spacing.cardGutter) {
+                ForEach(sortedConversations) { conv in
+                    ConversationCard(summary: conv,
+                                     isSelected: conv.id == app.selectedConversationId)
+                        .onTapGesture { app.selectConversation(conv.id) }
+                        .contextMenu { menu(for: conv) }
                 }
-                .padding(.horizontal, Tokens.Spacing.cardPadding)
-                .padding(.vertical, Tokens.Spacing.content)
             }
+            .padding(.horizontal, Tokens.Spacing.cardPadding)
+            .padding(.vertical, Tokens.Spacing.content)
         }
         .frame(maxHeight: .infinity)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            SidebarToolbar(app: app).topBarScrim()
+        }
     }
 
     /// 置顶优先，其余按时间倒序。
