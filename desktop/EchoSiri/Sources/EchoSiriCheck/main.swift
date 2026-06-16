@@ -10,4 +10,6 @@ runner.check("kit version is set") {
     try runner.expect(EchoSiriKit.version, "0.0.1")
 }
 
+registerProtocolChecks(runner)
+
 runner.run()
