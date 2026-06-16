@@ -69,12 +69,11 @@ final class AppState {
         scopeQuestion = nil
     }
 
-    /// 提交评分反馈（Phase 4 完整 60s/理由语义；此处即时提交）。
-    func submitRating(thumb: Int, reason: String?) {
-        if let item = ratingQueue.first {
-            coordinator?.sendFeedback(invocationId: item.id, rating: thumb, reason: reason)
-        }
-        commitRating()
+    /// 评分态切换（点👍/👎、撤销、展开理由）——仅改队首 UI 态，不发反馈。
+    /// 提交发生在 60s 窗口到期或「补充理由→提交」时（见 commitRating）。
+    func setRatingState(_ s: RatingItem.RatingState) {
+        guard !ratingQueue.isEmpty else { return }
+        ratingQueue[0].state = s
     }
 
     /// 载入 mock（Phase 1 走查 / 预览）。
@@ -193,31 +192,13 @@ final class AppState {
         }
     }
 
-    /// 评分状态推进。回 idle 视为撤销；提交（从 reason/rated 回 idle）出队。
-    func advanceRating(_ newState: RatingItem.RatingState) {
-        guard var head = ratingQueue.first else { return }
-        let wasRated: Bool
-        if case .idle = head.state { wasRated = false } else { wasRated = true }
-
-        if case .idle = newState, wasRated {
-            // 从已评分回到 idle：撤销，保留在队首待重评
-            head.state = .idle
-            ratingQueue[0] = head
-            return
-        }
-        if case .idle = newState, !wasRated {
-            // idle→idle 不会发生；忽略
-            return
-        }
-        // 提交路径：reason/rated 之后再回 idle 由上面处理；这里更新中间态
-        head.state = newState
-        ratingQueue[0] = head
-        // Phase 4: 当提交（窗口到期或点提交）时 → EchoAPIClient.sendFeedback + 出队
-    }
-
-    /// 提交当前评分并出队（Phase 4 接 /feedback）。
-    func commitRating() {
-        guard !ratingQueue.isEmpty else { return }
+    /// 提交队首评分并出队：POST /feedback（thumb + 可选 reason，带 invocation_id 精确归属）。
+    /// 触发点 = 60s 撤销窗到期，或用户在「补充理由」里点提交。撤销不会走到这里 → 真取消、不发反馈。
+    func commitRating(thumb: Int, reason: String?) {
+        guard let item = ratingQueue.first else { return }
+        let cleaned = reason?.trimmingCharacters(in: .whitespacesAndNewlines)
+        coordinator?.sendFeedback(invocationId: item.id, rating: thumb,
+                                  reason: (cleaned?.isEmpty ?? true) ? nil : cleaned)
         ratingQueue.removeFirst()
     }
 

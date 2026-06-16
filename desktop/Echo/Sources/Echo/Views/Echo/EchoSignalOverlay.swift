@@ -12,11 +12,9 @@ struct EchoSignalOverlay: View {
             } else if let scope = app.scopeQuestion {
                 ScopeQuestionCard(question: scope) { level in app.chooseScope(level) }
             } else if let rating = app.ratingQueue.first {
-                RatingWidget(item: rating) { newState in
-                    app.advanceRating(newState)
-                    // 首次给出 👍/👎 即提交反馈（Phase 4 再加 60s/理由细化）
-                    if case .rated(let thumb) = newState { app.submitRating(thumb: thumb, reason: nil) }
-                }
+                RatingWidget(item: rating,
+                             onState: { app.setRatingState($0) },
+                             onCommit: { thumb, reason in app.commitRating(thumb: thumb, reason: reason) })
             }
         }
         .padding(.horizontal, Tokens.Spacing.loose)
