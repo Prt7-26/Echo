@@ -11,7 +11,7 @@ struct SidebarToolbar: View {
                 Button("仅置顶") {}
                 Button("按时间") {}
             } label: {
-                Image(systemName: "line.3.horizontal.decrease")
+                Image(systemName: "line.3.horizontal.decrease").glassPill()
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)

@@ -101,27 +101,33 @@ private struct GlassPanelModifier: ViewModifier {
     }
 }
 
-// MARK: - 玻璃按钮（工具栏图标按钮）
+// MARK: - 玻璃图标控件（工具栏按钮 + 菜单标签共用同一外观）
 
-/// 常驻、圆润的 Liquid Glass 胶囊按钮（macOS Preview 同款）——
-/// 玻璃始终可见(非 hover 才显)，Capsule 全圆角(非方角)。macOS 26 的
-/// `.interactive()` 自带 hover/按压高光；15 回落常驻 thinMaterial 胶囊。
-struct IconGlassButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        let shape = Capsule(style: .continuous)
-        return configuration.label
-            .font(.system(size: 14, weight: .medium))
-            .frame(minWidth: 30, minHeight: 28)   // 圆润、尺寸一致
-            .padding(.horizontal, 8)
-            .contentShape(shape)
-            .modifier(PersistentGlass(shape: shape))
-            .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .opacity(configuration.isPressed ? 0.85 : 1)
-            .animation(.easeOut(duration: 0.10), value: configuration.isPressed)
+/// 工具栏图标控件尺寸（圆形玻璃直径）。比之前大一号，更贴合开发习惯。
+enum GlassIcon { static let diameter: CGFloat = 34 }
+
+extension View {
+    /// 常驻、圆润（正方→圆形）的 Liquid Glass 胶囊外观。按钮用 `.buttonStyle(.glassIcon)`，
+    /// 菜单(无 ButtonStyle)直接给 label 套 `.glassPill()`，二者视觉一致。
+    func glassPill(diameter: CGFloat = GlassIcon.diameter) -> some View {
+        modifier(GlassPill(diameter: diameter))
     }
 }
 
-/// 常驻玻璃背景（始终可见）。
+private struct GlassPill: ViewModifier {
+    let diameter: CGFloat
+    func body(content: Content) -> some View {
+        let shape = Capsule(style: .continuous)
+        return content
+            .font(.system(size: 15, weight: .medium))
+            .frame(width: diameter, height: diameter)   // 正方 → Capsule 即圆形
+            .contentShape(shape)
+            .modifier(PersistentGlass(shape: shape))
+    }
+}
+
+/// 常驻玻璃背景（始终可见，非 hover 才显）。macOS 26 用真 Liquid Glass，
+/// `.interactive()` 自带 hover/按压高光；15 回落常驻 thinMaterial 胶囊 + 描边。
 private struct PersistentGlass: ViewModifier {
     let shape: Capsule
     func body(content: Content) -> some View {
@@ -132,6 +138,17 @@ private struct PersistentGlass: ViewModifier {
                 .background(.thinMaterial, in: shape)
                 .overlay(shape.strokeBorder(.white.opacity(0.12), lineWidth: 0.75))
         }
+    }
+}
+
+/// 工具栏图标按钮：常驻圆润玻璃 + 按压反馈。
+struct IconGlassButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .glassPill()
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.easeOut(duration: 0.10), value: configuration.isPressed)
     }
 }
 

@@ -48,7 +48,7 @@ struct ConversationTopBar: View {
                 Button("重命名…") {}
                 Button("压缩上下文") {}
                 Button("导出…") {}
-            } label: { Image(systemName: "ellipsis") }
+            } label: { Image(systemName: "ellipsis").glassPill() }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
