@@ -14,6 +14,7 @@ final class GatewayCoordinator {
     /// 评分作用域用的 Hermes session_key（来自事件 session_key / create 响应）。
     private var sessionKey: String?
     private var pump: Task<Void, Never>?
+    private var monitors: SignalMonitors?
 
     init(app: AppState, dashboardBase: URL = BackendLocator.dashboardBase()) {
         self.app = app
@@ -35,6 +36,7 @@ final class GatewayCoordinator {
                 guard let self, let events = await self.clientEvents() else { return }
                 for await ev in events { await self.route(ev) }
             }
+            startSignalMonitors()
             await loadSessions()
         } catch {
             app?.statusLine = "后端启动失败：\(error)"
@@ -121,7 +123,17 @@ final class GatewayCoordinator {
         }
     }
 
+    private func startSignalMonitors() {
+        let echo = self.echo   // 端点服务端按最近 invocation 归属，无需带 session_key
+        let m = SignalMonitors { body in
+            Task { try? await echo.clipboardSignal(body) }
+        }
+        monitors = m
+        m.start()
+    }
+
     func shutdown() async {
+        monitors?.stop()
         pump?.cancel()
         await client.disconnect()
     }
