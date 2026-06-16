@@ -8,12 +8,24 @@
 
 ---
 
+## 0. 设计层级原则（Apple HIG · 最高优先，覆盖下文任何「玻璃」措辞）
+
+来源：[HIG/WWDC25 设计系统](https://developer.apple.com/videos/play/wwdc2025/356/) + [Applying Liquid Glass to custom views](https://developer.apple.com/documentation/SwiftUI/Applying-Liquid-Glass-to-custom-views)。
+
+- **Liquid Glass 只属于「导航/控件层」**——浮在内容之上的功能性元素：工具栏按钮、浮起输入条、浮动瞬时提示卡（评分/scope/clarify）、sidebar 容器（系统材质）、sheet/popover/菜单。
+- **内容层一律实底，绝不用玻璃**：会话卡片（列表项）、对话富文本、工具/推理/代码块、来源 chip、侧面板行、transcript 背景。用 `contentCard`（实底+轻投影+发丝边）/ `insetSurface`（淡填充）。
+- **窗口** 仅 chrome 级 translucency（`.containerBackground(.ultraThinMaterial, for: .window)`），内容区用 `Theme.contentBackground` 实底覆盖其上。
+- 玻璃不叠玻璃；tint 只为表意不为装饰。
+- 代码落点：`DesignSystem/GlassStyles.swift`（glass = 导航层；contentCard/insetSurface = 内容层）。下文凡写「玻璃卡」描述会话卡/内容块的，以本节为准改为实底。
+
+---
+
 ## 1. 截图特征拆解（参考图 = 新 Siri App）
 
 逐区域记录，作为像素级复刻的 spec。坐标按原图 2060×1314 描述。
 
 ### 1.1 窗口与材质
-- **整窗 Liquid Glass**：大圆角（≈ 16–20pt），窗口半透明，暖色壁纸从边缘透出；内容区是一层"磨砂玻璃"而非纯白。
+- **窗口 chrome translucency**：大圆角（≈ 16–20pt），窗口边缘/标题区半透明，暖色壁纸透出；但**内容区是实底**（见 §0：内容层不用玻璃，截图的"白卡"是实底内容卡，非玻璃）。
 - **无可见标题栏**：traffic lights（红/黄/绿）浮在内容之上，`titlebarAppearsTransparent + .hiddenTitleBar`，工具栏图标与内容同层。
 - **分栏**：左 sidebar ≈ 占窗宽 22%，右主对话区占其余；两栏之间无硬分割线，靠材质明暗过渡。
 

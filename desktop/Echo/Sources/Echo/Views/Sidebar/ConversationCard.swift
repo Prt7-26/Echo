@@ -24,13 +24,7 @@ struct ConversationCard: View {
         }
         .padding(Tokens.Spacing.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassCard(cornerRadius: Tokens.Radius.card, tinted: isSelected)
-        .overlay {
-            if isSelected {
-                RoundedRectangle(cornerRadius: Tokens.Radius.card, style: .continuous)
-                    .strokeBorder(Theme.accent.opacity(0.8), lineWidth: 1.5)
-            }
-        }
+        .contentCard(cornerRadius: Tokens.Radius.card, selected: isSelected)  // HIG: 列表项=内容层=实底
         .scaleEffect(isSelected ? 1.015 : 1)
         .animation(.smooth(duration: 0.18), value: isSelected)
         .onHover { hovering = $0 }

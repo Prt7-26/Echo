@@ -13,7 +13,8 @@ struct RootSplitView: View {
                     ideal: Tokens.Size.sidebarIdeal,
                     max: Tokens.Size.sidebarMax
                 )
-                .background(WindowGlassBackground().ignoresSafeArea())
+                // HIG: sidebar 是导航层，由 NavigationSplitView 自动套用系统 sidebar 材质；
+                // 不再自铺材质（避免双层材质/玻璃叠玻璃）。
         } detail: {
             HStack(spacing: 0) {
                 Group {

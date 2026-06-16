@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// 配色与强调色。Echo 信号区沿用 sonar-teal（与 CLI/TUI skin 同源），
 /// 其余遵循系统中性暖灰 + 大量留白（截图风格）。
@@ -11,6 +12,16 @@ enum Theme {
 
     /// 次级文字（卡片摘要、meta 行）。
     static let secondaryText = Color.secondary
+
+    // MARK: 表面色（HIG：内容层用实底，不用 Liquid Glass）
+    /// 内容卡片实底（会话卡）——随明暗自适应的控件/内容背景。
+    static let cardSurface = Color(nsColor: .controlBackgroundColor)
+    /// 对话/内容区实底（transcript、侧面板）。
+    static let contentBackground = Color(nsColor: .textBackgroundColor)
+    /// 内嵌内容面（回复内的工具/推理/代码/来源）——更淡的填充。
+    static let insetSurface = Color.secondary.opacity(0.09)
+    /// 发丝分隔线。
+    static let hairline = Color(nsColor: .separatorColor)
 
     /// 信号语义色（与 dashboard SIGNAL_BADGES 同语义）。
     enum Signal {

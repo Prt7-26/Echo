@@ -1,24 +1,66 @@
 import SwiftUI
 
-// Liquid Glass 封装层。
+// 设计系统：分清 Apple HIG 的两层。
 //
-// 唯一一处 `#available(macOS 26, *)` 切换，View 代码不散落可用性判断：
-//   • macOS 26+  → 真 Liquid Glass `.glassEffect`
-//   • macOS 15   → `.regularMaterial` + 描边 的等效降级
+// ★ Liquid Glass 只用于「导航/控件层」——浮在内容之上的功能性元素：
+//   工具栏按钮(GlassButtonStyle)、浮起输入条(glassPanel)、浮在对话上的瞬时
+//   提示卡(glassCard，如评分/scope/clarify)、sidebar 容器(系统材质)。
+//   官方原则：Liquid Glass is for the navigation layer that floats above content.
 //
-// 见 DevPlan/siri-app-wireframes.md「W8 降级对照」。
+// ★ 内容层用实底，绝不用玻璃——会话卡片(列表项)、对话富文本、工具/推理/代码块、
+//   来源 chip、侧面板行：contentCard / insetSurface（实底 + 轻投影/淡填充）。
+//   官方原则：Don't use Liquid Glass in the content layer (lists/tables/media)。
+//
+// 玻璃部分唯一一处 `#available(macOS 26, *)` 切换：26+ 真 `.glassEffect`，
+// 15 回落 `.regularMaterial` + 描边。见 DevPlan/siri-app-wireframes.md「W8」。
 
-// MARK: - 玻璃卡片
+// MARK: - 玻璃（导航/控件层）
 
 extension View {
-    /// 圆角玻璃卡（侧栏卡片、信号卡、内联图等）。
+    /// 浮起玻璃卡（仅用于浮在内容之上的瞬时提示：评分/scope/clarify）。
     func glassCard(cornerRadius: CGFloat = Tokens.Radius.card, tinted: Bool = false) -> some View {
         modifier(GlassCardModifier(cornerRadius: cornerRadius, tinted: tinted))
     }
 
-    /// 浮起玻璃面板（输入条、工具栏、悬浮容器）。
+    /// 浮起玻璃面板（输入条、悬浮容器）。
     func glassPanel(cornerRadius: CGFloat = Tokens.Radius.button) -> some View {
         modifier(GlassPanelModifier(cornerRadius: cornerRadius))
+    }
+}
+
+// MARK: - 内容层（实底，非玻璃）
+
+extension View {
+    /// 内容卡片（会话卡等列表项）：实底 + 轻投影 + 发丝边；选中态 accent 描边。
+    func contentCard(cornerRadius: CGFloat = Tokens.Radius.card, selected: Bool = false) -> some View {
+        modifier(ContentCardModifier(cornerRadius: cornerRadius, selected: selected))
+    }
+
+    /// 内嵌内容面（回复内的工具/推理/代码/来源/侧面板行）：更淡的填充，无投影。
+    func insetSurface(cornerRadius: CGFloat = Tokens.Radius.button) -> some View {
+        modifier(InsetSurfaceModifier(cornerRadius: cornerRadius))
+    }
+}
+
+private struct ContentCardModifier: ViewModifier {
+    let cornerRadius: CGFloat
+    let selected: Bool
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        content
+            .background(Theme.cardSurface, in: shape)
+            .overlay(shape.strokeBorder(
+                selected ? Theme.accent.opacity(0.85) : Theme.hairline.opacity(0.55),
+                lineWidth: selected ? 1.5 : 0.5))
+            .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+    }
+}
+
+private struct InsetSurfaceModifier: ViewModifier {
+    let cornerRadius: CGFloat
+    func body(content: Content) -> some View {
+        content.background(Theme.insetSurface,
+                           in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 
@@ -90,17 +132,6 @@ extension ButtonStyle where Self == GlassButtonStyle {
     static var glassIcon: GlassButtonStyle { GlassButtonStyle() }
 }
 
-// MARK: - 窗口背景
-
-/// 整窗 Liquid Glass 背景：壁纸从边缘透出（W1）。
-struct WindowGlassBackground: View {
-    var body: some View {
-        if #available(macOS 26.0, *) {
-            // macOS 26 下窗口本身的玻璃由 .containerBackground/材质承载；
-            // 这里铺一层极薄材质兜底，真正的「壁纸延伸」交给窗口层 backgroundExtensionEffect。
-            Color.clear.background(.ultraThinMaterial.opacity(0.6))
-        } else {
-            Color.clear.background(.ultraThinMaterial)
-        }
-    }
-}
+// 窗口级 translucency 由 EchoApp 的 `.containerBackground(.ultraThinMaterial, for: .window)`
+// 承载（仅作为窗口 chrome）；内容区一律用 Theme.contentBackground 实底覆盖在其上，
+// 避免内容透出材质（HIG：内容层不用 Liquid Glass）。

@@ -47,7 +47,7 @@ struct SourceChips: View {
                     .foregroundStyle(Theme.secondaryText)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .glassCard(cornerRadius: Tokens.Radius.chip)
+                    .insetSurface(cornerRadius: Tokens.Radius.chip)
             }
         }
     }
@@ -95,7 +95,7 @@ struct ToolActivityRow: View {
             }
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
-        .glassCard(cornerRadius: Tokens.Radius.button)
+        .insetSurface(cornerRadius: Tokens.Radius.button)
     }
 
     @ViewBuilder private var icon: some View {
@@ -141,6 +141,6 @@ struct ReasoningBlock: View {
             }
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
-        .glassCard(cornerRadius: Tokens.Radius.button)
+        .insetSurface(cornerRadius: Tokens.Radius.button)
     }
 }

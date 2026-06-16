@@ -98,7 +98,7 @@ struct CodeBlockView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassCard(cornerRadius: Tokens.Radius.button)
+        .insetSurface(cornerRadius: Tokens.Radius.button)
     }
 }
 

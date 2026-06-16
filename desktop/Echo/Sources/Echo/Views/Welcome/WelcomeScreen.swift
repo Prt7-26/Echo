@@ -6,7 +6,7 @@ struct WelcomeScreen: View {
 
     var body: some View {
         ZStack {
-            WindowGlassBackground().ignoresSafeArea()
+            Theme.contentBackground.ignoresSafeArea()
             VStack(spacing: Tokens.Spacing.loose) {
                 Spacer()
                 Image(systemName: "sparkles")

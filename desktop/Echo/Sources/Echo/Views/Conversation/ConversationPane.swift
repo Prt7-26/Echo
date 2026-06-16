@@ -19,7 +19,7 @@ struct ConversationPane: View {
                 AskSiriInputBar(app: app)
             }
         }
-        .background(WindowGlassBackground().ignoresSafeArea())
+        .background(Theme.contentBackground.ignoresSafeArea())
     }
 }
 

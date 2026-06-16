@@ -18,7 +18,7 @@ struct EchoSidePanel: View {
             .padding(Tokens.Spacing.content)
         }
         .frame(minWidth: 240, idealWidth: 300, maxWidth: 360)
-        .background(WindowGlassBackground().ignoresSafeArea())
+        .background(Theme.contentBackground.ignoresSafeArea())
     }
 
     private var header: some View {
@@ -40,7 +40,7 @@ struct EchoSidePanel: View {
     }
 
     private func tag(_ t: String) -> some View {
-        Text(t).padding(.horizontal, 8).padding(.vertical, 3).glassCard(cornerRadius: Tokens.Radius.chip)
+        Text(t).padding(.horizontal, 8).padding(.vertical, 3).insetSurface(cornerRadius: Tokens.Radius.chip)
     }
 
     @ViewBuilder
@@ -66,7 +66,7 @@ struct EchoSidePanel: View {
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(Theme.confidenceColor(sk.confidence))
                 }
-                .padding(8).glassCard(cornerRadius: Tokens.Radius.button)
+                .padding(8).insetSurface(cornerRadius: Tokens.Radius.button)
             }
             if app.echoSkills.isEmpty { emptyHint("暂无技能") }
         }
@@ -84,7 +84,7 @@ struct EchoSidePanel: View {
                         Text(reasons.joined(separator: "·")).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
-                .padding(8).glassCard(cornerRadius: Tokens.Radius.button)
+                .padding(8).insetSurface(cornerRadius: Tokens.Radius.button)
             }
             if app.echoCandidates.isEmpty { emptyHint("暂无候选") }
         }
@@ -106,7 +106,7 @@ struct EchoSidePanel: View {
                     Button { app.deletePreference(p.id) } label: { Image(systemName: "trash") }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
-                .padding(8).glassCard(cornerRadius: Tokens.Radius.button)
+                .padding(8).insetSurface(cornerRadius: Tokens.Radius.button)
             }
             if app.echoPreferences.isEmpty { emptyHint("暂无偏好") }
         }
