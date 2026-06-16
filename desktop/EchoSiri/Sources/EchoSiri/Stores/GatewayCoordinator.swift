@@ -143,6 +143,26 @@ final class GatewayCoordinator {
         }
     }
 
+    /// 刷新 Echo 侧面板（M4 置信度 / M1 候选 / M5 偏好 / 状态）。
+    func refreshEchoPanel() {
+        Task { [weak self] in
+            guard let self else { return }
+            async let skills = try? self.echo.skills()
+            async let cands = try? self.echo.candidates()
+            async let prefs = try? self.echo.preferences()
+            async let status = try? self.echo.status()
+            let (s, c, p, st) = await (skills, cands, prefs, status)
+            self.app?.echoSkills = s ?? []
+            self.app?.echoCandidates = c ?? []
+            self.app?.echoPreferences = p ?? []
+            self.app?.echoStatus = st
+        }
+    }
+
+    func deletePreference(_ id: Int) {
+        Task { [weak self] in try? await self?.echo.deletePreference(id) }
+    }
+
     /// clarify 应答（M1 提名）。
     func respondClarify(requestId: String, answer: String) {
         guard let sid = currentSessionId else { return }

@@ -35,6 +35,11 @@ struct ConversationTopBar: View {
             Spacer()
             Button {} label: { Image(systemName: "magnifyingglass") }
                 .buttonStyle(.glassIcon)
+            Button { app.toggleEchoPanel() } label: {
+                Image(systemName: app.showEchoPanel ? "sidebar.right" : "waveform.path.ecg")
+            }
+            .buttonStyle(.glassIcon)
+            .help("Echo 面板")
             Menu {
                 Button("重命名…") {}
                 Button("压缩上下文") {}

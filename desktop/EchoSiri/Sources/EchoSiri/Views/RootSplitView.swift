@@ -15,13 +15,23 @@ struct RootSplitView: View {
                 )
                 .background(WindowGlassBackground().ignoresSafeArea())
         } detail: {
-            if app.selectedConversationId != nil {
-                ConversationPane(app: app)
-                    .frame(minWidth: Tokens.Size.detailMin)
-            } else {
-                WelcomeScreen(app: app)
-                    .frame(minWidth: Tokens.Size.detailMin)
+            HStack(spacing: 0) {
+                Group {
+                    if app.selectedConversationId != nil {
+                        ConversationPane(app: app)
+                    } else {
+                        WelcomeScreen(app: app)
+                    }
+                }
+                .frame(minWidth: Tokens.Size.detailMin)
+
+                if app.showEchoPanel {
+                    Divider()
+                    EchoSidePanel(app: app)
+                        .transition(.move(edge: .trailing))
+                }
             }
+            .animation(.smooth(duration: 0.2), value: app.showEchoPanel)
         }
         .frame(minWidth: Tokens.Size.windowMinWidth, minHeight: Tokens.Size.windowMinHeight)
     }

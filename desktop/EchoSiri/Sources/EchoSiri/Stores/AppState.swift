@@ -26,6 +26,13 @@ final class AppState {
     var scopeQuestion: ScopeQuestion?
     var clarifyPrompt: ClarifyPrompt?
 
+    // Echo 侧面板（M4 置信度 / M1 候选 / M5 偏好 / 状态）
+    var showEchoPanel = false
+    var echoSkills: [SkillConfidence] = []
+    var echoCandidates: [EchoCandidate] = []
+    var echoPreferences: [Preference] = []
+    var echoStatus: EchoStatus?
+
     var selectedConversation: ConversationSummary? {
         conversations.first { $0.id == selectedConversationId }
     }
@@ -102,6 +109,36 @@ final class AppState {
         transcript = []; ratingQueue = []
         scopeQuestion = nil; clarifyPrompt = nil
         if let coordinator { Task { await coordinator.newConversation() } }
+    }
+
+    func toggleEchoPanel() {
+        showEchoPanel.toggle()
+        guard showEchoPanel else { return }
+        if let coordinator { coordinator.refreshEchoPanel() }
+        else { loadEchoPanelMock() }
+    }
+
+    private func loadEchoPanelMock() {
+        echoStatus = .init(schemaVersion: 8, encoder: "neural",
+                           tableRows: ["echo_signal_event": 124, "echo_skill_confidence": 9])
+        echoSkills = [
+            .init(skillId: "ascii-art", skillName: "ASCII Art", confidence: 0.42, status: "pending_review", nSignals: 7),
+            .init(skillId: "rename-batch", skillName: "Batch Rename", confidence: 0.71, status: "active", nSignals: 12),
+            .init(skillId: "research-summary", skillName: "Research Summary", confidence: 0.88, status: "active", nSignals: 20),
+        ]
+        echoCandidates = [
+            .init(id: 142, score: 130, reasons: ["save_intent", "recurrence"]),
+            .init(id: 138, score: 60, reasons: ["tool≥5"]),
+        ]
+        echoPreferences = [
+            .init(id: 1, userMessage: "微服务架构图", compositeScore: 0.91, useCount: 3),
+            .init(id: 2, userMessage: "marketing email", compositeScore: 0.74, useCount: 1),
+        ]
+    }
+
+    func deletePreference(_ id: Int) {
+        echoPreferences.removeAll { $0.id == id }
+        coordinator?.deletePreference(id)
     }
 
     func togglePin(_ id: String) {

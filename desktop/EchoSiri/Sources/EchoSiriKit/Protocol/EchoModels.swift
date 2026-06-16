@@ -36,6 +36,9 @@ public struct EchoCandidate: Decodable, Identifiable, Sendable, Equatable {
     public let id: Int
     public let score: Int
     public let reasons: [String]?
+    public init(id: Int, score: Int, reasons: [String]?) {
+        self.id = id; self.score = score; self.reasons = reasons
+    }
 }
 
 /// M5 偏好库一项（GET /preferences）。
@@ -44,6 +47,10 @@ public struct Preference: Decodable, Identifiable, Sendable, Equatable {
     public let userMessage: String?
     public let compositeScore: Double?
     public let useCount: Int?
+    public init(id: Int, userMessage: String?, compositeScore: Double?, useCount: Int?) {
+        self.id = id; self.userMessage = userMessage
+        self.compositeScore = compositeScore; self.useCount = useCount
+    }
     private enum CodingKeys: String, CodingKey {
         case id
         case userMessage = "user_message"
@@ -60,6 +67,10 @@ public struct SkillConfidence: Decodable, Identifiable, Sendable, Equatable {
     public let confidence: Double
     public let status: String?
     public let nSignals: Int?
+    public init(skillId: String, skillName: String?, confidence: Double, status: String?, nSignals: Int?) {
+        self.skillId = skillId; self.skillName = skillName
+        self.confidence = confidence; self.status = status; self.nSignals = nSignals
+    }
     private enum CodingKeys: String, CodingKey {
         case confidence, status
         case skillId = "skill_id"
@@ -73,6 +84,9 @@ public struct EchoStatus: Decodable, Sendable, Equatable {
     public let schemaVersion: Int?
     public let encoder: String?
     public let tableRows: [String: Int]?
+    public init(schemaVersion: Int?, encoder: String?, tableRows: [String: Int]?) {
+        self.schemaVersion = schemaVersion; self.encoder = encoder; self.tableRows = tableRows
+    }
     private enum CodingKeys: String, CodingKey {
         case encoder
         case schemaVersion = "schema_version"
