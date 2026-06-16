@@ -154,6 +154,20 @@ def on_pre_llm_call(
         from .session_context import set_session_context
         set_session_context(str(session_id), (platform or None))
 
+    # M2 (v9): capture the user's scope pick from a prior turn's clarify result.
+    # clarify bypasses post_tool_call, but its result IS appended to the message
+    # list, so we scan conversation_history here. Runs before the turn_type gate
+    # because the clarify result lands on the turn AFTER the question was asked.
+    try:
+        from . import scope_clarify
+        from .session_context import get_session_id
+        scope_clarify.capture_scope_from_history(
+            get_session_id() or (str(session_id) if session_id else None),
+            _kwargs.get("conversation_history"),
+        )
+    except Exception as exc:
+        logger.debug("Echo on_pre_llm_call(scope capture) failed: %s", exc, exc_info=True)
+
     if turn_type in ("assistant", "tool", "system"):
         return
     # Resolve which skill invocation this turn's signals attach to.

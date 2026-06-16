@@ -907,64 +907,10 @@
   const FADE_MS = 320;
   const POLL_INTERVAL_MS = 5000;
 
-  // -------------------------------------------------------------------
-  // ScopeQuestion — appears in the chat:bottom slot when a new skill
-  // needs scope_level confirmation. Takes precedence over ThumbsBar so
-  // the user resolves the more time-sensitive question first.
-  // -------------------------------------------------------------------
-
-  function ScopeQuestion({ skill, onAnswered }) {
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState(null);
-
-    const submit = useCallback((level) => {
-      if (submitting) return;
-      setSubmitting(true);
-      setError(null);
-      apiPost("/scope", { skill_id: skill.skill_id, scope_level: level })
-        .then(() => onAnswered && onAnswered(skill.skill_id))
-        .catch((e) => {
-          setError(e.message || String(e));
-          setSubmitting(false);
-        });
-    }, [skill, submitting, onAnswered]);
-
-    return h("div", {
-      className:
-        "flex flex-wrap items-center gap-3 px-3 py-2 text-xs " +
-        "border-t border-amber-900/40 bg-amber-950/20",
-    },
-      h("span", { className: "text-amber-300 font-medium" }, "Echo · scope?"),
-      h("span", { className: "text-zinc-400" },
-        "Just created ",
-        h("span", { className: "font-mono text-zinc-200" }, skill.skill_id),
-        ". When you do something similar next time, should I:",
-      ),
-      h("button", {
-        className: cn(
-          "px-2 py-1 rounded border border-zinc-700",
-          "hover:border-amber-500 hover:bg-amber-950/40",
-          submitting && "opacity-50 pointer-events-none",
-        ),
-        title: "Reuse this approach across similar tasks",
-        onClick: () => submit("broad"),
-        disabled: submitting,
-      }, "A · reuse the whole approach"),
-      h("button", {
-        className: cn(
-          "px-2 py-1 rounded border border-zinc-700",
-          "hover:border-amber-500 hover:bg-amber-950/40",
-          submitting && "opacity-50 pointer-events-none",
-        ),
-        title: "Borrow the methodology only; redo specifics each time",
-        onClick: () => submit("narrow"),
-        disabled: submitting,
-      }, "B · only the general idea"),
-      error
-        ? h("span", { className: "text-rose-400 ml-2" }, error)
-        : null,
-    );
-  }
+  // NOTE: the old ScopeQuestion chat:bottom widget was removed in v9. M2 scope
+  // confirmation now happens in-conversation via Hermes' clarify tool (Echo
+  // generates 2-4 applicability options with its aux LLM and nudges the agent
+  // to ask). See plugins/echo_signals/scope_clarify.py.
 
   function ThumbsBar(props) {
     // sessionId: the live PTY conversation id, handed in by ChatPage through
@@ -997,18 +943,12 @@
     const [shown, setShown] = useState(false); // opacity target for the fade
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(null);
-    const [pendingScope, setPendingScope] = useState(null);
-    // Local ack list of skills the user already answered scope for this
-    // session — prevents the question from flashing back if the API
-    // poll races the local write.
-    const [scopeAnswered, setScopeAnswered] = useState(new Set());
 
     // The head of the queue is the invocation currently up for rating.
     const current = queue.length ? queue[0] : null;
     const currentId = current ? current.invocation_id : null;
 
-    // Poll both endpoints. ScopeQuestion takes precedence in the render
-    // when pendingScope is non-null.
+    // Poll the recent-invocations endpoint for this conversation's rating queue.
     useEffect(() => {
       let cancelled = false;
       function tick() {
@@ -1016,7 +956,6 @@
         // prior conversation's skill from leaking into a fresh chat.
         if (!sessionId) {
           setQueue([]);
-          setPendingScope(null);
           return;
         }
         apiGet(
@@ -1054,34 +993,11 @@
             if (cancelled) return;
             setError(e.message || String(e));
           });
-        apiGet(
-          "/scope/pending?limit=1&session_id=" +
-            encodeURIComponent(sessionId),
-        )
-          .then((d) => {
-            if (cancelled) return;
-            const first = (d.pending || []).find(
-              (p) => !scopeAnswered.has(p.skill_id),
-            );
-            setPendingScope(first || null);
-          })
-          .catch(() => { /* non-fatal — scope polling is opportunistic */ });
       }
       tick();
       const id = setInterval(tick, POLL_INTERVAL_MS);
       return () => { cancelled = true; clearInterval(id); };
-    }, [scopeAnswered, sessionId]);
-
-    // When the user resolves a scope question, dismiss it locally so the
-    // poll doesn't re-show it before the backend update propagates.
-    const onScopeAnswered = useCallback((skill_id) => {
-      setScopeAnswered((prev) => {
-        const next = new Set(prev);
-        next.add(skill_id);
-        return next;
-      });
-      setPendingScope(null);
-    }, []);
+    }, [sessionId]);
 
     // Reset the per-item interaction whenever the queue head changes (advance
     // to the next invocation, or the queue drains to null). Hook — stays above
@@ -1167,14 +1083,6 @@
     // ---- render (all hooks above have already run) ---------------------
 
     if (!sessionId) return null;
-
-    // Session-scoped scope confirmation takes priority over rating.
-    if (pendingScope) {
-      return h(ScopeQuestion, {
-        skill: pendingScope,
-        onAnswered: onScopeAnswered,
-      });
-    }
 
     // Queue empty and fade-out finished → nothing mounted.
     if (!displayItem) return null;

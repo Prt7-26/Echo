@@ -41,6 +41,12 @@ def real_nomination():
     return None
 
 
+@pytest.fixture
+def real_scope():
+    """Marker fixture — request this to bypass the scope-async stub below."""
+    return None
+
+
 @pytest.fixture(autouse=True)
 def _stub_judge_async(monkeypatch, request):
     """Stub ``judge.start_judge_async`` unless the test requested
@@ -91,4 +97,22 @@ def _stub_nomination_async(monkeypatch, request):
         return None
 
     monkeypatch.setattr(nom, "_start_dedup_async", _noop)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _stub_scope_async(monkeypatch, request):
+    """Stub ``scope_clarify.start_scope_options_async`` unless the test
+    requested ``real_scope`` — so a skill_manage(create) in tests doesn't spawn
+    a real daemon thread hitting the echo_scope aux-LLM."""
+    if "real_scope" in request.fixturenames:
+        yield
+        return
+
+    from plugins.echo_signals import scope_clarify as scl
+
+    def _noop(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(scl, "start_scope_options_async", _noop)
     yield

@@ -54,6 +54,7 @@ TASK_CLASSIFIER = "echo_classifier"
 TASK_JUDGE = "echo_judge"
 TASK_REASON_SCORE = "echo_reason_score"
 TASK_SKILL_DEDUP = "echo_skill_dedup"
+TASK_SCOPE = "echo_scope"
 
 
 def _load_config() -> dict:
@@ -136,3 +137,7 @@ def reason_scorer_enabled() -> bool:
 
 def skill_dedup_enabled() -> bool:
     return aux_enabled_for(TASK_SKILL_DEDUP)
+
+
+def scope_enabled() -> bool:
+    return aux_enabled_for(TASK_SCOPE)

@@ -65,7 +65,14 @@ import sqlite3
 #          records the decision (ask / inform / create / skip) here, so it
 #          asks at most once per conversation and the inject channel knows
 #          what nudge (if any) to append on the next turn.
-ECHO_SCHEMA_VERSION = 8
+# v8 → v9: M2 scope confirmation moved from the dashboard widget to an
+#          in-conversation clarify question. echo_skill_scope gains
+#          scope_options (JSON of the 2-4 Echo-generated applicability
+#          choices), scope_choice (the option the user picked, captured from
+#          the clarify result in conversation history), and scope_state
+#          ('pending'|'options_ready'|'asked'|'confirmed') to drive the
+#          generate→inject→capture flow.
+ECHO_SCHEMA_VERSION = 9
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +174,13 @@ CREATE TABLE IF NOT EXISTS echo_skill_scope (
     -- scope-confirmation prompt is bound to this session so a skill created
     -- in conversation A never pops its question in conversation B.
     session_id            TEXT,
+    -- v9: in-conversation clarify scope flow. scope_options is a JSON array of
+    -- the 2-4 Echo-generated applicability choices; scope_choice is the option
+    -- the user picked (captured from the clarify result); scope_state drives
+    -- generate→ask→capture (pending/options_ready/asked/confirmed).
+    scope_options         TEXT,
+    scope_choice          TEXT,
+    scope_state           TEXT    NOT NULL DEFAULT 'pending',
     FOREIGN KEY (skill_id) REFERENCES echo_skill_confidence(skill_id)
         ON DELETE CASCADE,
     CHECK (scope_level IN ('broad', 'narrow', 'unknown'))
@@ -344,6 +358,12 @@ def ensure_echo_schema(conn: sqlite3.Connection) -> None:
     )
     _add_column_if_missing(
         cursor, "echo_user_request_log", "recurrence_sim", "REAL"
+    )
+    # v9: M2 scope confirmation via in-conversation clarify.
+    _add_column_if_missing(cursor, "echo_skill_scope", "scope_options", "TEXT")
+    _add_column_if_missing(cursor, "echo_skill_scope", "scope_choice", "TEXT")
+    _add_column_if_missing(
+        cursor, "echo_skill_scope", "scope_state", "TEXT NOT NULL DEFAULT 'pending'"
     )
 
     # Record / refresh schema version. INSERT on first run, UPDATE later.
