@@ -33,8 +33,12 @@ struct RootSplitView: View {
                 }
             }
             .animation(.smooth(duration: 0.2), value: app.showEchoPanel)
+            // 窗口要透明才能让 sidebar 透出桌面 → 右侧内容列必须自带实底兜底。
+            .background(Theme.contentBackground)
         }
         .frame(minWidth: Tokens.Size.windowMinWidth, minHeight: Tokens.Size.windowMinHeight)
+        // 让承载窗口非不透明：sidebar 的 .behindWindow vibrancy 才能真正透出桌面。
+        .background(WindowVibrancyConfigurator())
     }
 }
 

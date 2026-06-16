@@ -24,7 +24,7 @@ struct ConversationCard: View {
         }
         .padding(Tokens.Spacing.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .contentCard(cornerRadius: Tokens.Radius.card, selected: isSelected)  // HIG: 列表项=内容层=实底
+        .contentCard(cornerRadius: Tokens.Radius.cardLarge, selected: isSelected)  // HIG: 列表项=内容层=实底
         .scaleEffect(isSelected ? 1.015 : 1)
         .animation(.smooth(duration: 0.18), value: isSelected)
         .onHover { hovering = $0 }

@@ -8,6 +8,7 @@ enum Tokens {
     enum Radius {
         static let window: CGFloat = 18
         static let card: CGFloat = 14
+        static let cardLarge: CGFloat = 20   // 侧栏会话卡（更圆润，对齐 Siri）
         static let button: CGFloat = 10
         static let image: CGFloat = 12
         static let chip: CGFloat = 8
@@ -15,8 +16,8 @@ enum Tokens {
 
     // MARK: 间距
     enum Spacing {
-        static let cardGutter: CGFloat = 12
-        static let cardPadding: CGFloat = 10
+        static let cardGutter: CGFloat = 16   // 侧栏卡片间距（更大，对齐 Siri）
+        static let cardPadding: CGFloat = 12
         static let content: CGFloat = 16
         static let tight: CGFloat = 6
         static let loose: CGFloat = 24

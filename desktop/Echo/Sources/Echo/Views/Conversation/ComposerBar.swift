@@ -6,13 +6,13 @@ struct ComposerBar: View {
     @FocusState private var focused: Bool
 
     var body: some View {
+        // 三个独立玻璃组件：+（圆）/ 文本框（长胶囊）/ 麦克风（圆）——
+        // 各自独立的 Liquid Glass 包围，符合 Apple 设计规范。
         HStack(spacing: 10) {
             Button { /* Phase 4: 附件/动作菜单 */ } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .medium))
-                    .frame(width: 26, height: 26)
             }
-            .buttonStyle(.glassIcon)
+            .buttonStyle(.glassIcon)   // 独立圆形玻璃
 
             TextField("Ask Echo…", text: $app.composerText, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -20,18 +20,16 @@ struct ComposerBar: View {
                 .lineLimit(1...6)
                 .focused($focused)
                 .onSubmit(submit)
+                .padding(.horizontal, 18)
+                .frame(minHeight: GlassIcon.diameter)
+                .glassPanel(cornerRadius: GlassIcon.diameter / 2)   // 独立长胶囊玻璃
 
             Button(action: trailingAction) {
                 Image(systemName: app.isResponding ? "stop.fill" : "mic.fill")
-                    .font(.system(size: 15, weight: .medium))
-                    .frame(width: 26, height: 26)
                     .foregroundStyle(app.isResponding ? Theme.Signal.negative : Theme.accent)
             }
-            .buttonStyle(.glassIcon)
+            .buttonStyle(.glassIcon)   // 独立圆形玻璃
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .glassPanel(cornerRadius: 24)
         .padding(.horizontal, Tokens.Spacing.loose)
         .padding(.bottom, Tokens.Spacing.content)
     }
