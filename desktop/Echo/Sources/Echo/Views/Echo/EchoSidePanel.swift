@@ -23,7 +23,7 @@ struct EchoSidePanel: View {
 
     private var header: some View {
         HStack {
-            Image(systemName: "waveform.path.ecg").foregroundStyle(Theme.accent)
+            EchoLogo(size: 16, weight: .medium)
             Text("ECHO").font(.headline).tracking(2)
             Spacer()
             Button { app.toggleEchoPanel() } label: { Image(systemName: "sidebar.right") }

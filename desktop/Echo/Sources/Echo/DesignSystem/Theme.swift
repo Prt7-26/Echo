@@ -7,6 +7,9 @@ enum Theme {
     /// Echo 主强调色 sonar-teal（对齐 plugins/echo_signals/skin/echo.yaml）。
     static let accent = Color(red: 0.10, green: 0.66, blue: 0.62)
 
+    /// Echo 品牌标记：波形/脉冲线。单一来源，改一处即可全局生效。
+    static let logoSymbol = "waveform.path.ecg"
+
     /// 用户气泡底色（浅灰 pill）。
     static let userBubble = Color.secondary.opacity(0.14)
 

@@ -36,7 +36,7 @@ struct ConversationTopBar: View {
             Button {} label: { Image(systemName: "magnifyingglass") }
                 .buttonStyle(.glassIcon)
             Button { app.toggleEchoPanel() } label: {
-                Image(systemName: app.showEchoPanel ? "sidebar.right" : "waveform.path.ecg")
+                Image(systemName: app.showEchoPanel ? "sidebar.right" : Theme.logoSymbol)
             }
             .buttonStyle(.glassIcon)
             .help("Echo 面板")

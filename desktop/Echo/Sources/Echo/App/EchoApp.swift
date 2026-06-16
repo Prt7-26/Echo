@@ -30,8 +30,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        // swift-run 没有 .icns bundle → dock 是通用图标。用 Echo 波形标记现绘一个
+        // dock 图标（与界面 EchoLogo 同源符号）。打分发版时再换成真正的 AppIcon.icns。
+        if let icon = AppDelegate.makeDockIcon() { NSApp.applicationIconImage = icon }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    /// 现绘 dock 图标：圆角浅底 + sonar-teal 波形标记（Theme.logoSymbol 同源）。
+    static func makeDockIcon() -> NSImage? {
+        let teal = NSColor(red: 0.10, green: 0.66, blue: 0.62, alpha: 1)
+        let side: CGFloat = 512
+        let img = NSImage(size: NSSize(width: side, height: side))
+        img.lockFocus()
+        defer { img.unlockFocus() }
+
+        // 圆角底板（macOS 圆角矩形比例 ≈ 0.225 * 边长）。
+        let inset: CGFloat = 36
+        let plate = NSRect(x: inset, y: inset, width: side - inset * 2, height: side - inset * 2)
+        let radius = plate.width * 0.225
+        let bg = NSBezierPath(roundedRect: plate, xRadius: radius, yRadius: radius)
+        NSColor(calibratedWhite: 0.98, alpha: 1).setFill()
+        bg.fill()
+
+        // 波形标记，teal 着色，居中。
+        let cfg = NSImage.SymbolConfiguration(pointSize: 256, weight: .regular)
+            .applying(.init(paletteColors: [teal]))
+        if let sym = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: "Echo")?
+            .withSymbolConfiguration(cfg) {
+            let s = sym.size
+            let r = NSRect(x: (side - s.width) / 2, y: (side - s.height) / 2, width: s.width, height: s.height)
+            sym.draw(in: r)
+        }
+        return img
+    }
 }
 
 /// 菜单栏 Conversation 菜单（线框图 W1 菜单栏）。

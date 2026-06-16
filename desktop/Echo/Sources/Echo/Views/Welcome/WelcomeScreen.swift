@@ -9,9 +9,7 @@ struct WelcomeScreen: View {
             Theme.contentBackground.ignoresSafeArea()
             VStack(spacing: Tokens.Spacing.loose) {
                 Spacer()
-                Image(systemName: "sparkles")
-                    .font(.system(size: 44, weight: .light))
-                    .foregroundStyle(Theme.accent)
+                EchoLogo(size: 46, weight: .regular)
                 Text("Echo")
                     .font(.system(.largeTitle, design: .serif))
                 Text("开始一段对话，或从左侧打开历史")
