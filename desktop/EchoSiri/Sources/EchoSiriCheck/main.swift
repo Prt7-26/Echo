@@ -11,6 +11,7 @@ runner.check("kit version is set") {
 }
 
 registerProtocolChecks(runner)
+registerMarkdownChecks(runner)
 registerServiceChecks(runner)
 registerLiveChecks(runner)   // 仅 ECHOSIRI_LIVE=1 时挂载
 

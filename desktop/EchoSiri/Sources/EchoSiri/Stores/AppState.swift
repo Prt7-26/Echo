@@ -137,7 +137,7 @@ final class AppState {
                 items.append(.user(.init(id: UUID().uuidString, text: m.text ?? "")))
             case .assistant:
                 items.append(.assistant(.init(id: UUID().uuidString,
-                                              blocks: (m.text?.isEmpty ?? true) ? [] : [.paragraph(m.text!)])))
+                                              blocks: Self.renderBlocks(from: m.text ?? ""))))
             case .system, .tool:
                 break
             }
@@ -259,7 +259,7 @@ final class AppState {
         let id = streamingId ?? UUID().uuidString
         let msg = AssistantMessage(
             id: id,
-            blocks: text.isEmpty ? [] : [.paragraph(text)],   // Phase 3+: Markdown 解析成多块
+            blocks: Self.renderBlocks(from: text),   // Markdown → 富文本多块
             toolActivities: streamingTools,
             reasoning: reasoning ?? (streamingReasoning.isEmpty ? nil : streamingReasoning),
             usage: usage.map { UsageLite(durationS: nil, tokens: $0.total, model: $0.model) },
@@ -275,5 +275,18 @@ final class AppState {
         statusLine = nil
         // Phase 4: 拉 /invocations/recent 显示评分
         coordinator?.refreshRatingQueue()
+    }
+
+    /// Kit Markdown 块 → UI ResponseBlock。
+    static func renderBlocks(from text: String) -> [ResponseBlock] {
+        guard !text.isEmpty else { return [] }
+        return MarkdownParser.parse(text).map { block in
+            switch block {
+            case .paragraph(let p): return .paragraph(p)
+            case .heading(_, let t): return .heading(t)
+            case .bullets(let items): return .bullets(items)
+            case .code(let lang, let body): return .code(language: lang, text: body)
+            }
+        }
     }
 }
