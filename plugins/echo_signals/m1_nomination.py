@@ -160,52 +160,88 @@ def _build_nudge(state: str, task_text: str, dedup_skill: Optional[str],
     English so tool-calling is unambiguous."""
     if state == "ask":
         return (
-            "[Echo 提示] 你和用户的这段对话看起来是一个可复用的工作流程，"
-            "而技能库里还没有类似的技能。请在回答完用户当前的问题之后，"
-            "使用 clarify 工具询问用户是否要把这个流程保存成一个新技能"
-            "（选项例如：是，保存为技能 / 不用了）。如果用户选择「是」，"
-            "请用 skill_manage 工具（action=create）创建这个技能。" + _SCOPE_ASK_SUFFIX +
-            "如果用户当前的话与保存技能无关，正常回答即可。"
+            "[Echo 系统指令——必须执行工具调用，不能只用文字] "
+            "这段对话已达到「值得沉淀为可复用技能」的标准，且技能库中没有同类技能。"
+            "在你对用户当前消息给出正常回复之后，你**必须立即调用 clarify 工具**"
+            "（不要用普通文字提问，必须发起真正的工具调用）向用户确认是否把这个工作"
+            "流程保存为新技能，clarify 的 choices 必须是 [\"是，保存为技能\", \"不用了\"]。"
+            "若用户选「是」，**立即调用 skill_manage(action=create)** 创建该技能。"
+            + _SCOPE_ASK_SUFFIX +
+            "这是后台技能管理流程的强制步骤，请务必通过工具调用完成，不得跳过、"
+            "不得仅用文字描述。"
         )
     if state == "inform":
         sk = dedup_skill or "(unknown)"
         why = f"（{dedup_reason}）" if dedup_reason else ""
         return (
-            f"[Echo 提示] 用户希望把这个流程保存为技能，但技能库里已经有一个"
-            f"功能类似的技能「{sk}」{why}。请先告知用户已存在「{sk}」，"
-            f"再用 clarify 工具询问：直接复用现有的「{sk}」，还是仍要新建一个"
-            f"（选项例如：复用现有 / 新建一个）。如果用户选择新建，"
-            f"请用 skill_manage 工具（action=create）创建。" + _SCOPE_ASK_SUFFIX
+            f"[Echo 系统指令——必须执行工具调用，不能只用文字] "
+            f"用户希望把这个流程保存为技能，但技能库里已有一个功能类似的技能「{sk}」{why}。"
+            f"请先用一句话告知用户已存在「{sk}」，然后**必须立即调用 clarify 工具**询问："
+            f"直接复用现有的「{sk}」还是仍要新建一个，choices 必须是 "
+            f"[\"复用现有的{sk}\", \"新建一个\"]。若用户选新建，**立即调用 "
+            f"skill_manage(action=create)** 创建。" + _SCOPE_ASK_SUFFIX +
+            f"务必通过工具调用完成。"
         )
     if state == "create":
         return (
-            "[Echo 提示] 用户明确希望把这个流程保存为技能，且技能库里没有"
-            "功能类似的技能。请用 skill_manage 工具（action=create）把它"
-            "创建为一个新技能；创建前可以简要和用户确认一下技能名称。"
-            + _SCOPE_ASK_SUFFIX
+            "[Echo 系统指令——必须执行工具调用，不能只用文字] "
+            "用户明确希望把这个流程保存为技能，且技能库里没有同类技能。"
+            "请**立即调用 skill_manage(action=create)** 把它创建为一个新技能"
+            "（如需技能名可先用一句话与用户确认）。" + _SCOPE_ASK_SUFFIX +
+            "务必通过工具调用完成，不得仅用文字描述。"
         )
     return None
 
 
-def consume_nudge(session_id: Optional[str]) -> Optional[str]:
-    """Return the pending nudge directive for this session and mark it
-    consumed (state→'done'), or None if there's nothing to inject.
+# How many turns to keep re-injecting the ask/create directive. A fast model
+# can ignore the first nudge; re-emitting for a few turns raises the odds the
+# clarify/skill_manage tool call actually happens. Re-injection stops early as
+# soon as a skill is created in the session.
+MAX_NUDGES = 3
 
-    Marking consumed in the same call guarantees the nudge is injected at
-    most once even though the inject channel may fire on every turn.
+
+def _skill_created_in_session(conn, session_id: str) -> bool:
+    """True once any skill has been created in this conversation (scope_dialog
+    writes an echo_skill_scope row on skill_manage create). Used to stop
+    re-nudging — the flow succeeded, or the agent already created something."""
+    row = conn.execute(
+        "SELECT 1 FROM echo_skill_scope WHERE session_id = ? LIMIT 1",
+        (session_id,),
+    ).fetchone()
+    return row is not None
+
+
+def consume_nudge(session_id: Optional[str]) -> Optional[str]:
+    """Return the ask/create directive for this session, re-emitting it for up
+    to MAX_NUDGES turns until the agent actually creates a skill.
+
+    A fast model often ignores a single injected nudge, so we keep the
+    directive live for a few turns. We stop (state→'done') as soon as a skill
+    is created in the session, or the cap is reached.
     """
     if not session_id:
         return None
     try:
         conn = get_echo_conn()
         row = conn.execute(
-            "SELECT state, task_text, dedup_skill, dedup_reason "
-            "FROM echo_session_nomination "
-            "WHERE session_id = ? AND nudged_at IS NULL",
+            "SELECT state, task_text, dedup_skill, dedup_reason, nudge_count "
+            "FROM echo_session_nomination WHERE session_id = ?",
             (session_id,),
         ).fetchone()
         if row is None or row["state"] not in _NUDGE_STATES:
             return None
+
+        # Success / give-up stop conditions → retire the nudge.
+        if _skill_created_in_session(conn, session_id) or \
+                int(row["nudge_count"] or 0) >= MAX_NUDGES:
+            conn.execute(
+                "UPDATE echo_session_nomination "
+                "SET state = 'done', nudged_at = ? WHERE session_id = ?",
+                (time.time(), session_id),
+            )
+            conn.commit()
+            return None
+
         text = _build_nudge(
             row["state"], row["task_text"] or "",
             row["dedup_skill"], row["dedup_reason"],
@@ -214,7 +250,8 @@ def consume_nudge(session_id: Optional[str]) -> Optional[str]:
             return None
         conn.execute(
             "UPDATE echo_session_nomination "
-            "SET state = 'done', nudged_at = ? WHERE session_id = ?",
+            "SET nudged_at = ?, nudge_count = nudge_count + 1 "
+            "WHERE session_id = ?",
             (time.time(), session_id),
         )
         conn.commit()

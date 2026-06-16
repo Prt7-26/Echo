@@ -154,14 +154,30 @@ class TestConsumeNudge:
         conn.commit()
 
     @pytest.mark.parametrize("state", ["ask", "inform", "create"])
-    def test_returns_text_and_marks_done(self, isolated_db, state):
+    def test_reinjects_until_cap(self, isolated_db, state):
         echo_db.get_echo_conn()
         self._seed("n1", state, dedup_skill="email-draft")
-        text = nom.consume_nudge("n1")
-        assert text and "Echo" in text
-        # consumed → second call returns None, row is 'done'
+        # Re-emits for MAX_NUDGES turns (the model may ignore early nudges).
+        for i in range(nom.MAX_NUDGES):
+            text = nom.consume_nudge("n1")
+            assert text and "Echo" in text
+            assert _row("n1")["nudge_count"] == i + 1
+        # Cap reached → retires.
         assert nom.consume_nudge("n1") is None
         assert _row("n1")["state"] == "done"
+
+    def test_stops_when_skill_created(self, isolated_db):
+        conn = echo_db.get_echo_conn()
+        self._seed("n1b", "ask")
+        nom.consume_nudge("n1b")  # one nudge out
+        # A skill gets created in the session → scope_dialog writes a scope row.
+        now = time.time()
+        conn.execute("INSERT INTO echo_skill_confidence (skill_id, created_at, updated_at) VALUES ('new-skill', ?, ?)", (now, now))
+        conn.execute("INSERT INTO echo_skill_scope (skill_id, scope_level, created_at, updated_at, session_id) VALUES ('new-skill','unknown',?,?,'n1b')", (now, now))
+        conn.commit()
+        # Next consume sees the created skill → retires, no more nudging.
+        assert nom.consume_nudge("n1b") is None
+        assert _row("n1b")["state"] == "done"
 
     def test_skip_state_no_nudge(self, isolated_db):
         echo_db.get_echo_conn()
@@ -231,8 +247,10 @@ class TestIntegration:
             )
             assert out is not None
             assert "Echo" in out["context"]
-            # consumed → row is now 'done', second inject has no nudge
-            assert _row("inj-1")["state"] == "done"
+            # one nudge emitted; still live (re-injects up to the cap) until a
+            # skill is created or MAX_NUDGES is reached.
+            assert _row("inj-1")["nudge_count"] == 1
+            assert _row("inj-1")["state"] == "ask"
         finally:
             sc.clear_session_context()
 

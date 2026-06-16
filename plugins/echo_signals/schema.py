@@ -72,7 +72,12 @@ import sqlite3
 #          the clarify result in conversation history), and scope_state
 #          ('pending'|'options_ready'|'asked'|'confirmed') to drive the
 #          generate→inject→capture flow.
-ECHO_SCHEMA_VERSION = 9
+# v9 → v10: echo_session_nomination.nudge_count — the inject channel re-emits
+#          the "ask the user (via clarify)" directive for a few turns instead
+#          of once, because a fast model can ignore the first injected nudge.
+#          Re-injection stops as soon as a skill is created in the session or
+#          the cap is hit.
+ECHO_SCHEMA_VERSION = 10
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +305,11 @@ CREATE TABLE IF NOT EXISTS echo_session_nomination (
     task_text       TEXT,
     created_at      REAL    NOT NULL,
     decided_at      REAL,
-    nudged_at       REAL
+    nudged_at       REAL,
+    -- v10: how many times the ask/create directive has been injected. The
+    -- inject channel re-emits for a few turns (a fast model can ignore the
+    -- first nudge) and stops once a skill is created or the cap is reached.
+    nudge_count     INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -364,6 +373,10 @@ def ensure_echo_schema(conn: sqlite3.Connection) -> None:
     _add_column_if_missing(cursor, "echo_skill_scope", "scope_choice", "TEXT")
     _add_column_if_missing(
         cursor, "echo_skill_scope", "scope_state", "TEXT NOT NULL DEFAULT 'pending'"
+    )
+    # v10: nomination re-injection counter.
+    _add_column_if_missing(
+        cursor, "echo_session_nomination", "nudge_count", "INTEGER NOT NULL DEFAULT 0"
     )
 
     # Record / refresh schema version. INSERT on first run, UPDATE later.
