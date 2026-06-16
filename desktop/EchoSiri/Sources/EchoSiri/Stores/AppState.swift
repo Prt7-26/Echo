@@ -86,4 +86,32 @@ final class AppState {
         statusLine = nil
         // Phase 3: gateway.interrupt(...)
     }
+
+    /// 评分状态推进。回 idle 视为撤销；提交（从 reason/rated 回 idle）出队。
+    func advanceRating(_ newState: RatingItem.RatingState) {
+        guard var head = ratingQueue.first else { return }
+        let wasRated: Bool
+        if case .idle = head.state { wasRated = false } else { wasRated = true }
+
+        if case .idle = newState, wasRated {
+            // 从已评分回到 idle：撤销，保留在队首待重评
+            head.state = .idle
+            ratingQueue[0] = head
+            return
+        }
+        if case .idle = newState, !wasRated {
+            // idle→idle 不会发生；忽略
+            return
+        }
+        // 提交路径：reason/rated 之后再回 idle 由上面处理；这里更新中间态
+        head.state = newState
+        ratingQueue[0] = head
+        // Phase 4: 当提交（窗口到期或点提交）时 → EchoAPIClient.sendFeedback + 出队
+    }
+
+    /// 提交当前评分并出队（Phase 4 接 /feedback）。
+    func commitRating() {
+        guard !ratingQueue.isEmpty else { return }
+        ratingQueue.removeFirst()
+    }
 }
