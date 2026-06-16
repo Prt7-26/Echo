@@ -131,9 +131,13 @@ public enum GatewayEvent: Sendable {
     case other(name: String)
 }
 
-/// 事件 + 其会话 id 的组合，投递到 Stores。
+/// 事件 + 会话 id 的组合，投递到 Stores。
+/// `sessionKey` 是 Echo 扩展的 Hermes 真实会话 id（评分/scope 作用域要用它）。
 public struct ParsedEvent: Sendable {
     public let sid: String?
+    public let sessionKey: String?
     public let event: GatewayEvent
-    public init(sid: String?, event: GatewayEvent) { self.sid = sid; self.event = event }
+    public init(sid: String?, sessionKey: String? = nil, event: GatewayEvent) {
+        self.sid = sid; self.sessionKey = sessionKey; self.event = event
+    }
 }

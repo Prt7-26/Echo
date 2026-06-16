@@ -10,6 +10,15 @@ public actor GatewayClient {
 
     public private(set) var state: State = .disconnected
 
+    /// 单次 call 的超时（秒）。长任务如 prompt.submit 立即返回 {ok}，真正输出走事件，
+    /// 所以普通 call 不该久等。
+    public var callTimeout: Double = 30
+    public func setCallTimeout(_ seconds: Double) { callTimeout = seconds }
+
+    /// 调试：每收到一帧原始数据回调一次（诊断用）。
+    private var onRawFrame: (@Sendable (Data) -> Void)?
+    public func setRawFrameLogger(_ cb: (@Sendable (Data) -> Void)?) { onRawFrame = cb }
+
     private var transport: GatewayTransport?
     private var nextId = 1
     private var pending: [Int: CheckedContinuation<Data, Error>] = [:]
@@ -60,11 +69,16 @@ public actor GatewayClient {
         let req = RPCRequest(id: id, method: method, params: params)
         let data = try JSONEncoder().encode(req)
 
+        let timeout = callTimeout
         let respData: Data = try await withCheckedThrowingContinuation { cont in
             pending[id] = cont
             Task {
                 do { try await transport.send(data) }
-                catch { resumePending(id, throwing: error) }
+                catch { await self.resumePending(id, throwing: error) }
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                await self.timeoutPending(id)
             }
         }
         let resp = try GatewayDecoder.decodeResponse(R.self, from: respData)
@@ -95,6 +109,7 @@ public actor GatewayClient {
     }
 
     private func handle(_ data: Data) {
+        onRawFrame?(data)
         switch GatewayDecoder.classify(data) {
         case .response(let id):
             resumePending(id, returning: data)
@@ -114,6 +129,9 @@ public actor GatewayClient {
     }
     private func resumePending(_ id: Int, throwing error: Error) {
         if let cont = pending.removeValue(forKey: id) { cont.resume(throwing: error) }
+    }
+    private func timeoutPending(_ id: Int) {
+        if let cont = pending.removeValue(forKey: id) { cont.resume(throwing: GatewayError.timeout) }
     }
     private func failAllPending(_ error: Error) {
         let conts = pending; pending.removeAll()

@@ -53,41 +53,53 @@
 │  AppStore · ConversationListStore · ConversationStore · EchoSignalStore · TurnStore   │
 │       ▲ async/await + Combine/AsyncStream                                             │
 │  服务层                                                                                │
-│  ├─ GatewayClient   ── WebSocket JSON-RPC ──┐  对话/工具/审批/clarify/语音            │
-│  ├─ EchoAPIClient   ── HTTPS REST ───────────┤  Echo 信号/反馈/scope/M1/置信度        │
-│  └─ BackendSupervisor ── 探活/拉起/停止 ──────┘  (依决策 §14.2)                       │
-└──────────────────────────────────────────────┼───────────────────────────────────────┘
-                                                │  ws://127.0.0.1:9119/api/ws
-                                                │  http://127.0.0.1:9119/api/plugins/echo_signals/*
+│  ├─ GatewayClient ── stdio NDJSON JSON-RPC ─┐  对话/工具/审批/clarify/语音            │
+│  │     (StdioSubprocessTransport spawn)     │                                         │
+│  ├─ EchoAPIClient   ── HTTP REST ────────────┤  Echo 信号/反馈/scope/M1/置信度        │
+│  └─ BackendLocator ── 定位 python+repo ──────┘  (探活/拉起依决策 §14.2)               │
+└──────────┬───────────────────────────────────┼───────────────────────────────────────┘
+   spawn   │ stdin/stdout 管道                  │  http://127.0.0.1:9119/api/plugins/echo_signals/*
+           ▼                                    │  (仅 Echo 信号需要 dashboard 在跑)
                   ┌─────────────────────────────┴──────────────────────────────┐
-                  │  Echo 后端（沿用 ./echo dash --tui 的拉起方式）              │
+                  │  Echo 后端                                                    │
                   │  ┌────────────────────────┐   ┌──────────────────────────┐   │
-                  │  │ tui_gateway/server.py  │   │ Hermes Dashboard (FastAPI)│   │
-                  │  │  dispatch() + _emit()  │◀──│  ws.py: handle_ws()        │   │
-                  │  │  JSON-RPC (NDJSON)     │   │  /api/plugins/echo_signals │   │
-                  │  └──────────┬─────────────┘   └──────────┬───────────────┘   │
+                  │  │ python -m              │   │ Hermes Dashboard (FastAPI)│   │
+                  │  │   tui_gateway.entry    │   │  /api/plugins/echo_signals │   │
+                  │  │  dispatch() + _emit()  │   │  (echo_signals 插件 REST) │   │
+                  │  │  JSON-RPC (NDJSON/stdio)│   └──────────┬───────────────┘   │
+                  │  └──────────┬─────────────┘              │                     │
                   │             └── AIAgent.run_conversation() (run_agent.py) ──┘   │
                   │                         │                                          │
                   │             sessions.db (Hermes 会话 + echo_* 信号表)             │
                   └────────────────────────────────────────────────────────────────┘
 ```
 
-**核心判断：复用 gateway，不造新协议。**
-`tui_gateway/ws.py` 顶部文档原话：「Reuses `tui_gateway.server.dispatch` verbatim so every RPC method … flows through the same handlers whether the client is Ink over stdio or an iOS/web client over WebSocket.」——新 App 就是它设想的「web/iOS client」。
-- 线协议与 stdio 完全一致：**双向 newline-delimited JSON-RPC**，连接建立后服务端先发 `gateway.ready` 事件。
-- `ui-tui/src/app/createGatewayEventHandler.ts` 是 **行为金标准**，Swift 逐事件对照实现即可天然一致。
-- 唯一可能的后端改动：dashboard 若未挂 `@app.websocket("/api/ws")`，按 ws.py 文档示例补一行（落在 dashboard 插件层，合规）。**Phase 2 先 grep 核查现状。**
+**核心判断（已 live 验证修正）：把 gateway 当 stdio 子进程拉起，不连 dashboard WS、不造新协议、零改 Hermes。**
+- 实地核查发现：dashboard 的 `--tui` 走的是 `/api/pty`（PTY 流式终端 + xterm.js），**不是**干净 JSON-RPC；而 `ws.py` 的 `handle_ws` **当前根本没挂**。`hermes_cli/web_server.py` 是 Hermes upstream 文件（非 Echo 白名单），不应改去挂 WS。
+- **正解（ui-tui 同款）**：`ui-tui/src/gatewayClient.ts:326` 用 `spawn(python, ['-m','tui_gateway.entry'], {stdio:['pipe','pipe','pipe']})` 把 gateway 当子进程，stdin 写、stdout 按行读 NDJSON。原生 App 完全照搬：`StdioSubprocessTransport` spawn 同样的进程 → **零后端改动、零 dashboard 依赖**（聊天链路）。
+- 线协议：**双向 newline-delimited JSON-RPC**，进程启动即发 `gateway.ready` 事件（live 冒烟确认）。
+- `ui-tui/src/app/createGatewayEventHandler.ts` 是 **行为金标准**，Swift 逐事件对照实现。
+- WS（`ws.py`）作为 **可选备选**保留：若将来要远程/容器化部署，可在 Echo 自己的 dashboard 插件里挂 `@router.websocket("/ws")`（落在 `plugins/echo_signals/dashboard/`，白名单内），仍不碰 Hermes core。
+- **唯一仍需 dashboard 的**：Echo 信号 REST（`/api/plugins/echo_signals/*`，§3.4）—— 聊天不需要，但评分/scope/M1 队列需要 dashboard 在跑（Phase 4 决定是否改走 gateway 方法以彻底解耦）。
 
 ---
 
 ## 3. 协议契约（精确）
 
 ### 3.1 线格式
-- 传输：WebSocket（文本帧），每帧一条 JSON 对象（NDJSON 习惯，但 WS 每帧已自然分隔）。
+- 传输：**stdio 子进程**（生产）——spawn `python -m tui_gateway.entry`，每行一条 JSON（NDJSON，send 追加 `\n`，receive 按行读）。WS 为可选备选，帧语义相同。
 - **请求**（App→GW）：`{"jsonrpc":"2.0","id":<int>,"method":"<verb>","params":{...}}`
 - **响应**（GW→App）：`{"jsonrpc":"2.0","id":<int>,"result":{...}}` 或 `{"jsonrpc":"2.0","id":<int>,"error":{...}}`
-- **事件**（GW→App，无 id，单向推送）：`{"jsonrpc":"2.0","method":"event","params":{"event":"<name>","sid":"<session>","...payload}}`
-  - 即 `params.event` 是事件名，其余字段是 payload。`createGatewayEventHandler.ts` 里读作 `ev.payload.<field>`。
+- **事件**（GW→App，无 id，单向推送）。**真实形状**（实读 `server.py:_emit` + live 冒烟确认，2026-06）：
+  ```json
+  {"jsonrpc":"2.0","method":"event","params":{
+     "type":"<事件名>", "session_id":"<gateway sid>",
+     "session_key":"<Hermes 真实会话 id, Echo 扩展>",
+     "payload": { ...事件特定字段... }}}
+  ```
+  - ⚠️ 事件名在 `params.type`（**不是** `event`）；payload **嵌套**在 `params.payload`（**不是**平级兄弟键）。
+  - `session_key` 是 Echo 在 `_emit` 里加的——评分/scope widget 必须用它（Hermes 会话 id）而非 gateway 内部 `session_id` 来定位会话（CLAUDE.md Step 23 的坑）。
+  - 早期本文档误写为 `params.event` + 平级 payload；已由 live 冒烟纠正，Swift `EventMeta`/`EventParser` 按真实形状实现。
 
 ### 3.2 请求方法（method）× 响应类型
 

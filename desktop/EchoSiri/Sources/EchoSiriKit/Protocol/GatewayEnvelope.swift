@@ -42,10 +42,20 @@ public struct FrameHead: Decodable {
     public let method: String?
 }
 
-/// 事件元信息：从 params 里取 event 名与 sid。payload 字段是它们的兄弟键。
+/// 事件元信息。真实帧形状（实读 server.py:_emit）：
+///   params = {"type": <事件名>, "session_id": <sid>, "session_key": <hermes id>, "payload": {...}}
+/// 注意：事件名在 `type`，payload **嵌套**在 `payload` 键下（不是兄弟键）。
+/// `session_key` 是 Echo 的扩展——评分 widget 要用它而非 gateway 内部 sid 来定位会话。
 public struct EventMeta: Decodable {
-    public let event: String
-    public let sid: String?
+    public let event: String          // params.type
+    public let sid: String?           // params.session_id
+    public let sessionKey: String?    // params.session_key (Echo addition)
+
+    private enum CodingKeys: String, CodingKey {
+        case event = "type"
+        case sid = "session_id"
+        case sessionKey = "session_key"
+    }
 }
 
 private struct EventMetaFrame: Decodable {
@@ -53,7 +63,8 @@ private struct EventMetaFrame: Decodable {
 }
 
 private struct PayloadFrame<P: Decodable>: Decodable {
-    let params: P
+    struct Params: Decodable { let payload: P? }
+    let params: Params
 }
 
 // MARK: - 解码入口
@@ -88,9 +99,9 @@ public enum GatewayDecoder {
         try json.decode(RPCResponse<R>.self, from: data)
     }
 
-    /// 把事件帧的 payload 解成强类型（payload 与 event/sid 是 params 的兄弟键，
-    /// 类型 P 只声明自己关心的字段，未知键被 Codable 忽略）。
-    public static func decodeEventPayload<P: Decodable>(_ type: P.Type, from data: Data) throws -> P {
-        try json.decode(PayloadFrame<P>.self, from: data).params
+    /// 把事件帧的 payload 解成强类型。payload 嵌套在 `params.payload`；
+    /// 无 payload 键（如 reasoning.available）时返回 nil。
+    public static func decodeEventPayload<P: Decodable>(_ type: P.Type, from data: Data) throws -> P? {
+        try json.decode(PayloadFrame<P>.self, from: data).params.payload
     }
 }

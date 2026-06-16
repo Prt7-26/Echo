@@ -88,7 +88,7 @@ func registerServiceChecks(_ r: CheckRunner) {
         let mock = MockGatewayTransport()
         let client = GatewayClient()
         await client.connect(mock)
-        await mock.injectString(#"{"jsonrpc":"2.0","method":"event","params":{"event":"gateway.ready"}}"#)
+        await mock.injectString(#"{"jsonrpc":"2.0","method":"event","params":{"type":"gateway.ready","payload":{}}}"#)
         var ready = false
         for _ in 0..<200 {
             if await client.state == .ready { ready = true; break }
@@ -102,7 +102,7 @@ func registerServiceChecks(_ r: CheckRunner) {
         let mock = MockGatewayTransport()
         let client = GatewayClient()
         await client.connect(mock)
-        await mock.injectString(#"{"jsonrpc":"2.0","method":"event","params":{"event":"message.delta","sid":"s1","text":"Bosque"}}"#)
+        await mock.injectString(#"{"jsonrpc":"2.0","method":"event","params":{"type":"message.delta","session_id":"s1","payload":{"text":"Bosque"}}}"#)
         let ev = await nextEvent(client.events)
         guard let ev else { throw CheckError("no event delivered") }
         try r.expect(ev.sid, "s1")

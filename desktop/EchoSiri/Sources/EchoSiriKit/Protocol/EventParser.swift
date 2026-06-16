@@ -8,12 +8,12 @@ public enum EventParser {
     /// 解析事件帧。永不抛错：未知事件或 payload 解码失败时降级为 `.other`，不丢帧。
     public static func parse(meta: EventMeta, data: Data) -> ParsedEvent {
         let event = decode(name: meta.event, data: data)
-        return ParsedEvent(sid: meta.sid, event: event)
+        return ParsedEvent(sid: meta.sid, sessionKey: meta.sessionKey, event: event)
     }
 
     private static func decode(name: String, data: Data) -> GatewayEvent {
         func payload<P: Decodable>(_ type: P.Type) -> P? {
-            try? GatewayDecoder.decodeEventPayload(type, from: data)
+            (try? GatewayDecoder.decodeEventPayload(type, from: data)) ?? nil
         }
         switch name {
         case GatewayEventName.ready:

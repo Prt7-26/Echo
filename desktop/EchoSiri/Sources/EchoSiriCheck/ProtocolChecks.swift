@@ -16,11 +16,12 @@ func registerProtocolChecks(_ r: CheckRunner) {
         try r.expect(id, 7)
     }
 
-    r.check("classify: event frame") {
-        let f = GatewayDecoder.classify(data(#"{"jsonrpc":"2.0","method":"event","params":{"event":"message.start","sid":"s1"}}"#))
+    r.check("classify: event frame (real shape: type + session_id + session_key)") {
+        let f = GatewayDecoder.classify(data(#"{"jsonrpc":"2.0","method":"event","params":{"type":"message.start","session_id":"s1","session_key":"hermes-42"}}"#))
         guard case .event(let meta) = f else { throw CheckError("not an event: \(f)") }
         try r.expect(meta.event, "message.start")
         try r.expect(meta.sid, "s1")
+        try r.expect(meta.sessionKey, "hermes-42")
     }
 
     // MARK: 会话方法响应
@@ -63,8 +64,8 @@ func registerProtocolChecks(_ r: CheckRunner) {
 
     // MARK: 流式事件
 
-    r.check("parse event: message.delta") {
-        let raw = data(#"{"jsonrpc":"2.0","method":"event","params":{"event":"message.delta","sid":"s1","text":"Bosque","rendered":"Bosque"}}"#)
+    r.check("parse event: message.delta (nested payload)") {
+        let raw = data(#"{"jsonrpc":"2.0","method":"event","params":{"type":"message.delta","session_id":"s1","payload":{"text":"Bosque","rendered":"Bosque"}}}"#)
         guard case .event(let meta) = GatewayDecoder.classify(raw) else { throw CheckError("not event") }
         let pe = EventParser.parse(meta: meta, data: raw)
         try r.expect(pe.sid, "s1")
@@ -74,7 +75,7 @@ func registerProtocolChecks(_ r: CheckRunner) {
 
     r.check("parse event: message.complete with usage") {
         let raw = data(#"""
-        {"jsonrpc":"2.0","method":"event","params":{"event":"message.complete","sid":"s1","text":"full answer","status":"complete","usage":{"input":10,"output":20,"total":30,"calls":1,"cost_usd":0.001}}}
+        {"jsonrpc":"2.0","method":"event","params":{"type":"message.complete","session_id":"s1","payload":{"text":"full answer","status":"complete","usage":{"input":10,"output":20,"total":30,"calls":1,"cost_usd":0.001}}}}
         """#)
         guard case .event(let meta) = GatewayDecoder.classify(raw) else { throw CheckError("not event") }
         let pe = EventParser.parse(meta: meta, data: raw)
@@ -84,8 +85,8 @@ func registerProtocolChecks(_ r: CheckRunner) {
         try r.expect(c.usage?.total, 30)
     }
 
-    r.check("parse event: tool.complete") {
-        let raw = data(#"{"jsonrpc":"2.0","method":"event","params":{"event":"tool.complete","sid":"s1","tool_id":"t9","name":"read_file","summary":"opened","duration_s":0.4}}"#)
+    r.check("parse event: tool.complete (nested payload)") {
+        let raw = data(#"{"jsonrpc":"2.0","method":"event","params":{"type":"tool.complete","session_id":"s1","payload":{"tool_id":"t9","name":"read_file","summary":"opened","duration_s":0.4}}}"#)
         guard case .event(let meta) = GatewayDecoder.classify(raw) else { throw CheckError("not event") }
         guard case .toolComplete(let t) = EventParser.parse(meta: meta, data: raw).event else { throw CheckError("not toolComplete") }
         try r.expect(t.name, "read_file")
@@ -94,7 +95,7 @@ func registerProtocolChecks(_ r: CheckRunner) {
 
     r.check("parse event: clarify.request (M1 nomination)") {
         let raw = data(#"""
-        {"jsonrpc":"2.0","method":"event","params":{"event":"clarify.request","sid":"s1","question":"存成技能?","choices":["好","不用"],"request_id":"req42"}}
+        {"jsonrpc":"2.0","method":"event","params":{"type":"clarify.request","session_id":"s1","payload":{"question":"存成技能?","choices":["好","不用"],"request_id":"req42"}}}
         """#)
         guard case .event(let meta) = GatewayDecoder.classify(raw) else { throw CheckError("not event") }
         guard case .clarifyRequest(let c) = EventParser.parse(meta: meta, data: raw).event else { throw CheckError("not clarify") }
@@ -103,8 +104,14 @@ func registerProtocolChecks(_ r: CheckRunner) {
         try r.expect(c.requestId, "req42")
     }
 
+    r.check("parse event: no-payload event (reasoning.available)") {
+        let raw = data(#"{"jsonrpc":"2.0","method":"event","params":{"type":"reasoning.available","session_id":"s1"}}"#)
+        guard case .event(let meta) = GatewayDecoder.classify(raw) else { throw CheckError("not event") }
+        guard case .reasoningAvailable = EventParser.parse(meta: meta, data: raw).event else { throw CheckError("not reasoningAvailable") }
+    }
+
     r.check("parse event: unknown → .other (no frame loss)") {
-        let raw = data(#"{"jsonrpc":"2.0","method":"event","params":{"event":"voice.transcript","sid":"s1","text":"hi"}}"#)
+        let raw = data(#"{"jsonrpc":"2.0","method":"event","params":{"type":"voice.transcript","session_id":"s1","payload":{"text":"hi"}}}"#)
         guard case .event(let meta) = GatewayDecoder.classify(raw) else { throw CheckError("not event") }
         guard case .other(let n) = EventParser.parse(meta: meta, data: raw).event else { throw CheckError("expected .other") }
         try r.expect(n, "voice.transcript")
