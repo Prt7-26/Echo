@@ -1,5 +1,5 @@
 import Foundation
-import EchoSiriKit
+import EchoKit
 
 /// 把 GatewayClient 的事件流泵进 AppState，并把 UI 意图翻译成 gateway 调用。
 /// 聊天走 stdio gateway；Echo 信号走 dashboard REST（若在跑）。

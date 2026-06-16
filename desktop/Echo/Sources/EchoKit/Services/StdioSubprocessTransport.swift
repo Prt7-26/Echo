@@ -142,7 +142,7 @@ public final class StdioSubprocessTransport: GatewayTransport, @unchecked Sendab
 
     public var isRunning: Bool { process.isRunning }
 
-    private static let traceOn = ProcessInfo.processInfo.environment["ECHOSIRI_TRACE"] == "1"
+    private static let traceOn = ProcessInfo.processInfo.environment["ECHO_APP_TRACE"] == "1"
     private static func trace(_ s: String) {
         if traceOn { FileHandle.standardError.write(Data(("    [tx] " + s + "\n").utf8)) }
     }

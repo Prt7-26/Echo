@@ -1,5 +1,5 @@
 import Foundation
-import EchoSiriKit
+import EchoKit
 
 func registerMarkdownChecks(_ r: CheckRunner) {
 

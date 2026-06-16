@@ -95,7 +95,7 @@ macai 结构（`/tmp/macai_ref`）：`macaiApp.swift` → `ContentView`（`Navig
 ## 4. UI 组件树与实现要点
 
 ```
-EchoSiriApp (App)
+EchoApp (App)
 └─ MainWindow (WindowGroup, .hiddenTitleBar, Liquid Glass background)
    └─ RootSplitView : NavigationSplitView
       ├─ Sidebar:  ConversationGallery        ← 双列错落卡片
@@ -181,8 +181,8 @@ Echo 的全部价值在「用户信号驱动的技能生命周期」。Web Dashb
 ## 6. UI 交付物清单
 
 ```
-EchoSiri/
-├─ App/                EchoSiriApp.swift, AppDelegate(NSWindow 定制), Menus(Conversation 菜单)
+Echo/
+├─ App/                EchoApp.swift, AppDelegate(NSWindow 定制), Menus(Conversation 菜单)
 ├─ DesignSystem/       Tokens.swift, GlassStyles.swift (glassCard / GlassButtonStyle / 降级)
 ├─ Sidebar/            ConversationGallery.swift, ConversationCard.swift, SidebarToolbar.swift, MasonryLayout.swift
 ├─ Conversation/       ConversationPane.swift, GlassToolbar.swift, TranscriptScroll.swift,

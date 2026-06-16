@@ -1,19 +1,19 @@
 import SwiftUI
 import AppKit
-import EchoSiriKit
+import EchoKit
 
 @main
-struct EchoSiriApp: App {
+struct EchoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @State private var app = AppState.mock()   // ECHOSIRI_CONNECT=1 时切真后端
+    @State private var app = AppState.mock()   // ECHO_APP_CONNECT=1 时切真后端
 
     var body: some Scene {
         WindowGroup {
             RootSplitView(app: app)
                 .containerBackground(.ultraThinMaterial, for: .window)
                 .task {
-                    // 设 ECHOSIRI_CONNECT=1 接真后端；否则保留 mock 数据走查。
-                    if ProcessInfo.processInfo.environment["ECHOSIRI_CONNECT"] == "1" {
+                    // 设 ECHO_APP_CONNECT=1 接真后端；否则保留 mock 数据走查。
+                    if ProcessInfo.processInfo.environment["ECHO_APP_CONNECT"] == "1" {
                         app.connectLive()
                     }
                 }

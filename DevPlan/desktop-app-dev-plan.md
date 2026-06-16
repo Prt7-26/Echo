@@ -45,7 +45,7 @@
 ## 2. 系统架构
 
 ```
-┌──────────────────────── EchoSiri.app (Swift 6 / SwiftUI) ───────────────────────────┐
+┌──────────────────────── Echo.app (Swift 6 / SwiftUI) ───────────────────────────┐
 │  View 层 (siri-app-ui-plan.md)                                                        │
 │  ConversationGallery · TranscriptScroll · AskSiriInputBar · EchoSignalOverlay         │
 │       ▲ @Observable 绑定                                                               │
@@ -178,11 +178,11 @@
 起 **新 Xcode 工程**（不 fork macai，避免继承其 Core Data / APIHandler 包袱），**选择性拷贝** macai 的纯 UI 工具类。
 
 ```
-desktop/EchoSiri/                      # 纳入 CLAUDE.md「Echo 五处代码」白名单
-├─ EchoSiri.xcodeproj
-├─ EchoSiri/
+desktop/Echo/                      # 纳入 CLAUDE.md「Echo 五处代码」白名单
+├─ Echo.xcodeproj
+├─ Echo/
 │  ├─ App/
-│  │  ├─ EchoSiriApp.swift             # @main, WindowGroup, .hiddenTitleBar
+│  │  ├─ EchoApp.swift             # @main, WindowGroup, .hiddenTitleBar
 │  │  ├─ AppDelegate.swift             # NSWindow 定制(透明标题栏/可拖拽), 生命周期
 │  │  └─ Menus.swift                   # 菜单栏 Conversation 菜单 (CommandMenu)
 │  ├─ DesignSystem/
@@ -217,8 +217,8 @@ desktop/EchoSiri/                      # 纳入 CLAUDE.md「Echo 五处代码」
 │  │  ├─ RichText/                     # MarkdownRenderer, CodeBlockView   (借 macai MessageParser/HighlightedText)
 │  │  └─ Welcome/                      # WelcomeScreen (空态, 可选)
 │  └─ Resources/                       # Assets.xcassets, AppIcon, Localizable (zh-Hans/en)
-├─ EchoSiriTests/                      # 协议层单测 + 模型解码
-└─ EchoSiriUITests/                    # XCUITest 关键路径 (可选)
+├─ EchoTests/                      # 协议层单测 + 模型解码
+└─ EchoUITests/                    # XCUITest 关键路径 (可选)
 ```
 
 **从 macai 选择性拷贝（去依赖后）**：`MessageParser.swift`、`HighlightedText.swift`、`ThinkingProcessView.swift`（→ ReasoningBlock 参考）、`ZoomableImageView.swift`、`AttachmentParser.swift`。**不拷**：任何 `APIHandlers/*`、`ChatStore`/Core Data、`APIService*`。
@@ -426,7 +426,7 @@ ConversationStore 立即插入 UserBubble + 占位 AssistantResponse
 - [ ] 确认 §14 全部决策点（用 AskUserQuestion）
 - [ ] grep dashboard 是否已挂 `/api/ws`，定后端是否需补一行
 - [ ] 通读 `createGatewayEventHandler.ts`，落成 §3 契约的最终核对表
-- [ ] 建 `desktop/EchoSiri/` Xcode 工程（Swift 6, macOS 26 target，App Sandbox 评估）
+- [ ] 建 `desktop/Echo/` Xcode 工程（Swift 6, macOS 26 target，App Sandbox 评估）
 - [ ] `DesignSystem/`：Tokens + GlassStyles（含 `#available(macOS 26)` 降级封装）
 - [ ] 拷入并去依赖 macai 的 MessageParser / HighlightedText / ThinkingProcessView / ZoomableImageView
 - [ ] 空壳 App 起得来，窗口呈 Liquid Glass（hiddenTitleBar + 材质背景）
@@ -522,7 +522,7 @@ ConversationStore 立即插入 UserBubble + 占位 AssistantResponse
 ## 13. 与现有 Echo 工程衔接
 
 - **`./echo` 启动器**：新增 `./echo app`（构建/拉起原生 App，自动确保后端在跑），与 `chat/tui/dash/tauri/full` 并列。
-- **代码白名单**：CLAUDE.md「Echo 五处代码」追加 `desktop/EchoSiri/`（如当初加 `tauri-shell/`），保持 `git diff upstream/main` 干净。
+- **代码白名单**：CLAUDE.md「Echo 五处代码」追加 `desktop/Echo/`（如当初加 `tauri-shell/`），保持 `git diff upstream/main` 干净。
 - **dashboard 改动**：若挂 `/api/ws`，落在 echo_signals dashboard 插件或 Hermes 既有 mount 点——**先确认现状再动**；有歧义按规则问。
 - **皮肤一致**：Echo 信号区沿用 sonar-teal 主色，原生 App 与 CLI/TUI 视觉同源。
 - **文档**：完成后在 CLAUDE.md「Phase 1 status」加节记录；更新 `DevPlan/launch-and-debug.md`。
@@ -536,7 +536,7 @@ ConversationStore 立即插入 UserBubble + 占位 AssistantResponse
 
 1. **最低系统**：只支持 macOS 26+（外观纯净、省一套 fallback）vs 兼容 14/15（多一套降级）。
 2. **后端形态**：App **自动拉起** Echo 子进程（开箱即用，像 Tauri 壳）vs **连接已运行** 的 `./echo dash`（开发期方便，分发需另说）。
-3. **工程位置**：同仓 `desktop/EchoSiri/`（与 `tauri-shell/` 并列，纳入白名单）vs 独立 repo。
+3. **工程位置**：同仓 `desktop/Echo/`（与 `tauri-shell/` 并列，纳入白名单）vs 独立 repo。
 4. **Tauri 壳去留**：原生 App 是否取代 `tauri-shell/`（剪贴板/窗口焦点改用 `NSPasteboard`/`NSWindow` 重新实现）。
 5. **Echo 面板范围（MVP）**：只做对话内 评分+scope+clarify，还是含 置信度/候选/偏好 侧面板。
 6. **附件/语音范围**：MVP 是否含图片/PDF 附件、是否含语音（`voice.*` gateway 已具备，但是 Phase 2 量级）。
@@ -563,6 +563,6 @@ ConversationStore 立即插入 UserBubble + 占位 AssistantResponse
 1. `AskUserQuestion` 确认 §14 的 6 个决策点。
 2. grep 核查 dashboard 是否已暴露 `/api/ws`。
 3. 通读 `ui-tui/src/app/createGatewayEventHandler.ts`，定稿 §3/§5 契约。
-4. 起 `desktop/EchoSiri/`，进入 Phase 0。
+4. 起 `desktop/Echo/`，进入 Phase 0。
 
 > 参考与来源见 [siri-app-ui-plan.md](siri-app-ui-plan.md) 末尾「Sources」。

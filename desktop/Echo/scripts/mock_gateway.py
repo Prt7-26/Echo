@@ -2,9 +2,9 @@
 """Tiny deterministic stand-in for `tui_gateway.entry`.
 
 Speaks the exact wire protocol (frame shapes verified against the real gateway,
-2026-06) so EchoSiri's StdioSubprocessTransport + GatewayClient can be tested
+2026-06) so Echo's StdioSubprocessTransport + GatewayClient can be tested
 end-to-end over real stdio pipes WITHOUT the heavy/nondeterministic real
-backend. Used by LiveChecks when ECHOSIRI_MOCK_GW points here.
+backend. Used by LiveChecks when ECHO_APP_MOCK_GW points here.
 
 Frames:
   event:    {"jsonrpc":"2.0","method":"event","params":{"type":..,"session_id":..,"payload":{..}}}

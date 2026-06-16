@@ -1,5 +1,5 @@
 import Foundation
-import EchoSiriKit
+import EchoKit
 
 // 协议层解码自检：用真实形状的 JSON 帧（对照 gatewayTypes.ts / server.py / plugin_api.py）
 // 断言每个 Codable 正确解码、事件分类器正确路由。

@@ -1,5 +1,5 @@
 import Foundation
-import EchoSiriKit
+import EchoKit
 
 // 服务层自检：GatewayClient 请求/响应配对 + 事件流；EchoAPIClient URL/body 构造。
 // 无真后端，用 MockGatewayTransport 与注入 fetch 验证逻辑。

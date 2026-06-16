@@ -1,18 +1,18 @@
 import Foundation
-import EchoSiriKit
+import EchoKit
 
 // 自检入口。新增协议层逻辑时在这里追加 runner.check(...)。
 let runner = CheckRunner()
 
-print("EchoSiri self-check (EchoSiriKit \(EchoSiriKit.version))\n")
+print("Echo self-check (EchoKit \(EchoKit.version))\n")
 
 runner.check("kit version is set") {
-    try runner.expect(EchoSiriKit.version, "0.0.1")
+    try runner.expect(EchoKit.version, "0.0.1")
 }
 
 registerProtocolChecks(runner)
 registerMarkdownChecks(runner)
 registerServiceChecks(runner)
-registerLiveChecks(runner)   // 仅 ECHOSIRI_LIVE=1 时挂载
+registerLiveChecks(runner)   // 仅 ECHO_APP_LIVE=1 时挂载
 
 await runner.run()

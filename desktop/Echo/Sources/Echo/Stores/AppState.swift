@@ -1,6 +1,6 @@
 import SwiftUI
 import Observation
-import EchoSiriKit
+import EchoKit
 
 /// 应用级状态。Phase 1 用 mock 填充；Phase 3 接 GatewayClient 事件流。
 @MainActor

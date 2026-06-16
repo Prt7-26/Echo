@@ -1,5 +1,5 @@
 import SwiftUI
-import EchoSiriKit
+import EchoKit
 
 /// Echo 侧面板（线框图 W6）：状态 + M4 置信度排名 + M1 候选 + M5 偏好库。
 /// 复用已验证的 EchoAPIClient（经 GatewayCoordinator）。

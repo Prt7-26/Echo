@@ -1,6 +1,6 @@
 import Foundation
 
-// UI 层视图模型（与 EchoSiriKit 的协议 Codable 模型分离）。
+// UI 层视图模型（与 EchoKit 的协议 Codable 模型分离）。
 // Phase 1 用 mock 填充；Phase 3 由 gateway 事件流映射而来。
 
 /// 侧栏画廊一张卡片。

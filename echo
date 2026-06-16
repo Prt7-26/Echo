@@ -87,9 +87,9 @@ COMMANDS
   tui [args]     Hermes full-screen TUI.
   dash [args]    Hermes Web Dashboard (foreground).  Browser opens to /echo.
                  Extra args forwarded to `hermes dashboard`.
-  app [--connect] Native macOS app (EchoSiri, Liquid Glass / new-Siri look).
+  app [--connect] Native macOS app (Echo, Liquid Glass / new-Siri look).
                  Default = mock walkthrough; --connect spawns the live gateway.
-  app-check      Run EchoSiri's self-check harness (swift run echosiri-check).
+  app-check      Run Echo's self-check harness (swift run echo-check).
   verify         Run Echo unit tests + scripts/verify_echo.py smoke check.
   status         Show whether the background dashboard is up.
   stop           Stop the background dashboard started by ./echo.
@@ -209,7 +209,7 @@ case "$cmd" in
     exec "$PYBIN" -m hermes_cli.main dashboard --host "$DASH_HOST" --port "$DASH_PORT" "$@"
     ;;
   app)
-    # 原生 macOS App (EchoSiri, Liquid Glass)。默认 mock 走查；
+    # 原生 macOS App (Echo, Liquid Glass)。默认 mock 走查；
     # 加 --connect 用 stdio 子进程接真后端 gateway。
     if ! command -v swift >/dev/null 2>&1; then
       c_err "swift not found — install Xcode 26 or Command Line Tools"
@@ -220,20 +220,20 @@ case "$cmd" in
     export ECHO_REPO_ROOT="$REPO_ROOT"
     export HERMES_PYTHON="$PYBIN"
     if [[ "$connect" == "1" ]]; then
-      export ECHOSIRI_CONNECT=1
-      c_dim "EchoSiri: connecting to live gateway (spawns python -m tui_gateway.entry)"
+      export ECHO_APP_CONNECT=1
+      c_dim "Echo: connecting to live gateway (spawns python -m tui_gateway.entry)"
     else
-      c_dim "EchoSiri: mock walkthrough (no backend). add --connect for live."
+      c_dim "Echo: mock walkthrough (no backend). add --connect for live."
     fi
-    cd desktop/EchoSiri
-    exec swift run EchoSiri
+    cd desktop/Echo
+    exec swift run Echo
     ;;
   app-check)
-    # 跑 EchoSiri 自检 harness（CLT 下 XCTest 替代）。
+    # 跑 Echo 自检 harness（CLT 下 XCTest 替代）。
     export ECHO_REPO_ROOT="$REPO_ROOT"
     export HERMES_PYTHON="$PYBIN"
-    cd desktop/EchoSiri
-    exec swift run echosiri-check
+    cd desktop/Echo
+    exec swift run echo-check
     ;;
   verify)
     python3 -m pytest tests/plugins/echo_signals/ -o addopts="" -q

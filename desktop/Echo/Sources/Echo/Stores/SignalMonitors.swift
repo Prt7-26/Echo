@@ -1,5 +1,5 @@
 import AppKit
-import EchoSiriKit
+import EchoKit
 
 /// 原生采集浏览器沙箱拿不到的两类信号（替代 Tauri 壳，DevPlan 决策 §14.4）：
 ///   • OS 剪贴板变化 → clipboard_copy（仅长度 + 200 字预览，全文绝不外传/持久化）

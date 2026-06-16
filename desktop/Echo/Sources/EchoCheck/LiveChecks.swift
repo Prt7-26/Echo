@@ -1,25 +1,25 @@
 import Foundation
-import EchoSiriKit
+import EchoKit
 
-// 真后端 live 集成自检。仅当 ECHOSIRI_LIVE=1 时运行（默认离线，不依赖后端）。
+// 真后端 live 集成自检。仅当 ECHO_APP_LIVE=1 时运行（默认离线，不依赖后端）。
 // 真的把 `python -m tui_gateway.entry` 拉起，验证 spawn→ready→session.list 全链路。
 //
 // 用法：
-//   ECHOSIRI_LIVE=1 ECHO_REPO_ROOT=/path/to/Echo HERMES_PYTHON=/path/to/python \
-//     swift run echosiri-check
+//   ECHO_APP_LIVE=1 ECHO_REPO_ROOT=/path/to/Echo HERMES_PYTHON=/path/to/python \
+//     swift run echo-check
 
 private func diag(_ s: String) {
     FileHandle.standardError.write(Data(("    [live] " + s + "\n").utf8))
 }
 
 /// 确定性 mock gateway 集成自检（真 stdio 管道，不依赖重型真后端）。
-/// 自动定位 scripts/mock_gateway.py；可用 ECHOSIRI_MOCK_GW 覆盖路径。
+/// 自动定位 scripts/mock_gateway.py；可用 ECHO_APP_MOCK_GW 覆盖路径。
 func registerMockGatewayCheck(_ r: CheckRunner) {
     r.checkAsync("MOCK-GW: spawn → ready → session.list → create → prompt stream") {
         let env = ProcessInfo.processInfo.environment
         let python = env["HERMES_PYTHON"] ?? "/usr/bin/python3"
         guard let mockPath = locateMockGateway(env: env) else {
-            diag("mock_gateway.py not found — skipping (set ECHOSIRI_MOCK_GW)")
+            diag("mock_gateway.py not found — skipping (set ECHO_APP_MOCK_GW)")
             return
         }
         let transport = try StdioSubprocessTransport(
@@ -79,18 +79,18 @@ private actor EventCollector {
 
 private func locateMockGateway(env: [String: String]) -> String? {
     let fm = FileManager.default
-    if let p = env["ECHOSIRI_MOCK_GW"], fm.fileExists(atPath: p) { return p }
+    if let p = env["ECHO_APP_MOCK_GW"], fm.fileExists(atPath: p) { return p }
     // 从 repo 根定位
     var roots: [String] = []
-    if let root = env["ECHO_REPO_ROOT"] { roots.append(root + "/desktop/EchoSiri/scripts/mock_gateway.py") }
+    if let root = env["ECHO_REPO_ROOT"] { roots.append(root + "/desktop/Echo/scripts/mock_gateway.py") }
     roots.append(fm.currentDirectoryPath + "/scripts/mock_gateway.py")
-    roots.append(fm.currentDirectoryPath + "/desktop/EchoSiri/scripts/mock_gateway.py")
+    roots.append(fm.currentDirectoryPath + "/desktop/Echo/scripts/mock_gateway.py")
     return roots.first(where: fm.fileExists)
 }
 
 func registerLiveChecks(_ r: CheckRunner) {
     registerMockGatewayCheck(r)
-    guard ProcessInfo.processInfo.environment["ECHOSIRI_LIVE"] == "1" else { return }
+    guard ProcessInfo.processInfo.environment["ECHO_APP_LIVE"] == "1" else { return }
 
     r.checkAsync("LIVE: spawn gateway → gateway.ready → session.list → session.create") {
         guard let resolved = BackendLocator.resolve() else {

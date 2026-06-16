@@ -1,4 +1,4 @@
-# EchoSiri — 原生 macOS 桌面应用
+# Echo — 原生 macOS 桌面应用
 
 外观复刻 macOS 新 Siri App（Liquid Glass），后端复用 Echo 的 Agent Harness。
 **聊天链路把 `python -m tui_gateway.entry` 作为 stdio 子进程拉起**（与 ui-tui 同构，
@@ -20,10 +20,10 @@
 ./echo app-check          # 跑自检 harness
 
 # 或直接在包内
-cd desktop/EchoSiri
+cd desktop/Echo
 swift build               # 编译（含 SwiftUI Views）
-swift run echosiri-check  # 37 项自检（协议/服务/Markdown/退避 + 真管道 mock-gw 流式）
-swift run EchoSiri        # 启动 App
+swift run echo-check  # 37 项自检（协议/服务/Markdown/退避 + 真管道 mock-gw 流式）
+swift run Echo        # 启动 App
 ```
 
 - 工具链：Swift 6.3+，macOS 26 SDK（真 Liquid Glass `.glassEffect` 已验证可编译）。
@@ -32,12 +32,12 @@ swift run EchoSiri        # 启动 App
 ## 验证现状
 
 - ✅ `swift build` 全包编译通过（CLT-only 机器，macOS 26 SDK）。
-- ✅ `swift run echosiri-check` **37/37**：协议 Codable 解码、GatewayClient 请求/响应
+- ✅ `swift run echo-check` **37/37**：协议 Codable 解码、GatewayClient 请求/响应
   配对 + 事件流、EchoAPIClient URL/body、Markdown 多块解析、指数退避，以及
   **真 stdio 管道端到端**（`scripts/mock_gateway.py`：spawn→ready→list→create→
   prompt 流式）。
 - ⚠️ 可视化走查需 Xcode 26（CLT 无 `#Preview` 宏插件，已用 `#if canImport(PreviewsMacros)` 门控）。
-- ⚠️ 真后端 live（`ECHOSIRI_LIVE=1`）：真 gateway 在本机启动**非确定性**（重型 import +
+- ⚠️ 真后端 live（`ECHO_APP_LIVE=1`）：真 gateway 在本机启动**非确定性**（重型 import +
   更新检查 + 与运行中的 dashboard gateway 争用），故默认不跑；协议/传输已由 mock-gw
   在真管道上确定性验证。
 
@@ -45,12 +45,12 @@ swift run EchoSiri        # 启动 App
 
 ```
 Sources/
-├─ EchoSiriKit/        纯逻辑（可自检）
+├─ EchoKit/        纯逻辑（可自检）
 │  ├─ Protocol/        Codable 模型 + JSON-RPC 信封 + 事件解析器
 │  ├─ Services/        GatewayClient(actor) · EchoAPIClient · StdioSubprocessTransport
 │  │                   · BackendLocator · ExponentialBackoff
 │  └─ RichText/        MarkdownBlocks 解析器
-└─ EchoSiri/           可执行 App
+└─ Echo/           可执行 App
    ├─ App/             @main · Conversation 菜单
    ├─ DesignSystem/    Tokens · GlassStyles(26→15 降级) · Theme
    ├─ Models/          UI 视图模型 + MockData
