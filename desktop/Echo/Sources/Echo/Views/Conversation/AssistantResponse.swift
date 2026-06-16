@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit   // NSPasteboard（代码块复制）
 
 /// 助手回复（线框图 W3）：左对齐、无气泡、富文本块流式渲染。
 struct AssistantResponse: View {
@@ -82,16 +83,28 @@ struct TypingCursor: View {
     }
 }
 
-/// 代码块占位（Phase 1c 简版；Phase 1 后段接 macai HighlightedText）。
+/// 代码块：语言标签 + 复制按钮 + 横向滚动等宽（可选中）。
+/// 语法高亮（macai HighlightedText）属后续视觉打磨；当前优先把「复制」做对，最常用。
 struct CodeBlockView: View {
     let language: String
     let text: String
+    @State private var copied = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if !language.isEmpty {
-                Text(language).font(Tokens.Typeface.metaSmall).foregroundStyle(Theme.secondaryText)
-                    .padding(.horizontal, 10).padding(.top, 6)
+            HStack(spacing: 8) {
+                if !language.isEmpty {
+                    Text(language).font(Tokens.Typeface.metaSmall).foregroundStyle(Theme.secondaryText)
+                }
+                Spacer(minLength: 0)
+                Button(action: copy) {
+                    Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc")
+                        .font(Tokens.Typeface.metaSmall).labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(copied ? Theme.Signal.positive : Theme.secondaryText)
             }
+            .padding(.horizontal, 10).padding(.top, 6)
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(text).font(Tokens.Typeface.mono).textSelection(.enabled)
                     .padding(10)
@@ -99,6 +112,16 @@ struct CodeBlockView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .insetSurface(cornerRadius: Tokens.Radius.button)
+    }
+
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copied = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            copied = false
+        }
     }
 }
 
