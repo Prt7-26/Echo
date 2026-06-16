@@ -436,7 +436,7 @@ export function ChatSidebar({ channel, className, onSessionId }: ChatSidebarProp
           tools
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden pr-0.5">
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden pr-0.5 [&>*]:shrink-0">
           {tools.length === 0 ? (
             <div className="px-2 py-4 text-center text-xs text-muted-foreground">
               no tool calls yet
@@ -457,7 +457,7 @@ export function ChatSidebar({ channel, className, onSessionId }: ChatSidebarProp
           skills
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden pr-0.5">
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden pr-0.5 [&>*]:shrink-0">
           {skills.length === 0 ? (
             <div className="px-2 py-4 text-center text-xs text-muted-foreground">
               no skills used yet
