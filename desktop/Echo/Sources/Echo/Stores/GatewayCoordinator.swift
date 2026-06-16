@@ -85,6 +85,9 @@ final class GatewayCoordinator {
         if let items = try? await client.listSessions() { app?.applySessionList(items) }
     }
 
+    /// 刷新会话列表（新建会话发完首条消息后，让侧栏出现这条新会话）。
+    func refreshSessions() { Task { [weak self] in await self?.loadSessions() } }
+
     func openConversation(_ id: String) async {
         currentSessionId = id
         if let resumed = try? await client.resumeSession(id) {
@@ -111,6 +114,11 @@ final class GatewayCoordinator {
     func interrupt() async {
         guard let sid = currentSessionId else { return }
         _ = try? await client.interrupt(session: sid)
+    }
+
+    /// 删除后端会话（侧栏删除时调用，避免重启后复现）。
+    func deleteSession(_ id: String) {
+        Task { [weak self] in _ = try? await self?.client.deleteSession(id) }
     }
 
     // MARK: Echo 信号（dashboard REST）

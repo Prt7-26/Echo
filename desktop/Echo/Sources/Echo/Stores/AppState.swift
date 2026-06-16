@@ -152,6 +152,7 @@ final class AppState {
 
     func deleteConversation(_ id: String) {
         conversations.removeAll { $0.id == id }
+        coordinator?.deleteSession(id)   // 也删后端，否则重启会复现
         if selectedConversationId == id { newConversation() }
     }
 
@@ -187,12 +188,14 @@ final class AppState {
     }
 
     func applySessionList(_ items: [SessionListItem]) {
+        let pinnedIds = Set(conversations.filter { $0.pinned }.map(\.id))  // 置顶是本地态，刷新时保留
         conversations = items.map { item in
             ConversationSummary(
                 id: item.id,
                 title: item.title.isEmpty ? String(item.preview.prefix(28)) : item.title,
                 preview: item.preview,
-                timestamp: Date(timeIntervalSince1970: item.startedAt)
+                timestamp: Date(timeIntervalSince1970: item.startedAt),
+                pinned: pinnedIds.contains(item.id)
             )
         }
     }
@@ -313,6 +316,10 @@ final class AppState {
         streamTick &+= 1
         // Phase 4: 拉 /invocations/recent 显示评分
         coordinator?.refreshRatingQueue()
+        // 新建会话发完首轮 → 侧栏还没有这条 → 刷新会话列表让它出现。
+        if let sel = selectedConversationId, !conversations.contains(where: { $0.id == sel }) {
+            coordinator?.refreshSessions()
+        }
     }
 
     /// Kit Markdown 块 → UI ResponseBlock。
