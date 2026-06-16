@@ -91,6 +91,9 @@ COMMANDS
                  background if it isn't already up.
   full           Dashboard in background + Tauri shell in foreground.
                  Stops the background dashboard on exit.
+  app [--connect] Native macOS app (EchoSiri, Liquid Glass / new-Siri look).
+                 Default = mock walkthrough; --connect spawns the live gateway.
+  app-check      Run EchoSiri's self-check harness (swift run echosiri-check).
   verify         Run Echo unit tests + scripts/verify_echo.py smoke check.
   status         Show whether the background dashboard is up.
   stop           Stop the background dashboard started by ./echo.
@@ -231,6 +234,33 @@ case "$cmd" in
     start_dashboard_bg
     ensure_tauri_deps
     ( cd tauri-shell && npm run dev )
+    ;;
+  app)
+    # 原生 macOS App (EchoSiri, Liquid Glass)。默认 mock 走查；
+    # 加 --connect 用 stdio 子进程接真后端 gateway。
+    if ! command -v swift >/dev/null 2>&1; then
+      c_err "swift not found — install Xcode 26 or Command Line Tools"
+      exit 1
+    fi
+    connect=0
+    for a in "$@"; do [[ "$a" == "--connect" ]] && connect=1; done
+    export ECHO_REPO_ROOT="$REPO_ROOT"
+    export HERMES_PYTHON="$PYBIN"
+    if [[ "$connect" == "1" ]]; then
+      export ECHOSIRI_CONNECT=1
+      c_dim "EchoSiri: connecting to live gateway (spawns python -m tui_gateway.entry)"
+    else
+      c_dim "EchoSiri: mock walkthrough (no backend). add --connect for live."
+    fi
+    cd desktop/EchoSiri
+    exec swift run EchoSiri
+    ;;
+  app-check)
+    # 跑 EchoSiri 自检 harness（CLT 下 XCTest 替代）。
+    export ECHO_REPO_ROOT="$REPO_ROOT"
+    export HERMES_PYTHON="$PYBIN"
+    cd desktop/EchoSiri
+    exec swift run echosiri-check
     ;;
   verify)
     python3 -m pytest tests/plugins/echo_signals/ -o addopts="" -q
