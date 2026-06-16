@@ -38,6 +38,9 @@ The repository already contains substantial design documentation. Read before gu
 - `tests/plugins/echo_signals/` — unit tests
 - `docs/hermes-architecture.html` — onboarding aid
 - `tauri-shell/` — Rust/Tauri desktop wrapper around the dashboard (Step 17)
+- `desktop/EchoSiri/` — native macOS SwiftUI app (Liquid Glass / new-Siri look), SPM-built,
+  front-end onto the Echo Agent Harness via `tui_gateway` WS + `echo_signals` REST (Step 26).
+  Plans: `DevPlan/siri-app-ui-plan.md`, `desktop-app-dev-plan.md`, `siri-app-wireframes.md`.
 - `scripts/verify_echo.py` — end-to-end smoke check
 - `scripts/eval/` — evaluation harness, four metric scripts, hyperparameter sweep (Step 19)
 - `hermes_cli/setup.py` — Echo registers its own wizard section here via the
