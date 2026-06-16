@@ -113,7 +113,10 @@ class TestCheckDuplicate:
         monkeypatch.setattr(aux_config, "aux_enabled_for", lambda task: True)
         assert sd.check_duplicate("   ").match is None
 
-    def test_injected_match(self, monkeypatch):
+    def test_injected_match(self, monkeypatch, real_nomination):
+        # real_nomination bypasses conftest's autouse _stub_nomination_dedup,
+        # which otherwise replaces sd.check_duplicate with a fixed no-match and
+        # would shadow the impl injected below.
         from plugins.echo_signals import aux_config
         monkeypatch.setattr(aux_config, "aux_enabled_for", lambda task: True)
         monkeypatch.setattr(sd, "enumerate_skills",

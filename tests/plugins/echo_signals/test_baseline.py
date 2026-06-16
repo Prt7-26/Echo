@@ -359,6 +359,43 @@ class TestFinalizeInvocation:
         assert 1.0 <= mod_drift.severity <= bl.SEVERITY_CAP
         assert mod_drift.severity == bl.SEVERITY_CAP  # this z is huge
 
+    def test_tool_count_drift_downweighted(self, isolated_db):
+        """A tool_call_count drift carries less severity than the same-shape
+        modification_round_count drift (maintainer's weighting: tool calls are
+        high-variance, modif rounds are trustworthy)."""
+        _seed_confidence("alpha", confidence=0.5)
+        for _ in range(bl.N_WARM):
+            inv = _seed_invocation("alpha")
+            _seed_events(inv, "alpha", user_turns=5, tool_calls=2)
+            bl.finalize_invocation(inv)
+
+        # Equal nonzero variance on both metrics so the z-scores are comparable.
+        conn = echo_db.get_echo_conn()
+        conn.execute(
+            "UPDATE echo_skill_baseline SET variance = 1.0 "
+            "WHERE skill_id='alpha' AND metric_name IN "
+            "('modification_round_count', 'tool_call_count')"
+        )
+        conn.commit()
+
+        # Baselines are exactly mean=5 turns / mean=2 tools (constant seeds),
+        # variance forced to 1.0. Push both to z=3 (+3 over each mean) so
+        # raw_severity=2.0 on both and NEITHER hits SEVERITY_CAP — otherwise
+        # the cap would flatten the ratio we're testing.
+        outlier_inv = _seed_invocation("alpha")
+        _seed_events(outlier_inv, "alpha", user_turns=8, tool_calls=5)
+        drifts = bl.finalize_invocation(outlier_inv)
+
+        by_metric = {d.metric_name: d for d in drifts}
+        assert "modification_round_count" in by_metric
+        assert "tool_call_count" in by_metric
+        # Same z (matched mean-delta + variance) → severity ratio is the weight
+        # ratio: tool 0.4 vs modif 1.0.
+        modif_sev = by_metric["modification_round_count"].severity
+        tool_sev = by_metric["tool_call_count"].severity
+        assert tool_sev < modif_sev
+        assert tool_sev == pytest.approx(modif_sev * 0.4, rel=0.05)
+
     def test_baseline_keeps_updating_after_drift(self, isolated_db):
         """A drift event doesn't stop the baseline from adapting."""
         _seed_confidence("alpha", confidence=0.5)

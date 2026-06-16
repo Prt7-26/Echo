@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 # config.yaml when the rest of the engine does.
 # ---------------------------------------------------------------------------
 
-N_WARM = 8                   # require this many samples before drift detection
+N_WARM = 5                   # require this many samples before drift detection
 DRIFT_THRESHOLD_Z = 2.0      # |z| above this is "drift"
 SEVERITY_CAP = 3.0           # one drift never multiplies confidence-loss past this
 
@@ -60,6 +60,21 @@ TRACKED_METRICS: tuple[str, ...] = (
     "tool_call_count",
     "tool_error_count",
 )
+
+# Per-metric trust weight applied to a drift's severity (maintainer's tuning).
+# Not every behavioral metric is equally informative:
+#   * modification_round_count — the user iterating many rounds on the same
+#     task is a strong, low-noise dissatisfaction signal. Full weight.
+#   * tool_call_count — high variance: a single "search the web for X" turn can
+#     fire many tool calls without meaning the skill is bad. Down-weighted so a
+#     tool-count spike alone barely moves confidence.
+#   * tool_error_count — real (broken output) but noisier than modif rounds.
+# severity = min(raw_severity * weight, SEVERITY_CAP); unknown metrics → 1.0.
+METRIC_DRIFT_WEIGHT: dict[str, float] = {
+    "modification_round_count": 1.0,
+    "tool_call_count": 0.4,
+    "tool_error_count": 0.7,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +296,8 @@ def finalize_invocation(invocation_id: int) -> list[DriftEvent]:
                 # SEVERITY_CAP so one extreme outlier can't kill a skill
                 # in a single hit.
                 raw_severity = (abs(z) - DRIFT_THRESHOLD_Z) + 1.0
-                severity = min(raw_severity, SEVERITY_CAP)
+                weight = METRIC_DRIFT_WEIGHT.get(metric_name, 1.0)
+                severity = min(raw_severity * weight, SEVERITY_CAP)
                 drifts.append(DriftEvent(
                     skill_id=skill_id,
                     metric_name=metric_name,

@@ -25,7 +25,7 @@ from .common import Artifact, load
 
 # Mirrors baseline.N_WARM. Hard-coded rather than imported so this script
 # stays consumable without bringing in the Echo plugin.
-N_WARM = 8
+N_WARM = 5
 
 
 @dataclass

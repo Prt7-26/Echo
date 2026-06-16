@@ -70,8 +70,14 @@ INITIAL_CONFIDENCE_SAVE_INTENT = 0.65
 ALPHA_EXPLICIT_POSITIVE = 0.10     # explicit thumbs up
 ALPHA_NL_POSITIVE = 0.05           # NL-classified positive sentiment
 BETA_EXPLICIT_NEGATIVE = 0.30      # explicit thumbs down (large hit)
-BETA_NL_NEGATIVE = 0.15            # NL-classified negative sentiment
-BETA_DRIFT = 0.15                  # Layer A behavior-drift detected
+BETA_NL_NEGATIVE = 0.15            # NL-classified negative sentiment (Layer B)
+# Layer A behavior-drift hit. Deliberately SMALLER than the Layer B negative
+# coefficient (maintainer's tuning): Layer B reads the user's actual words and
+# is near noise-free, whereas Layer A infers from behavior alone and is noisier,
+# so a single drift should move confidence less than an NL-negative turn. Even
+# the full-weight metric (modification_round_count, weight 1.0) lands at 0.10 <
+# BETA_NL_NEGATIVE = 0.15.
+BETA_DRIFT = 0.10
 C_MIN = 0.30                       # falling below → pending_review
 C_RETIRE = 0.10                    # falling below → retired
 

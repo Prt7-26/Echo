@@ -48,8 +48,16 @@ class TestApplyRule:
         assert explicit < nl  # explicit hits harder
 
     def test_drift_default_severity(self):
-        # 0.5 * (1 - 0.15 * 1.0) = 0.425
-        assert conf._apply_rule(0.5, "drift_detected") == pytest.approx(0.425)
+        # 0.5 * (1 - 0.10 * 1.0) = 0.45  (BETA_DRIFT lowered to 0.10 so a
+        # behavioral drift hits softer than a Layer B nl_negative turn).
+        assert conf._apply_rule(0.5, "drift_detected") == pytest.approx(0.45)
+
+    def test_drift_softer_than_nl_negative(self):
+        # Layer A weight < Layer B weight: a single drift must move confidence
+        # less than a single NL-negative (which reads the user's actual words).
+        c_drift = conf._apply_rule(0.5, "drift_detected", severity=1.0)
+        c_nl_neg = conf._apply_rule(0.5, "nl_negative", severity=1.0)
+        assert c_drift > c_nl_neg  # drift leaves more confidence intact
 
     def test_drift_severity_scales(self):
         c_normal = conf._apply_rule(0.5, "drift_detected", severity=1.0)

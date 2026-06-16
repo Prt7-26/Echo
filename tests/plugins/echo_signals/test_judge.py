@@ -134,8 +134,8 @@ class TestProcessVerdict:
         c = conn.execute(
             "SELECT confidence FROM echo_skill_confidence WHERE skill_id='alpha'"
         ).fetchone()["confidence"]
-        # drift_detected with severity=2.0: c * (1 - 0.15 * 2.0) = c * 0.7
-        assert c == pytest.approx(0.25 * 0.7)
+        # drift_detected with severity=2.0: c * (1 - 0.10 * 2.0) = c * 0.8
+        assert c == pytest.approx(0.25 * 0.8)
 
     def test_exclusion_creates_scope_row(self, isolated_db):
         _seed("alpha")
