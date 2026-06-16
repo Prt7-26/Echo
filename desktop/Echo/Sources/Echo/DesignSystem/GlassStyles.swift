@@ -47,12 +47,13 @@ private struct ContentCardModifier: ViewModifier {
     let selected: Bool
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        // 不用 .shadow（每张卡一次离屏栅格化，masonry 滚动时帧率杀手）；
+        // 靠 cardSurface 与 sidebar 材质的明度差 + 发丝边做分隔，开销近乎为零。
         content
             .background(Theme.cardSurface, in: shape)
             .overlay(shape.strokeBorder(
                 selected ? Theme.accent.opacity(0.85) : Theme.hairline.opacity(0.55),
                 lineWidth: selected ? 1.5 : 0.5))
-            .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
     }
 }
 

@@ -36,7 +36,7 @@ struct EchoSidePanel: View {
             if let v = s.schemaVersion { tag("schema v\(v)") }
             if let e = s.encoder { tag(e == "neural" ? "neural ⚡︎" : e) }
         }
-        .font(.caption2)
+        .font(Tokens.Typeface.metaSmall)
     }
 
     private func tag(_ t: String) -> some View {
@@ -58,8 +58,8 @@ struct EchoSidePanel: View {
                 HStack(spacing: 8) {
                     ConfidenceBar(value: sk.confidence)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(sk.skillName ?? sk.skillId).font(.caption).lineLimit(1)
-                        if let st = sk.status { Text(st).font(.caption2).foregroundStyle(.secondary) }
+                        Text(sk.skillName ?? sk.skillId).font(Tokens.Typeface.meta).lineLimit(1)
+                        if let st = sk.status { Text(st).font(Tokens.Typeface.metaSmall).foregroundStyle(.secondary) }
                     }
                     Spacer(minLength: 0)
                     Text(String(format: "%.2f", sk.confidence))
@@ -78,10 +78,10 @@ struct EchoSidePanel: View {
             ForEach(app.echoCandidates) { c in
                 HStack {
                     Text("#\(c.id)").font(.caption.monospaced())
-                    Text("score \(c.score)").font(.caption).foregroundStyle(Theme.accent)
+                    Text("score \(c.score)").font(Tokens.Typeface.meta).foregroundStyle(Theme.accent)
                     Spacer(minLength: 0)
                     if let reasons = c.reasons {
-                        Text(reasons.joined(separator: "·")).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        Text(reasons.joined(separator: "·")).font(Tokens.Typeface.metaSmall).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
                 .padding(8).insetSurface(cornerRadius: Tokens.Radius.button)
@@ -96,10 +96,10 @@ struct EchoSidePanel: View {
             ForEach(app.echoPreferences) { p in
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(p.userMessage ?? "—").font(.caption).lineLimit(1)
+                        Text(p.userMessage ?? "—").font(Tokens.Typeface.meta).lineLimit(1)
                         if let s = p.compositeScore {
                             Text(String(format: "%.2f · ×%d", s, p.useCount ?? 0))
-                                .font(.caption2).foregroundStyle(.secondary)
+                                .font(Tokens.Typeface.metaSmall).foregroundStyle(.secondary)
                         }
                     }
                     Spacer(minLength: 0)
@@ -113,7 +113,7 @@ struct EchoSidePanel: View {
     }
 
     private func emptyHint(_ t: String) -> some View {
-        Text(t).font(.caption2).foregroundStyle(.secondary.opacity(0.6))
+        Text(t).font(Tokens.Typeface.metaSmall).foregroundStyle(.secondary.opacity(0.6))
     }
 }
 

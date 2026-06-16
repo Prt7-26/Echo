@@ -17,7 +17,7 @@ struct ConversationCard: View {
                 thumbnail(thumb)
             }
             Text(summary.preview)
-                .font(.caption)
+                .font(Tokens.Typeface.cardPreview)
                 .foregroundStyle(Theme.secondaryText)
                 .lineLimit(summary.thumbnailSymbol == nil ? 4 : 2)
                 .fixedSize(horizontal: false, vertical: true)

@@ -60,7 +60,7 @@ struct StatusStrip: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "circle.dotted").symbolEffect(.rotate)
-            Text(text).font(.caption)
+            Text(text).font(Tokens.Typeface.meta)
             Spacer()
         }
         .foregroundStyle(Theme.secondaryText)

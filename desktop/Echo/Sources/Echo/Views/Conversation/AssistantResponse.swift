@@ -89,7 +89,7 @@ struct CodeBlockView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if !language.isEmpty {
-                Text(language).font(.caption2).foregroundStyle(Theme.secondaryText)
+                Text(language).font(Tokens.Typeface.metaSmall).foregroundStyle(Theme.secondaryText)
                     .padding(.horizontal, 10).padding(.top, 6)
             }
             ScrollView(.horizontal, showsIndicators: false) {

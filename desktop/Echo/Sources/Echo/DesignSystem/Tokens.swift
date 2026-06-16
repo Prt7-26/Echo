@@ -43,15 +43,18 @@ enum Tokens {
         static let signalPoll: Duration = .seconds(5)
     }
 
-    // MARK: 字体
+    // MARK: 字体（整体比系统默认偏大一档，更易读；改这里全局生效）
     enum Typeface {
-        static let body = Font.body
-        static let callout = Font.callout
-        static let cardTitle = Font.system(.subheadline, weight: .semibold)
-        static let cardTimestamp = Font.system(.caption2)
+        static let body = Font.system(size: 15)              // 对话正文（默认 ~13 → 15）
+        static let callout = Font.system(size: 14)
+        static let cardTitle = Font.system(size: 15, weight: .semibold)
+        static let cardPreview = Font.system(size: 13)       // 卡片摘要（原 .caption ~11 → 13）
+        static let cardTimestamp = Font.system(size: 12)
+        static let meta = Font.system(size: 12)              // 工具/用量/次级
+        static let metaSmall = Font.system(size: 11)
         /// 助手回复里的大标题 —— New York 衬线
-        static let serifTitle = Font.system(.title, design: .serif)
-        static let serifTitle2 = Font.system(.title2, design: .serif)
-        static let mono = Font.system(.callout, design: .monospaced)
+        static let serifTitle = Font.system(size: 24, design: .serif)
+        static let serifTitle2 = Font.system(size: 20, design: .serif)
+        static let mono = Font.system(size: 13, design: .monospaced)
     }
 }

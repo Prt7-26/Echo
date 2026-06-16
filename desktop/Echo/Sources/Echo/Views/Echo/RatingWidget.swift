@@ -22,7 +22,7 @@ struct RatingWidget: View {
 
     private var idleView: some View {
         HStack {
-            Text("这条有用吗？").font(.callout).foregroundStyle(Theme.secondaryText)
+            Text("这条有用吗？").font(Tokens.Typeface.callout).foregroundStyle(Theme.secondaryText)
             Spacer()
             thumbButton("hand.thumbsup", value: 1)
             thumbButton("hand.thumbsdown", value: -1)
@@ -32,14 +32,14 @@ struct RatingWidget: View {
     private func ratedView(_ thumb: Int) -> some View {
         HStack {
             Label("已记录 \(thumb > 0 ? "👍" : "👎")", systemImage: "checkmark.circle.fill")
-                .font(.callout).foregroundStyle(thumb > 0 ? .green : Theme.Signal.negative)
+                .font(Tokens.Typeface.callout).foregroundStyle(thumb > 0 ? .green : Theme.Signal.negative)
             Spacer()
             Button("撤销") { onChange(.idle) }.buttonStyle(.plain).foregroundStyle(Theme.accent)
             Button { onChange(.reason(thumb: thumb)) } label: {
                 Label("补充理由", systemImage: "square.and.pencil")
             }.buttonStyle(.plain).foregroundStyle(Theme.accent)
         }
-        .font(.callout)
+        .font(Tokens.Typeface.callout)
     }
 
     private func reasonView(_ thumb: Int) -> some View {
@@ -51,7 +51,7 @@ struct RatingWidget: View {
                 Spacer()
                 Button("取消") { onChange(.rated(thumb: thumb)) }.buttonStyle(.plain)
                 Button("提交") { onChange(.idle) }.buttonStyle(.borderedProminent).tint(Theme.accent)
-            }.font(.callout)
+            }.font(Tokens.Typeface.callout)
         }
     }
 

@@ -18,7 +18,7 @@ struct InlineImageCard: View {
                 }
                 .shadow(color: .black.opacity(0.10), radius: 6, y: 2)
             if let caption = image.caption {
-                Text(caption).font(.caption).foregroundStyle(Theme.secondaryText)
+                Text(caption).font(Tokens.Typeface.meta).foregroundStyle(Theme.secondaryText)
             }
         }
     }
@@ -43,7 +43,7 @@ struct SourceChips: View {
         HStack(spacing: 6) {
             ForEach(sources, id: \.self) { s in
                 Text(s)
-                    .font(.caption2)
+                    .font(Tokens.Typeface.metaSmall)
                     .foregroundStyle(Theme.secondaryText)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
@@ -63,7 +63,7 @@ struct UsageMetaRow: View {
             if let t = usage.tokens { label("number", "\(t) tok") }
             if let m = usage.model { label("cpu", m) }
         }
-        .font(.caption2)
+        .font(Tokens.Typeface.metaSmall)
         .foregroundStyle(Theme.secondaryText.opacity(0.8))
     }
 
@@ -84,14 +84,14 @@ struct ToolActivityRow: View {
             icon
             Text(activity.name).font(.callout.monospaced())
             if let preview = activity.preview, activity.state == .running {
-                Text(preview).font(.caption).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                Text(preview).font(Tokens.Typeface.meta).foregroundStyle(Theme.secondaryText).lineLimit(1)
             }
             if let summary = activity.summary, activity.state != .running {
-                Text("· \(summary)").font(.caption).foregroundStyle(Theme.secondaryText)
+                Text("· \(summary)").font(Tokens.Typeface.meta).foregroundStyle(Theme.secondaryText)
             }
             Spacer(minLength: 0)
             if let d = activity.durationS, activity.state != .running {
-                Text(String(format: "%.1fs", d)).font(.caption2).foregroundStyle(Theme.secondaryText)
+                Text(String(format: "%.1fs", d)).font(Tokens.Typeface.metaSmall).foregroundStyle(Theme.secondaryText)
             }
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
@@ -125,16 +125,16 @@ struct ReasoningBlock: View {
                 HStack(spacing: 6) {
                     Image(systemName: "brain")
                     Text("Reasoning")
-                    Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.caption2)
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right").font(Tokens.Typeface.metaSmall)
                     Spacer(minLength: 0)
                 }
-                .font(.caption).foregroundStyle(Theme.secondaryText)
+                .font(Tokens.Typeface.meta).foregroundStyle(Theme.secondaryText)
             }
             .buttonStyle(.plain)
 
             if expanded {
                 Text(text)
-                    .font(.caption)
+                    .font(Tokens.Typeface.meta)
                     .foregroundStyle(Theme.secondaryText)
                     .textSelection(.enabled)
                     .transition(.opacity.combined(with: .move(edge: .top)))

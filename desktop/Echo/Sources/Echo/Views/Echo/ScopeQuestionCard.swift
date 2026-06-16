@@ -9,7 +9,7 @@ struct ScopeQuestionCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("刚才这套做法要怎么复用？")
-                .font(.callout).foregroundStyle(.primary)
+                .font(Tokens.Typeface.callout).foregroundStyle(.primary)
             HStack(spacing: 10) {
                 choice(title: "A · 复用整套方法", subtitle: "reuse the approach", level: "specific")
                 choice(title: "B · 只复用大致想法", subtitle: "the general idea", level: "general")
@@ -24,7 +24,7 @@ struct ScopeQuestionCard: View {
         Button { onChoose(level) } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.callout.weight(.medium))
-                Text(subtitle).font(.caption2).foregroundStyle(Theme.secondaryText)
+                Text(subtitle).font(Tokens.Typeface.metaSmall).foregroundStyle(Theme.secondaryText)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)

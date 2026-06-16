@@ -10,7 +10,9 @@ struct EchoApp: App {
     var body: some Scene {
         WindowGroup {
             RootSplitView(app: app)
-                .containerBackground(.ultraThinMaterial, for: .window)
+                // 不再给整窗铺毛玻璃：大面积 backdrop-blur 会逼 WindowServer 每帧
+                // 重合成全屏、拖累 ProMotion 与同屏其它窗口。内容区用实底，sidebar
+                // 由系统给材质，窗口本身保持不透明即可（HIG：内容层不用玻璃）。
                 .task {
                     // 设 ECHO_APP_CONNECT=1 接真后端；否则保留 mock 数据走查。
                     if ProcessInfo.processInfo.environment["ECHO_APP_CONNECT"] == "1" {

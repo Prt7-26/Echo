@@ -87,8 +87,10 @@ COMMANDS
   tui [args]     Hermes full-screen TUI.
   dash [args]    Hermes Web Dashboard (foreground).  Browser opens to /echo.
                  Extra args forwarded to `hermes dashboard`.
-  app [--connect] Native macOS app (Echo, Liquid Glass / new-Siri look).
-                 Default = mock walkthrough; --connect spawns the live gateway.
+  app [--connect] [--debug]
+                 Native macOS app (Echo, Liquid Glass / new-Siri look).
+                 Default = mock walkthrough + release build (smooth);
+                 --connect spawns the live gateway; --debug = fast-iterate build.
   app-check      Run Echo's self-check harness (swift run echo-check).
   verify         Run Echo unit tests + scripts/verify_echo.py smoke check.
   status         Show whether the background dashboard is up.
@@ -215,8 +217,11 @@ case "$cmd" in
       c_err "swift not found — install Xcode 26 or Command Line Tools"
       exit 1
     fi
-    connect=0
-    for a in "$@"; do [[ "$a" == "--connect" ]] && connect=1; done
+    connect=0; conf="release"
+    for a in "$@"; do
+      [[ "$a" == "--connect" ]] && connect=1
+      [[ "$a" == "--debug" ]] && conf="debug"   # 快速迭代用 debug；默认 release 更流畅
+    done
     export ECHO_REPO_ROOT="$REPO_ROOT"
     export HERMES_PYTHON="$PYBIN"
     if [[ "$connect" == "1" ]]; then
@@ -225,8 +230,10 @@ case "$cmd" in
     else
       c_dim "Echo: mock walkthrough (no backend). add --connect for live."
     fi
+    # 默认 release：SwiftUI 的 debug 构建慢一个数量级，是开发期卡顿的头号原因。
+    [[ "$conf" == "release" ]] && c_dim "Echo: release build (first build is slower; add --debug for fast iterate)."
     cd desktop/Echo
-    exec swift run Echo
+    exec swift run -c "$conf" Echo
     ;;
   app-check)
     # 跑 Echo 自检 harness（CLT 下 XCTest 替代）。

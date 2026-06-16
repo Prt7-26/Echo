@@ -13,13 +13,13 @@ struct ClarifyCard: View {
                 Image(systemName: "lightbulb.fill")
                     .foregroundStyle(Theme.Signal.nomination)
                 Text(prompt.question)
-                    .font(.callout).foregroundStyle(.primary)
+                    .font(Tokens.Typeface.callout).foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 10) {
                 ForEach(prompt.choices, id: \.self) { choice in
                     Button { onAnswer(choice) } label: {
-                        Text(choice).font(.callout).padding(.horizontal, 4).padding(.vertical, 2)
+                        Text(choice).font(Tokens.Typeface.callout).padding(.horizontal, 4).padding(.vertical, 2)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glassIcon)
