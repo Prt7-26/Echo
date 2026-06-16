@@ -9,6 +9,12 @@ struct EchoSiriApp: App {
         WindowGroup {
             RootSplitView(app: app)
                 .containerBackground(.ultraThinMaterial, for: .window)
+                .task {
+                    // 设 ECHOSIRI_CONNECT=1 接真后端；否则保留 mock 数据走查。
+                    if ProcessInfo.processInfo.environment["ECHOSIRI_CONNECT"] == "1" {
+                        app.connectLive()
+                    }
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unified(showsTitle: false))

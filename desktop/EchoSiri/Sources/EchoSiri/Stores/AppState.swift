@@ -30,7 +30,45 @@ final class AppState {
         conversations.first { $0.id == selectedConversationId }
     }
 
+    /// 协调器（Phase 3 注入）。nil 时走 Phase 1 本地 mock 行为。
+    var coordinator: GatewayCoordinator?
+
+    // 流式累积态
+    private var streamingId: String?
+    private var streamingText = ""
+    private var streamingTools: [ToolActivity] = []
+    private var streamingReasoning = ""
+
     init() {}
+
+    /// 接入真后端：建协调器、spawn gateway、泵事件。
+    func connectLive() {
+        let coord = GatewayCoordinator(app: self)
+        coordinator = coord
+        conversations = []
+        transcript = []
+        Task { await coord.start() }
+    }
+
+    /// clarify 应答（M1 提名）。
+    func answerClarify(_ answer: String) {
+        if let c = clarifyPrompt { coordinator?.respondClarify(requestId: c.id, answer: answer) }
+        clarifyPrompt = nil
+    }
+
+    /// scope 选择（M2）。
+    func chooseScope(_ level: String) {
+        if let s = scopeQuestion { coordinator?.submitScope(skillId: s.id, level: level) }
+        scopeQuestion = nil
+    }
+
+    /// 提交评分反馈（Phase 4 完整 60s/理由语义；此处即时提交）。
+    func submitRating(thumb: Int, reason: String?) {
+        if let item = ratingQueue.first {
+            coordinator?.sendFeedback(invocationId: item.id, rating: thumb, reason: reason)
+        }
+        commitRating()
+    }
 
     /// 载入 mock（Phase 1 走查 / 预览）。
     static func mock(selected: Bool = true) -> AppState {
@@ -49,18 +87,21 @@ final class AppState {
 
     func selectConversation(_ id: String) {
         selectedConversationId = id
-        // Phase 3: gateway.resumeSession(id) → 回放历史
-        transcript = (id == "c2") ? MockData.sampleTranscript : []
-        ratingQueue = (id == "c2") ? MockData.sampleRatings : []
+        clarifyPrompt = nil; scopeQuestion = nil
+        if let coordinator {
+            transcript = []
+            Task { await coordinator.openConversation(id) }
+        } else {
+            transcript = (id == "c2") ? MockData.sampleTranscript : []
+            ratingQueue = (id == "c2") ? MockData.sampleRatings : []
+        }
     }
 
     func newConversation() {
-        // Phase 3: gateway.createSession()
         selectedConversationId = nil
-        transcript = []
-        ratingQueue = []
-        scopeQuestion = nil
-        clarifyPrompt = nil
+        transcript = []; ratingQueue = []
+        scopeQuestion = nil; clarifyPrompt = nil
+        if let coordinator { Task { await coordinator.newConversation() } }
     }
 
     func togglePin(_ id: String) {
@@ -78,13 +119,41 @@ final class AppState {
         guard !text.isEmpty else { return }
         composerText = ""
         transcript.append(.user(.init(id: UUID().uuidString, text: text)))
-        // Phase 3: gateway.submitPrompt(...) → message.start/delta/complete
+        if let coordinator { Task { await coordinator.submit(text) } }
     }
 
     func stop() {
         isResponding = false
         statusLine = nil
-        // Phase 3: gateway.interrupt(...)
+        if let coordinator { Task { await coordinator.interrupt() } }
+    }
+
+    /// 回放 session.resume 的历史消息到 transcript。
+    func loadHistory(_ messages: [TranscriptMessage]) {
+        var items: [TranscriptItem] = []
+        for m in messages {
+            switch m.role {
+            case .user:
+                items.append(.user(.init(id: UUID().uuidString, text: m.text ?? "")))
+            case .assistant:
+                items.append(.assistant(.init(id: UUID().uuidString,
+                                              blocks: (m.text?.isEmpty ?? true) ? [] : [.paragraph(m.text!)])))
+            case .system, .tool:
+                break
+            }
+        }
+        transcript = items
+    }
+
+    func applySessionList(_ items: [SessionListItem]) {
+        conversations = items.map { item in
+            ConversationSummary(
+                id: item.id,
+                title: item.title.isEmpty ? String(item.preview.prefix(28)) : item.title,
+                preview: item.preview,
+                timestamp: Date(timeIntervalSince1970: item.startedAt)
+            )
+        }
     }
 
     /// 评分状态推进。回 idle 视为撤销；提交（从 reason/rated 回 idle）出队。
@@ -113,5 +182,98 @@ final class AppState {
     func commitRating() {
         guard !ratingQueue.isEmpty else { return }
         ratingQueue.removeFirst()
+    }
+
+    // MARK: - Phase 3: gateway 事件 → UI 归约
+
+    /// 把一个 gateway 事件映射成 transcript / 状态变更（在 MainActor 上调用）。
+    func handle(_ event: ParsedEvent) {
+        switch event.event {
+        case .ready:
+            connection = .online
+        case .sessionInfo:
+            break // 可在此更新模型/技能元数据
+        case .messageStart:
+            beginAssistantTurn()
+        case .messageDelta(let d):
+            streamingText += d.text
+            isResponding = true
+            refreshStreamingMessage()
+        case .messageComplete(let c):
+            completeAssistantTurn(text: c.text, usage: c.usage, reasoning: c.reasoning)
+        case .statusUpdate(let s):
+            statusLine = s.text
+        case .toolGenerating(let t):
+            upsertTool(.init(id: t.name, name: t.name, state: .running))
+        case .toolProgress(let p):
+            if let name = p.name { upsertTool(.init(id: name, name: name, preview: p.preview, state: .running)) }
+        case .toolComplete(let t):
+            let name = t.name ?? "tool"
+            upsertTool(.init(id: name, name: name, state: t.error == nil ? .done : .failed,
+                             durationS: t.durationS, summary: t.summary ?? t.error))
+        case .reasoningDelta(let d), .thinkingDelta(let d):
+            streamingReasoning += d.text
+            refreshStreamingMessage()
+        case .clarifyRequest(let c):
+            clarifyPrompt = .init(id: c.requestId, question: c.question, choices: c.choices)
+        case .error(let e):
+            statusLine = "⚠︎ \(e.displayText)"
+            isResponding = false
+        case .reasoningAvailable, .approvalRequest, .secretRequest, .other:
+            break
+        }
+    }
+
+    private func beginAssistantTurn() {
+        streamingId = UUID().uuidString
+        streamingText = ""; streamingReasoning = ""; streamingTools = []
+        isResponding = true
+        statusLine = statusLine ?? "Thinking…"
+        refreshStreamingMessage()
+    }
+
+    private func upsertTool(_ tool: ToolActivity) {
+        if let i = streamingTools.firstIndex(where: { $0.id == tool.id }) { streamingTools[i] = tool }
+        else { streamingTools.append(tool) }
+        refreshStreamingMessage()
+    }
+
+    /// 用当前累积态刷新（或插入）流式助手消息。
+    private func refreshStreamingMessage() {
+        guard let id = streamingId else { return }
+        let msg = AssistantMessage(
+            id: id,
+            blocks: streamingText.isEmpty ? [] : [.paragraph(streamingText)],
+            toolActivities: streamingTools,
+            reasoning: streamingReasoning.isEmpty ? nil : streamingReasoning,
+            streaming: true
+        )
+        if let i = transcript.firstIndex(where: { $0.id == "a-\(id)" }) {
+            transcript[i] = .assistant(msg)
+        } else {
+            transcript.append(.assistant(msg))
+        }
+    }
+
+    private func completeAssistantTurn(text: String, usage: Usage?, reasoning: String?) {
+        let id = streamingId ?? UUID().uuidString
+        let msg = AssistantMessage(
+            id: id,
+            blocks: text.isEmpty ? [] : [.paragraph(text)],   // Phase 3+: Markdown 解析成多块
+            toolActivities: streamingTools,
+            reasoning: reasoning ?? (streamingReasoning.isEmpty ? nil : streamingReasoning),
+            usage: usage.map { UsageLite(durationS: nil, tokens: $0.total, model: $0.model) },
+            streaming: false
+        )
+        if let i = transcript.firstIndex(where: { $0.id == "a-\(id)" }) {
+            transcript[i] = .assistant(msg)
+        } else {
+            transcript.append(.assistant(msg))
+        }
+        streamingId = nil; streamingText = ""; streamingReasoning = ""; streamingTools = []
+        isResponding = false
+        statusLine = nil
+        // Phase 4: 拉 /invocations/recent 显示评分
+        coordinator?.refreshRatingQueue()
     }
 }

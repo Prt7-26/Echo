@@ -8,11 +8,15 @@ struct EchoSignalOverlay: View {
     var body: some View {
         Group {
             if let clarify = app.clarifyPrompt {
-                ClarifyCard(prompt: clarify) { _ in app.clarifyPrompt = nil }
+                ClarifyCard(prompt: clarify) { answer in app.answerClarify(answer) }
             } else if let scope = app.scopeQuestion {
-                ScopeQuestionCard(question: scope) { _ in app.scopeQuestion = nil }
+                ScopeQuestionCard(question: scope) { level in app.chooseScope(level) }
             } else if let rating = app.ratingQueue.first {
-                RatingWidget(item: rating) { app.advanceRating($0) }
+                RatingWidget(item: rating) { newState in
+                    app.advanceRating(newState)
+                    // 首次给出 👍/👎 即提交反馈（Phase 4 再加 60s/理由细化）
+                    if case .rated(let thumb) = newState { app.submitRating(thumb: thumb, reason: nil) }
+                }
             }
         }
         .padding(.horizontal, Tokens.Spacing.loose)
