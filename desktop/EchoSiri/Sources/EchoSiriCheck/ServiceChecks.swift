@@ -178,4 +178,32 @@ func registerServiceChecks(_ r: CheckRunner) {
         do { _ = try await client.status() } catch { threw = true }
         try r.expectTrue(threw, "500 did not throw")
     }
+
+    // MARK: 指数退避
+
+    r.check("backoff: 1→2→4→8 capped at 30") {
+        var b = ExponentialBackoff(base: 1, factor: 2, cap: 30)
+        try r.expect(b.next(), 1)
+        try r.expect(b.next(), 2)
+        try r.expect(b.next(), 4)
+        try r.expect(b.next(), 8)
+        try r.expect(b.next(), 16)
+        try r.expect(b.next(), 30)   // 32 capped
+        try r.expect(b.next(), 30)
+    }
+
+    r.check("backoff: reset returns to base") {
+        var b = ExponentialBackoff()
+        _ = b.next(); _ = b.next()
+        b.reset()
+        try r.expect(b.next(), 1)
+    }
+
+    r.check("backoff: maxAttempts stops") {
+        var b = ExponentialBackoff(maxAttempts: 2)
+        try r.expectTrue(b.next() != nil)
+        try r.expectTrue(b.next() != nil)
+        try r.expectTrue(b.next() == nil, "should stop after maxAttempts")
+        try r.expectTrue(!b.shouldRetry)
+    }
 }

@@ -15,32 +15,60 @@ final class GatewayCoordinator {
     private var sessionKey: String?
     private var pump: Task<Void, Never>?
     private var monitors: SignalMonitors?
+    private var resolved: BackendLocator.Resolved?
+    private var supervisor: Task<Void, Never>?
+    private var backoff = ExponentialBackoff(base: 1, factor: 2, cap: 30)
 
     init(app: AppState, dashboardBase: URL = BackendLocator.dashboardBase()) {
         self.app = app
         self.echo = EchoAPIClient(base: dashboardBase)
     }
 
-    /// 启动：spawn gateway → 连接 → 泵事件 → 载入会话列表。
+    /// 启动：spawn gateway → 连接 → 泵事件 → 载入会话列表 + 监督重连。
     func start() async {
-        guard let resolved = BackendLocator.resolve() else {
+        guard let r = BackendLocator.resolve() else {
             app?.statusLine = "找不到 Echo 后端（设 ECHO_REPO_ROOT）"
             return
         }
+        resolved = r
+        // 事件泵只建一次（events 流在 client 生命周期内复用，跨重连不变）。
+        pump = Task { [weak self] in
+            guard let self, let events = await self.clientEvents() else { return }
+            for await ev in events { await self.route(ev) }
+        }
+        await connectOnce()
+        startSignalMonitors()
+        superviseReconnect()
+    }
+
+    private func connectOnce() async {
+        guard let r = resolved else { return }
         app?.connection = .connecting
         do {
-            let transport = try StdioSubprocessTransport(
-                pythonPath: resolved.python, repoRoot: resolved.repoRoot)
+            let transport = try StdioSubprocessTransport(pythonPath: r.python, repoRoot: r.repoRoot)
             await client.connect(transport)
-            pump = Task { [weak self] in
-                guard let self, let events = await self.clientEvents() else { return }
-                for await ev in events { await self.route(ev) }
-            }
-            startSignalMonitors()
+            backoff.reset()
             await loadSessions()
         } catch {
             app?.statusLine = "后端启动失败：\(error)"
             app?.connection = .offline
+        }
+    }
+
+    /// 监督：transport 断开（state==.failed）时指数退避后重连。
+    private func superviseReconnect() {
+        supervisor = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let self else { return }
+                if await self.client.state == .failed {
+                    let delay = self.backoff.next() ?? 30
+                    self.app?.statusLine = "连接断开，\(Int(delay))s 后重连…"
+                    self.app?.connection = .connecting
+                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    await self.connectOnce()
+                }
+            }
         }
     }
 
@@ -133,6 +161,7 @@ final class GatewayCoordinator {
     }
 
     func shutdown() async {
+        supervisor?.cancel()
         monitors?.stop()
         pump?.cancel()
         await client.disconnect()
