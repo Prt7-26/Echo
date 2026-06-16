@@ -116,3 +116,7 @@ DevPlan/*.synctex.gz
 # dashboard testing (e.g. macos-architecture.html, microservice-architecture.html).
 # Root-anchored so docs/hermes-architecture.html (tracked) is unaffected.
 /*-architecture*.html
+
+# Echo eval — downloaded benchmark data + experiment artifacts (not versioned)
+scripts/eval/data/
+scripts/eval/results/
