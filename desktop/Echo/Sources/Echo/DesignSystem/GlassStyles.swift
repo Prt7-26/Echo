@@ -101,36 +101,42 @@ private struct GlassPanelModifier: ViewModifier {
     }
 }
 
-// MARK: - 玻璃按钮
+// MARK: - 玻璃按钮（工具栏图标按钮）
 
-/// 无边框玻璃圆角按钮，hover 才显描边（W1/W2 工具栏按钮）。
-struct GlassButtonStyle: ButtonStyle {
-    var cornerRadius: CGFloat = Tokens.Radius.button
-    @State private var hovering = false
-
+/// 常驻、圆润的 Liquid Glass 胶囊按钮（macOS Preview 同款）——
+/// 玻璃始终可见(非 hover 才显)，Capsule 全圆角(非方角)。macOS 26 的
+/// `.interactive()` 自带 hover/按压高光；15 回落常驻 thinMaterial 胶囊。
+struct IconGlassButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let shape = Capsule(style: .continuous)
         return configuration.label
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .font(.system(size: 14, weight: .medium))
+            .frame(minWidth: 30, minHeight: 28)   // 圆润、尺寸一致
+            .padding(.horizontal, 8)
             .contentShape(shape)
-            .background {
-                if #available(macOS 26.0, *) {
-                    shape.fill(.clear).glassEffect(.regular.interactive(), in: shape)
-                        .opacity(hovering || configuration.isPressed ? 1 : 0.0)
-                } else {
-                    shape.fill(.ultraThinMaterial)
-                        .opacity(hovering || configuration.isPressed ? 1 : 0.0)
-                }
-            }
-            .opacity(configuration.isPressed ? 0.6 : 1)
-            .onHover { hovering = $0 }
-            .animation(.easeOut(duration: 0.12), value: hovering)
+            .modifier(PersistentGlass(shape: shape))
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.easeOut(duration: 0.10), value: configuration.isPressed)
     }
 }
 
-extension ButtonStyle where Self == GlassButtonStyle {
-    static var glassIcon: GlassButtonStyle { GlassButtonStyle() }
+/// 常驻玻璃背景（始终可见）。
+private struct PersistentGlass: ViewModifier {
+    let shape: Capsule
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: shape)
+        } else {
+            content
+                .background(.thinMaterial, in: shape)
+                .overlay(shape.strokeBorder(.white.opacity(0.12), lineWidth: 0.75))
+        }
+    }
+}
+
+extension ButtonStyle where Self == IconGlassButtonStyle {
+    static var glassIcon: IconGlassButtonStyle { IconGlassButtonStyle() }
 }
 
 // 窗口级 translucency 由 EchoApp 的 `.containerBackground(.ultraThinMaterial, for: .window)`
