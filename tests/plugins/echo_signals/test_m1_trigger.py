@@ -420,11 +420,15 @@ class TestDetectSemanticRecurrence:
             "write a marketing email for our product launch",
             ts=old_ts,
         )
+        # Pass an explicit threshold so the test exercises the MATCH mechanism
+        # independent of the production RECURRENCE_THRESHOLD (tuned to 0.8,
+        # above what the test's hashing-embedding pair scores).
         hit, sim = m1.detect_semantic_recurrence(
             "write me a marketing email for the launch",
+            threshold=0.5,
         )
         assert hit is True
-        assert sim >= m1.RECURRENCE_THRESHOLD
+        assert sim >= 0.5
 
     def test_unrelated_message_no_hit(self, isolated_db):
         _seed_request_log(

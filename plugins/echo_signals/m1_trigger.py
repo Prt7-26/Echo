@@ -68,12 +68,12 @@ THRESHOLD_TOOL_COUNT = 11
 THRESHOLD_MODIF_ROUNDS = 5
 SCORE_THRESHOLD = 30
 
-# Semantic recurrence detection params. The proposal asks for cosine
-# similarity in a neural embedding space; we use M5's hashing embedding
-# as a *lexical* proxy. Threshold deliberately conservative — hashing
-# embeddings are lexical-overlap-heavy, so 0.6 still requires a lot of
-# shared tokens (i.e. the user really IS asking the same kind of thing).
-RECURRENCE_THRESHOLD = 0.6
+# Semantic recurrence detection params. With neural embeddings (the configured
+# DashScope text-embedding-v3) cosine runs high even for loosely related text,
+# so 0.6 fired too eagerly (a fresh "weekly workout plan" matched earlier ones).
+# 0.8 requires the new request to be genuinely the SAME kind of task before it
+# counts as recurrence (maintainer tuning).
+RECURRENCE_THRESHOLD = 0.8
 RECURRENCE_LOOKBACK_DAYS = 30
 # Recent self-correlation guard: don't match against turns from the
 # same invocation or from the past 60 seconds (rapid re-asks in the
