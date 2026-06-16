@@ -537,8 +537,8 @@
         return h(EmptyBlock, {
           message:
             "No skill candidates yet. Echo nominates invocations as " +
-            "skill-worthy when the user expresses save intent, runs ≥ 5 " +
-            "tool calls, or iterates ≥ 3 user turns.",
+            "skill-worthy when the user expresses save intent, runs > 10 " +
+            "tool calls, or iterates > 4 user turns.",
         });
 
       return h("ul", { className: "space-y-2" },
@@ -601,7 +601,7 @@
           message:
             "No new-skill candidates yet. Echo nominates a conversation " +
             "that never used a skill when the user expresses save intent, " +
-            "repeats a past request, runs ≥ 5 tool calls, or iterates ≥ 3 turns.",
+            "repeats a past request, runs > 10 tool calls, or iterates > 4 turns.",
         });
 
       return h("ul", { className: "space-y-2" },

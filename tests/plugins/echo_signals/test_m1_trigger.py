@@ -210,33 +210,33 @@ class TestListCandidates:
     def test_tool_count_threshold_alone_qualifies(self, isolated_db):
         _seed_skill("alpha")
         inv = _seed_invocation("alpha")
-        # Need ≥ 5 tool_call events.
-        for _ in range(5):
+        # Need ≥ THRESHOLD_TOOL_COUNT tool_call events.
+        for _ in range(m1.THRESHOLD_TOOL_COUNT):
             _seed_signal(inv, "alpha", "tool_call")
         out = m1.list_candidates()
         assert len(out) == 1
         c = out[0]
-        assert c.tool_calls == 5
+        assert c.tool_calls == m1.THRESHOLD_TOOL_COUNT
         assert c.score == m1.WEIGHT_TOOL_COUNT
 
     def test_modif_rounds_threshold_alone_qualifies(self, isolated_db):
         _seed_skill("alpha")
         inv = _seed_invocation("alpha")
-        for _ in range(3):
+        for _ in range(m1.THRESHOLD_MODIF_ROUNDS):
             _seed_signal(inv, "alpha", "user_turn")
         out = m1.list_candidates()
         assert len(out) == 1
-        assert out[0].user_turns == 3
+        assert out[0].user_turns == m1.THRESHOLD_MODIF_ROUNDS
         assert out[0].score == m1.WEIGHT_MODIF_ROUNDS
 
     def test_below_threshold_excluded(self, isolated_db):
         _seed_skill("alpha")
         inv = _seed_invocation("alpha")
-        # Only 4 tool calls — below threshold of 5.
-        for _ in range(4):
+        # One below the tool-count threshold.
+        for _ in range(m1.THRESHOLD_TOOL_COUNT - 1):
             _seed_signal(inv, "alpha", "tool_call")
-        # And 2 user turns — below threshold of 3.
-        for _ in range(2):
+        # And one below the modification-round threshold.
+        for _ in range(m1.THRESHOLD_MODIF_ROUNDS - 1):
             _seed_signal(inv, "alpha", "user_turn")
         assert m1.list_candidates() == []
 
@@ -244,9 +244,9 @@ class TestListCandidates:
         _seed_skill("alpha")
         inv = _seed_invocation("alpha")
         _seed_signal(inv, "alpha", "m1_save_intent", layer="B")
-        for _ in range(5):
+        for _ in range(m1.THRESHOLD_TOOL_COUNT):
             _seed_signal(inv, "alpha", "tool_call")
-        for _ in range(3):
+        for _ in range(m1.THRESHOLD_MODIF_ROUNDS):
             _seed_signal(inv, "alpha", "user_turn")
         out = m1.list_candidates()
         assert len(out) == 1
@@ -291,7 +291,7 @@ class TestListCandidates:
         _seed_skill("alpha")
         inv = _seed_invocation("alpha")
         # Just modif_rounds → score = 30
-        for _ in range(3):
+        for _ in range(m1.THRESHOLD_MODIF_ROUNDS):
             _seed_signal(inv, "alpha", "user_turn")
         # min_score=50 should exclude this 30-score candidate.
         out = m1.list_candidates(min_score=50)
@@ -316,7 +316,7 @@ class TestCandidatesAPI:
         _seed_skill("alpha")
         inv = _seed_invocation("alpha")
         _seed_signal(inv, "alpha", "m1_save_intent", layer="B")
-        for _ in range(5):
+        for _ in range(m1.THRESHOLD_TOOL_COUNT):
             _seed_signal(inv, "alpha", "tool_call")
 
         r = client.get("/api/plugins/echo_signals/candidates")
@@ -325,9 +325,9 @@ class TestCandidatesAPI:
         c = data[0]
         assert c["invocation_id"] == inv
         assert c["skill_id"] == "alpha"
-        assert c["score"] == 130
+        assert c["score"] == m1.WEIGHT_SAVE_INTENT + m1.WEIGHT_TOOL_COUNT
         assert c["has_save_intent"] is True
-        assert c["tool_calls"] == 5
+        assert c["tool_calls"] == m1.THRESHOLD_TOOL_COUNT
         assert "save intent" in " ".join(c["reasons"]).lower()
 
     def test_query_params(self, client):
@@ -335,7 +335,7 @@ class TestCandidatesAPI:
         inv1 = _seed_invocation("alpha", started_at=100.0)
         inv2 = _seed_invocation("alpha", started_at=200.0)
         for inv in (inv1, inv2):
-            for _ in range(3):
+            for _ in range(m1.THRESHOLD_MODIF_ROUNDS):
                 _seed_signal(inv, "alpha", "user_turn")
         # Both qualify at min_score=30. Limit=1 should return just one.
         r = client.get(
@@ -641,12 +641,12 @@ class TestListSessionCandidates:
 
     def test_modif_turns_threshold_alone_qualifies(self, isolated_db):
         echo_db.get_echo_conn()
-        for i in range(3):
+        for i in range(m1.THRESHOLD_MODIF_ROUNDS):
             _log_request("sess-B", f"iterate email v{i}")
         out = m1.list_session_candidates()
         assert len(out) == 1
         assert out[0].score == m1.WEIGHT_MODIF_ROUNDS
-        assert out[0].user_turns == 3
+        assert out[0].user_turns == m1.THRESHOLD_MODIF_ROUNDS
 
     def test_below_threshold_excluded(self, isolated_db):
         echo_db.get_echo_conn()
@@ -674,8 +674,9 @@ class TestListSessionCandidates:
         echo_db.get_echo_conn()
         _log_request("sess-F", "draft email", save_intent=True,
                      recurrence_sim=m1.RECURRENCE_THRESHOLD + 0.1)
-        _log_request("sess-F", "again")
-        _log_request("sess-F", "and again")
+        # Enough additional turns to also cross the modification threshold.
+        for i in range(m1.THRESHOLD_MODIF_ROUNDS - 1):
+            _log_request("sess-F", f"again {i}")
         out = m1.list_session_candidates()
         assert len(out) == 1
         assert out[0].score == (m1.WEIGHT_SAVE_INTENT

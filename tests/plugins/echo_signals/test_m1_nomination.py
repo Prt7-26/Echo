@@ -65,7 +65,7 @@ class TestMaybeStart:
     def test_implicit_trigger_kind(self, isolated_db, monkeypatch):
         echo_db.get_echo_conn()
         monkeypatch.setattr(nom, "_start_dedup_async", lambda *a: None)
-        for i in range(3):
+        for i in range(m1.THRESHOLD_MODIF_ROUNDS):
             _log("s3", f"iterate {i}")
         nom.maybe_start_nomination("s3")
         assert _row("s3")["trigger_kind"] == "implicit"
