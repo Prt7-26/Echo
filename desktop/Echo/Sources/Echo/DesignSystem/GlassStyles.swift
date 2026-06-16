@@ -103,8 +103,8 @@ private struct GlassPanelModifier: ViewModifier {
 
 // MARK: - 玻璃图标控件（工具栏按钮 + 菜单标签共用同一外观）
 
-/// 工具栏图标控件尺寸（圆形玻璃直径）。比之前大一号，更贴合开发习惯。
-enum GlassIcon { static let diameter: CGFloat = 34 }
+/// 工具栏图标控件尺寸（圆形玻璃直径）。
+enum GlassIcon { static let diameter: CGFloat = 44 }
 
 extension View {
     /// 常驻、圆润（正方→圆形）的 Liquid Glass 胶囊外观。按钮用 `.buttonStyle(.glassIcon)`，
@@ -119,7 +119,7 @@ private struct GlassPill: ViewModifier {
     func body(content: Content) -> some View {
         let shape = Capsule(style: .continuous)
         return content
-            .font(.system(size: 15, weight: .medium))
+            .font(.system(size: 17, weight: .medium))
             .frame(width: diameter, height: diameter)   // 正方 → Capsule 即圆形
             .contentShape(shape)
             .modifier(PersistentGlass(shape: shape))
