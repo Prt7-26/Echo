@@ -116,6 +116,43 @@ def _recent_invocation_for_session(session_id: Optional[str]) -> Optional[int]:
         return None
 
 
+# Hermes injects background-review / curator prompts by FORKING the main agent
+# and running it on the SAME session_id (agent/background_review.py). Those
+# forked turns reach this hook indistinguishable from a real user turn, but
+# they are NOT user input — counting them inflates user_turn / recurrence, and
+# the skill-curator prompt literally contains the words "remember this" (an
+# instruction to the curator), which trips a FALSE m1_save_intent. All three
+# review prompts begin with a stable signature, so we match and skip them.
+_INTERNAL_PROMPT_SIGNATURES: Optional[tuple[str, ...]] = None
+
+
+def _internal_prompt_signatures() -> tuple[str, ...]:
+    global _INTERNAL_PROMPT_SIGNATURES
+    if _INTERNAL_PROMPT_SIGNATURES is None:
+        sigs: list[str] = []
+        try:
+            from agent import background_review as _br
+            for attr in ("_MEMORY_REVIEW_PROMPT", "_SKILL_REVIEW_PROMPT",
+                         "_COMBINED_REVIEW_PROMPT"):
+                p = getattr(_br, attr, None)
+                if isinstance(p, str) and p.strip():
+                    sigs.append(p.strip()[:48])
+        except Exception as exc:
+            logger.debug("Echo: background_review import failed: %s", exc)
+        if not sigs:
+            sigs = ["Review the conversation above"]
+        _INTERNAL_PROMPT_SIGNATURES = tuple(sigs)
+    return _INTERNAL_PROMPT_SIGNATURES
+
+
+def _is_internal_prompt(text: Optional[str]) -> bool:
+    """True if ``text`` is a Hermes background-review / curator prompt."""
+    if not text or not text.strip():
+        return False
+    stripped = text.strip()
+    return any(stripped.startswith(sig) for sig in _internal_prompt_signatures())
+
+
 def on_pre_llm_call(
     *,
     turn_type: str = "",
@@ -170,6 +207,21 @@ def on_pre_llm_call(
 
     if turn_type in ("assistant", "tool", "system"):
         return
+
+    # Skip Hermes-injected background-review / curator prompts (they fork the
+    # main agent onto the same session_id but are not user turns). Otherwise
+    # they inflate user_turn/recurrence and the curator prompt's "remember this"
+    # trips a false m1_save_intent that wrongly routes nomination to the
+    # silent-create path instead of asking the user.
+    try:
+        from . import nl_classifier as _nlc
+        _probe = (_nlc.extract_user_text(user_message)
+                  if isinstance(user_message, (str, dict, list)) else "")
+    except Exception:
+        _probe = ""
+    if _is_internal_prompt(_probe):
+        return
+
     # Resolve which skill invocation this turn's signals attach to.
     #
     # The _current_invocation_id contextvar is set by bump_use — but bump_use

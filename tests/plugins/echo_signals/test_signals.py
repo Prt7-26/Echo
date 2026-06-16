@@ -386,3 +386,58 @@ class TestRealisticFlow:
         finally:
             sc.clear_session_context()
             uh.uninstall_bump_use_hook()
+
+
+# ---------------------------------------------------------------------------
+# Background-review / curator prompt filtering
+# ---------------------------------------------------------------------------
+
+
+class TestInternalPromptFilter:
+    def test_skill_curator_prompt_detected(self):
+        from agent import background_review as br
+        assert sig._is_internal_prompt(br._SKILL_REVIEW_PROMPT) is True
+        assert sig._is_internal_prompt(br._MEMORY_REVIEW_PROMPT) is True
+        assert sig._is_internal_prompt(br._COMBINED_REVIEW_PROMPT) is True
+
+    def test_normal_user_message_not_detected(self):
+        assert sig._is_internal_prompt("帮我写一封裁员通知信") is False
+        assert sig._is_internal_prompt("remember this approach for me") is False
+        assert sig._is_internal_prompt("") is False
+        assert sig._is_internal_prompt(None) is False
+
+    def test_curator_prompt_does_not_log_user_turn_or_save_intent(self, isolated_db):
+        from plugins.echo_signals import m1_trigger as m1
+        from agent import background_review as br
+
+        # A skill-less session: the curator prompt must not be counted.
+        sc.set_session_context("curator-sess", "cli")
+        try:
+            sig.on_pre_llm_call(
+                user_message=br._SKILL_REVIEW_PROMPT,
+                session_id="curator-sess", platform="cli",
+            )
+            conn = echo_db.get_echo_conn()
+            n_log = conn.execute(
+                "SELECT COUNT(*) AS n FROM echo_user_request_log "
+                "WHERE session_id='curator-sess'"
+            ).fetchone()["n"]
+            assert n_log == 0  # not logged at all
+            # And no skill-less candidate / nomination spawned from it.
+            assert m1.list_session_candidates() == []
+        finally:
+            sc.clear_session_context()
+
+    def test_real_user_turn_still_logged(self, isolated_db):
+        sc.set_session_context("real-sess", "cli")
+        try:
+            sig.on_pre_llm_call(
+                user_message="帮我写一封信", session_id="real-sess", platform="cli",
+            )
+            n = echo_db.get_echo_conn().execute(
+                "SELECT COUNT(*) AS n FROM echo_user_request_log "
+                "WHERE session_id='real-sess'"
+            ).fetchone()["n"]
+            assert n == 1
+        finally:
+            sc.clear_session_context()
