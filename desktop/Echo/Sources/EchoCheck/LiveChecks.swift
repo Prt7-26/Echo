@@ -68,10 +68,18 @@ private actor EventCollector {
     var deltaCount = 0
     var hasComplete = false
     var completeText = ""
+    var gotStart = false            // 真 agent loop 起了一轮（message.start）
+    var firstSignal: String?        // 第一条与本轮相关的事件名（status/start/delta/complete）
     func add(_ ev: ParsedEvent) {
         switch ev.event {
-        case .messageDelta: deltaCount += 1
-        case .messageComplete(let c): hasComplete = true; completeText = c.text
+        case .messageStart:
+            gotStart = true; if firstSignal == nil { firstSignal = "message.start" }
+        case .statusUpdate:
+            if firstSignal == nil { firstSignal = "status.update" }
+        case .messageDelta:
+            deltaCount += 1; if firstSignal == nil { firstSignal = "message.delta" }
+        case .messageComplete(let c):
+            hasComplete = true; completeText = c.text; if firstSignal == nil { firstSignal = "message.complete" }
         default: break
         }
     }
@@ -136,6 +144,35 @@ func registerLiveChecks(_ r: CheckRunner) {
         let created = try await client.createSession()
         diag("session.create → \(created.sessionId), model=\(created.info?.model ?? "?")")
         try r.expectTrue(!created.sessionId.isEmpty, "empty session id")
+
+        // 真 prompt 往返：证明真 agent loop 经我们的 transport 回流事件（不只是握手）。
+        let collected = EventCollector()
+        let pump = Task { for await ev in client.events { await collected.add(ev) } }
+        diag("submitting prompt 'reply with just OK'…")
+        _ = try await client.submitPrompt(session: created.sessionId, text: "Reply with exactly: OK")
+
+        // 等 agent 起一轮（message.start / status.update）——这步快，先于 LLM 出完。
+        var engaged = false
+        for i in 0..<300 { // 最多 30s
+            if await collected.firstSignal != nil { engaged = true; break }
+            if i % 50 == 0 { diag("waiting for agent to engage… \(i/10)s") }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        try r.expectTrue(engaged, "agent never engaged after prompt.submit")
+        diag("agent engaged ✓ (first signal: \(await collected.firstSignal ?? "?"))")
+
+        // 尽力等完整回复（不强求，模型慢时只记日志）。
+        for _ in 0..<600 { // 最多 60s
+            if await collected.hasComplete { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        if await collected.hasComplete {
+            let txt = await collected.completeText
+            diag("message.complete ✓ (\(await collected.deltaCount) deltas): \"\(txt.prefix(60))\"")
+        } else {
+            diag("no message.complete within 60s (model slow / not configured) — engagement already proven")
+        }
+        pump.cancel()
 
         await client.disconnect()
         diag("disconnected, done ✓")
