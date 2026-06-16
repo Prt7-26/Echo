@@ -87,10 +87,11 @@ COMMANDS
   tui [args]     Hermes full-screen TUI.
   dash [args]    Hermes Web Dashboard (foreground).  Browser opens to /echo.
                  Extra args forwarded to `hermes dashboard`.
-  app [--connect] [--debug]
+  app [--mock] [--debug]
                  Native macOS app (Echo, Liquid Glass / new-Siri look).
-                 Default = mock walkthrough + release build (smooth);
-                 --connect spawns the live gateway; --debug = fast-iterate build.
+                 Default = live backend (spawns the gateway + ensures the
+                 dashboard for Echo signals) + release build (smooth);
+                 --mock = front-end only (no backend); --debug = fast build.
   app-check      Run Echo's self-check harness (swift run echo-check).
   verify         Run Echo unit tests + scripts/verify_echo.py smoke check.
   status         Show whether the background dashboard is up.
@@ -104,7 +105,8 @@ ENV VARS
 EXAMPLES
   ./echo chat                       # quick chat session
   ./echo dash                       # open the dashboard
-  ./echo app                        # native macOS app (mock walkthrough)
+  ./echo app                        # native macOS app (live backend)
+  ./echo app --mock                 # native macOS app (front-end mock, no backend)
   ECHO_DASH_PORT=9200 ./echo dash   # use a different port
   ./echo verify                     # confirm Echo is healthy
 EOF
@@ -211,15 +213,17 @@ case "$cmd" in
     exec "$PYBIN" -m hermes_cli.main dashboard --host "$DASH_HOST" --port "$DASH_PORT" "$@"
     ;;
   app)
-    # 原生 macOS App (Echo, Liquid Glass)。默认 mock 走查；
-    # 加 --connect 用 stdio 子进程接真后端 gateway。
+    # 原生 macOS App (Echo, Liquid Glass)。默认接真后端（stdio 子进程拉起
+    # python -m tui_gateway.entry），并确保 dashboard 在跑供 Echo 信号 REST。
+    # 加 --mock 走纯前端 mock（不连后端），--debug 用快速迭代构建。
     if ! command -v swift >/dev/null 2>&1; then
       c_err "swift not found — install Xcode 26 or Command Line Tools"
       exit 1
     fi
-    connect=0; conf="release"
+    connect=1; conf="release"
     for a in "$@"; do
-      [[ "$a" == "--connect" ]] && connect=1
+      [[ "$a" == "--mock" ]] && connect=0
+      [[ "$a" == "--connect" ]] && connect=1   # 兼容旧用法（现已是默认）
       [[ "$a" == "--debug" ]] && conf="debug"   # 快速迭代用 debug；默认 release 更流畅
     done
     export ECHO_REPO_ROOT="$REPO_ROOT"
@@ -227,8 +231,11 @@ case "$cmd" in
     if [[ "$connect" == "1" ]]; then
       export ECHO_APP_CONNECT=1
       c_dim "Echo: connecting to live gateway (spawns python -m tui_gateway.entry)"
+      # Echo 信号（评分/scope/M1 候选/偏好）走 dashboard REST → 确保它在跑。
+      # 聊天链路本身不依赖 dashboard，所以失败不阻塞，只降级信号面板。
+      start_dashboard_bg || c_warn "Echo signals需 dashboard；启动失败，仅聊天可用"
     else
-      c_dim "Echo: mock walkthrough (no backend). add --connect for live."
+      c_dim "Echo: mock walkthrough (no backend). drop --mock for live."
     fi
     # 默认 release：SwiftUI 的 debug 构建慢一个数量级，是开发期卡顿的头号原因。
     [[ "$conf" == "release" ]] && c_dim "Echo: release build (first build is slower; add --debug for fast iterate)."

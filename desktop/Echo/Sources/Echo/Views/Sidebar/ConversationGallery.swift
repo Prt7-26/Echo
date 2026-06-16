@@ -18,13 +18,15 @@ struct ConversationGallery: View {
             .padding(.horizontal, Tokens.Spacing.cardPadding)
             .padding(.vertical, Tokens.Spacing.content)
         }
-        .scrollContentBackground(.hidden)   // 别让 ScrollView 铺实底盖住系统 sidebar 材质
+        .scrollContentBackground(.hidden)   // 别让 ScrollView 铺实底盖住下面的材质
         .frame(maxHeight: .infinity)
         .safeAreaInset(edge: .top, spacing: 0) {
             SidebarToolbar(app: app).topBarScrim()
         }
-        // 不再自铺第二层毛玻璃：NavigationSplitView 已给 sidebar 套系统 .behindWindow 材质，
-        // 配合 WindowVibrancyConfigurator 的透明窗口，桌面/壁纸直接透出来（Finder/Siri 同款，单层最透）。
+        // 更透：用 .underWindowBackground（标准材质里最见底的一档）盖掉系统 .sidebar 材质，
+        // 自己掌控透明度。前置的 .behindWindow 视图会遮住系统那层，不会叠成双层霜白；
+        // 配合 WindowVibrancyConfigurator 的透明窗口，壁纸大面积透出来（比 .sidebar 更透）。
+        .background(VisualEffectBackground(material: .underWindowBackground).ignoresSafeArea())
     }
 
     /// 置顶优先，其余按时间倒序。
