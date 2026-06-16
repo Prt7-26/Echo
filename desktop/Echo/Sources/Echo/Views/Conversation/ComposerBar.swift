@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// 底部浮起玻璃输入条（线框图 W1/W5）：＋ / 多行输入 / 🎙️(推理中变 ⏹)。
-struct AskSiriInputBar: View {
+struct ComposerBar: View {
     @Bindable var app: AppState
     @FocusState private var focused: Bool
 
@@ -14,7 +14,7 @@ struct AskSiriInputBar: View {
             }
             .buttonStyle(.glassIcon)
 
-            TextField("Ask Siri…", text: $app.composerText, axis: .vertical)
+            TextField("Ask Echo…", text: $app.composerText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(Tokens.Typeface.body)
                 .lineLimit(1...6)
@@ -47,7 +47,7 @@ struct AskSiriInputBar: View {
 
 #if canImport(PreviewsMacros)
 #Preview {
-    AskSiriInputBar(app: .mock())
+    ComposerBar(app: .mock())
         .frame(width: 640)
         .padding()
 }

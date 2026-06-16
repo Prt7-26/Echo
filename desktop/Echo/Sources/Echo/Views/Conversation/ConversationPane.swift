@@ -16,7 +16,7 @@ struct ConversationPane: View {
             // 浮起输入条 + 其上方的 Echo 信号卡
             VStack(spacing: 8) {
                 EchoSignalOverlay(app: app)
-                AskSiriInputBar(app: app)
+                ComposerBar(app: app)
             }
         }
         .background(Theme.contentBackground.ignoresSafeArea())

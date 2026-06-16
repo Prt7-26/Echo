@@ -17,7 +17,7 @@ struct WelcomeScreen: View {
                 Text("开始一段对话，或从左侧打开历史")
                     .font(.callout)
                     .foregroundStyle(Theme.secondaryText)
-                AskSiriInputBar(app: app)
+                ComposerBar(app: app)
                     .frame(maxWidth: 560)
                 Text("提示：⌘N 新对话 · ⌘F 搜索 · 右键卡片可置顶/分支")
                     .font(.caption2)
