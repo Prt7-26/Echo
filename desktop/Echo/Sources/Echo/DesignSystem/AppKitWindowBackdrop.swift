@@ -32,25 +32,46 @@ struct AppKitWindowBackdrop: NSViewRepresentable {
     private static func install(in window: NSWindow, material: NSVisualEffectView.Material) {
         guard let contentView = window.contentView,
               let frameView = contentView.superview else { return }
-        // 幂等：已装过就只更新尺寸。
+
+        // ① 去掉窗口自己的黑色底 + 让背板/内容延伸到标题栏区（去掉顶部黑条）。
+        //    不动 isOpaque（保持默认，不卡）；只清背景色，让玻璃背板成为最底层、直贴桌面。
+        window.backgroundColor = .clear
+        window.titlebarAppearsTransparent = true
+        window.styleMask.insert(.fullSizeContentView)
+        window.isMovableByWindowBackground = true
+
+        // ② 背板玻璃只创建一次；之后只更新尺寸。
         if let existing = frameView.subviews.first(where: { $0.identifier == backdropID }) {
             existing.frame = contentView.frame
-            return
+        } else {
+            let fx = NSVisualEffectView()
+            fx.identifier = backdropID
+            fx.material = material
+            fx.blendingMode = .behindWindow      // 透出窗口背后的桌面/壁纸
+            fx.state = .active                   // 常驻 active：失焦也不变暗
+            fx.frame = contentView.frame
+            fx.autoresizingMask = [.width, .height]
+            frameView.addSubview(fx, positioned: .below, relativeTo: contentView)
         }
-        let fx = NSVisualEffectView()
-        fx.identifier = backdropID
-        fx.material = material
-        fx.blendingMode = .behindWindow      // 透出窗口背后的桌面/壁纸
-        fx.state = .active                   // 常驻，激活/失活不重渲染
-        fx.frame = contentView.frame
-        fx.autoresizingMask = [.width, .height]
-        // 放在 SwiftUI 承载视图「下面」（窗口背板层）。
-        frameView.addSubview(fx, positioned: .below, relativeTo: contentView)
 
-        // 让承载视图透明，背板才能从它的透明区（sidebar 未铺背景处）透上来。
-        // detail 区铺了 Theme.contentBackground 实底 → 仍遮住背板，桌面只在 sidebar 露出。
+        // ③ 每次都重新把承载视图设透明（失焦/重绘可能被系统重置回不透明 → 发黑）。
         contentView.wantsLayer = true
         contentView.layer?.isOpaque = false
         contentView.layer?.backgroundColor = NSColor.clear.cgColor
+
+        // ④ NavigationSplitView 给 sidebar 列自带一层系统 vibrancy，默认 followsWindowActiveState
+        //    → 窗口失焦时它变不透明、盖住背板（用户反馈「失焦就不透」）。把窗口里所有系统
+        //    vibrancy（除我们的背板）设成常驻 .active：失焦不变暗，且与背板叠加更轻。
+        forceActiveVibrancy(contentView)
+    }
+
+    /// 递归把所有系统 NSVisualEffectView（除背板）设为常驻 active，消除失焦变暗。
+    private static func forceActiveVibrancy(_ view: NSView) {
+        for sub in view.subviews {
+            if let fx = sub as? NSVisualEffectView, fx.identifier != backdropID {
+                fx.state = .active
+            }
+            forceActiveVibrancy(sub)
+        }
     }
 }
