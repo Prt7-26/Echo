@@ -93,10 +93,21 @@ final class SidebarVibrancyController: NSViewController {
     required init?(coder: NSCoder) { fatalError("init(coder:) unused") }
 
     override func loadView() {
-        effectView.material = .underWindowBackground
-        effectView.blendingMode = .behindWindow      // 透出桌面/壁纸
-        effectView.state = .active                   // 失焦也透
+        effectView.material = Self.material            // 基础透明度（材质）
+        effectView.blendingMode = .behindWindow        // 透出桌面/壁纸
+        effectView.state = .active                     // 失焦也透
         effectView.autoresizingMask = [.width, .height]
+
+        // 可调染色层（叠在玻璃上、内容下）：alpha 越大越「磨砂/朦胧」、越小越「透」。
+        // 试参：ECHO_SIDEBAR_TINT=0..1（深色染色 alpha）、ECHO_SIDEBAR_MATERIAL=材质名。
+        if Self.tintAlpha > 0 {
+            let tint = NSView()
+            tint.wantsLayer = true
+            tint.layer?.backgroundColor = NSColor.black.withAlphaComponent(Self.tintAlpha).cgColor
+            tint.autoresizingMask = [.width, .height]
+            tint.frame = effectView.bounds
+            effectView.addSubview(tint)
+        }
 
         let host = NSHostingView(rootView: ConversationGallery(app: app))
         host.translatesAutoresizingMaskIntoConstraints = false
@@ -108,5 +119,25 @@ final class SidebarVibrancyController: NSViewController {
             host.bottomAnchor.constraint(equalTo: effectView.bottomAnchor),
         ])
         self.view = effectView
+    }
+
+    // 透明度旋钮（环境变量实时试；定下后我把默认值焊死）。
+    static var tintAlpha: CGFloat {
+        if let s = ProcessInfo.processInfo.environment["ECHO_SIDEBAR_TINT"], let v = Double(s) {
+            return CGFloat(max(0, min(1, v)))
+        }
+        return 0.0   // 默认：纯玻璃、最透
+    }
+    static var material: NSVisualEffectView.Material {
+        switch ProcessInfo.processInfo.environment["ECHO_SIDEBAR_MATERIAL"] {
+        case "sidebar":            return .sidebar
+        case "hud":                return .hudWindow
+        case "menu":               return .menu
+        case "popover":            return .popover
+        case "fullscreen":         return .fullScreenUI
+        case "window":             return .windowBackground
+        case "content":            return .contentBackground
+        default:                   return .underWindowBackground   // 默认：偏透
+        }
     }
 }
