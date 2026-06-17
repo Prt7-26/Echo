@@ -46,7 +46,14 @@ struct WindowVibrancyConfigurator: NSViewRepresentable {
             guard let window = view?.window else { return }  // 窗口还没 attach → 等下次 update 再试
             window.isOpaque = false
             window.backgroundColor = .clear
+            // 非不透明窗口默认可能被窗口服务器排除出 Mission Control/Exposé 动画（停在原处不缩放）。
+            // 显式规整为「正常受管理窗口」：参与 Spaces/调度中心、正常层级、有阴影。
+            window.level = .normal
+            window.hasShadow = true
+            window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenPrimary]
             coord.configured = true
+            FileHandle.standardError.write(Data(
+                "[echo-ui] window configured: opaque=\(window.isOpaque) level=\(window.level.rawValue) behavior=\(window.collectionBehavior.rawValue)\n".utf8))
         }
     }
 }
