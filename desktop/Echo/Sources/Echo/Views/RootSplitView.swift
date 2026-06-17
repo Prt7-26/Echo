@@ -37,9 +37,10 @@ struct RootSplitView: View {
             .background(Theme.contentBackground)
         }
         .frame(minWidth: Tokens.Size.windowMinWidth, minHeight: Tokens.Size.windowMinHeight)
-        // 不再手动改窗口透明度（那会卡、还破坏调度中心）。交给 SwiftUI 原生：
-        // NavigationSplitView 的 sidebar 自带系统半透材质透出桌面，且只透 sidebar 区、
-        // 不碰整窗合成——既是 WeChat/Siri 的正确结构，又是正常受管理窗口（调度中心正常）。
+        // AppKit 窗口背板：在 SwiftUI 承载视图「下面」挂一层 .behindWindow 玻璃，透出桌面。
+        // sidebar 透明 → 露出它；detail 实底 → 遮住它。只 sidebar 区与桌面合成，不卡。
+        // 不碰 window.isOpaque（SwiftUI 默认即可），调度中心正常。
+        .background(AppKitWindowBackdrop())
     }
 }
 

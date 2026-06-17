@@ -18,16 +18,13 @@ struct ConversationGallery: View {
             .padding(.horizontal, Tokens.Spacing.cardPadding)
             .padding(.vertical, Tokens.Spacing.content)
         }
-        .scrollContentBackground(.hidden)   // ScrollView 透明，露出下面的 vibrancy 大底
+        .scrollContentBackground(.hidden)   // ScrollView 透明
         .frame(maxHeight: .infinity)
         .safeAreaInset(edge: .top, spacing: 0) {
             SidebarToolbar(app: app).topBarScrim()
         }
-        // 透明大底：一层 .behindWindow 的 vibrancy（透出桌面/壁纸），卡片是实底盖在上面
-        // ——WeChat/Siri 的「透明大底 + 不透明内容层」结构。关键：**不碰窗口 isOpaque**
-        // （那会么堵死透出桌面=黑、要么整窗合成=卡）。.behindWindow 只让 sidebar 这块透，
-        // 既透又不卡。.underWindowBackground 比 .sidebar 更见底（更透）。
-        .background(VisualEffectBackground(material: .underWindowBackground).ignoresSafeArea())
+        // sidebar 不铺任何背景 → 保持透明 → 露出 AppKitWindowBackdrop 的窗口背板玻璃
+        // （透出桌面/壁纸）。卡片是实底 contentCard，浮在透明大底之上（WeChat/Siri 结构）。
     }
 
     /// 置顶优先，其余按时间倒序。
