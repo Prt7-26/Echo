@@ -72,7 +72,49 @@ final class AppState {
         coordinator = coord
         conversations = []
         transcript = []
+        selectedConversationId = nil   // 清掉 mock 残留 "c2"，进来是干净空态
         Task { await coord.start() }
+        if ProcessInfo.processInfo.environment["ECHO_APP_SELFTEST"] == "1" {
+            Task { await runSelfTest() }
+        }
+    }
+
+    /// 无头压力自测：连上 → 反复 resume 历史会话 / 开关面板 / 发送 —— 触发潜在崩溃。
+    /// 仅 ECHO_APP_SELFTEST=1 时跑。结果写 /tmp/echo-ui.log（uiLog）。
+    func runSelfTest() async {
+        for _ in 0..<300 where connection != .online { try? await Task.sleep(nanoseconds: 100_000_000) }
+        uiLog("selftest: connection=\(connection) sessions=\(conversations.count)")
+        try? await Task.sleep(nanoseconds: 800_000_000)
+
+        // 1) 逐个 resume 前几个历史会话（最复杂路径：loadHistory + 后台 markdown 解析）。
+        let ids = conversations.prefix(5).map(\.id)
+        for id in ids {
+            uiLog("selftest: open \(id)")
+            selectConversation(id)
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            uiLog("selftest:   transcript=\(transcript.count)")
+        }
+        // 2) 开关 Echo 面板。
+        uiLog("selftest: toggle panel on"); toggleEchoPanel(); try? await Task.sleep(nanoseconds: 500_000_000)
+        uiLog("selftest: toggle panel off"); toggleEchoPanel(); try? await Task.sleep(nanoseconds: 300_000_000)
+        // 3) 新会话 + 发送，等回复。
+        uiLog("selftest: newConversation"); newConversation(); try? await Task.sleep(nanoseconds: 500_000_000)
+        composerText = "Reply with exactly: OK"
+        uiLog("selftest: send"); send()
+        for i in 0..<400 {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            let got = transcript.reversed().compactMap { item -> String? in
+                if case .assistant(let m) = item, !m.streaming {
+                    return m.blocks.compactMap { if case .paragraph(let p) = $0 { return p } else { return nil } }.joined()
+                }
+                return nil
+            }.first
+            if let t = got, !t.isEmpty { uiLog("selftest: GOT REPLY text=\"\(t.prefix(40))\""); break }
+            if i % 50 == 0 { uiLog("selftest: waiting… transcript=\(transcript.count) responding=\(isResponding)") }
+        }
+        // 4) 再 resume 一个 + 再发一条（多轮）。
+        if let id = ids.first { uiLog("selftest: reopen \(id)"); selectConversation(id); try? await Task.sleep(nanoseconds: 700_000_000) }
+        uiLog("selftest: DONE (no crash)")
     }
 
     /// clarify 应答（M1 提名）。
