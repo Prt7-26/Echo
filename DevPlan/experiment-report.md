@@ -2,9 +2,13 @@
 
 *Every number in this report comes from a live model call; no value is fabricated, and
 weak or null results are reported as such. Aggregate statistics are produced by
-`scripts/eval/analyze.py` (→ [`stats.json`](experiment-figures/stats.json)); the
-publication figures are rendered by `scripts/eval/make_figures.py` into
-[`DevPlan/experiment-figures/`](experiment-figures/) as both PNG (300 dpi) and vector PDF.*
+`scripts/eval/analyze.py` (→ [`stats.json`](experiment-figures/stats.json)); the report
+figures are editorial vector graphics rendered by
+[`generate_svg.py`](experiment-figures/generate_svg.py) into
+[`DevPlan/experiment-figures/`](experiment-figures/) as `.svg`. The same numbers are also
+available as an interactive ECharts dashboard,
+[`charts.html`](experiment-figures/charts.html) (built by
+[`generate_html.py`](experiment-figures/generate_html.py); open it in a browser).*
 
 > **Scope note for the oral checkpoint.** Every experiment below was executed against
 > live models. The real-user (Telegram) study described in the proposal is **not** part
@@ -124,7 +128,7 @@ through 55.2% ± 3.0% (full history, 8,254 chars injected) to **64.6% ± 1.0%** 
 ≈⅓ the injected context. The error bars are tight and the three conditions separate
 cleanly.
 
-![Figure 1](experiment-figures/personamem_accuracy.png)
+![Figure 1](experiment-figures/personamem_accuracy.svg)
 
 *__Figure 1 | PersonaMem (COLM 2025): preference recall.__ Preference-probe accuracy by
 condition. Bars are the mean over 3 seeds; error bars are ±1 SD across seeds; in-bar text
@@ -137,7 +141,7 @@ following collapses when the preference is not in context. With the preference s
 199 distractors, Echo's retrieval reaches **82% ± 3.7%**, against an oracle (preference
 handed directly to the model) of 90% ± 2.2% (n = 300, 3 seeds).
 
-![Figure 2](experiment-figures/prefeval_adherence.png)
+![Figure 2](experiment-figures/prefeval_adherence.svg)
 
 *__Figure 2 | PrefEval (ICLR 2025): preference adherence in generation.__ Adherence rate
 by condition; bars are the mean over 3 seeds, error bars ±1 SD. The single target
@@ -161,7 +165,7 @@ to "large effect, near ceiling." The residual gap is occasional multi-rule perso
 the British-spelling triple rule) where mimo drops one constraint — a base-model
 instruction-following limit, reported in §4.6.
 
-![Figure 3](experiment-figures/satisfaction_curve.png)
+![Figure 3](experiment-figures/satisfaction_curve.svg)
 
 *__Figure 3 | Proactive satisfaction across the conversation.__ Independent GLM-5.2
 satisfaction (1–5) of each turn's first output, mean over 15 personas × 3 seeds
@@ -180,7 +184,7 @@ distribution (Figure 4b): bad skills collapse to a mean confidence of ≈0.13, b
 retirement threshold c_retire = 0.10, while good skills stay near 0.85 — a clean
 separation that does not depend on tuning.
 
-![Figure 4](experiment-figures/error_propagation_deterministic.png)
+![Figure 4](experiment-figures/error_propagation_deterministic.svg)
 
 *__Figure 4 | Error propagation (deterministic harness; 5 seeds, 15% noise).__ **(a)**
 Silently-wrong skills retired by Echo versus the frequency-decay Baseline B; error bars
@@ -220,7 +224,7 @@ task.
   tokens each; **36 of 45 Echo runs never fired the judge**. This is under a high-pressure
   setting where *every* run had a planted bad skill; in normal use Layer C fires ≈ 0.
 
-![Figure 5](experiment-figures/overhead.png)
+![Figure 5](experiment-figures/overhead.svg)
 
 *__Figure 5 | System overhead.__ **(a)** Mean tokens per 10-turn run, decomposed into agent
 reply, Echo Layer B (every turn) and Layer C (on alarm); Echo's fair agent-token delta is
@@ -240,7 +244,7 @@ Figure 6c). M4 confidence tracks planted true usefulness with **Spearman ρ = +0
 (recall@k = 0.375 with and without weights; Figure 6d) — its real value is the benchmark
 retrieval gains in §4.1, not this toy library.
 
-![Figure 6](experiment-figures/micrometrics.png)
+![Figure 6](experiment-figures/micrometrics.svg)
 
 *__Figure 6 | Per-module micro-metrics (deterministic, planted ground truth).__ **(a)** M4 —
 Echo confidence vs planted true usefulness, Spearman ρ = +0.67 (dashed line = identity).
@@ -280,8 +284,9 @@ $PY -m scripts.eval.exp_closedloop --turns 10 --seeds 2
 $PY -m scripts.eval.run_micrometrics
 # aggregate stats (stats.json)
 $PY -m scripts.eval.analyze
-# publication figures (PNG + vector PDF)
-$PY -m scripts.eval.make_figures
+# report figures (.svg) and the interactive ECharts dashboard (charts.html)
+$PY DevPlan/experiment-figures/generate_svg.py
+$PY DevPlan/experiment-figures/generate_html.py
 ```
 
 Credentials live in `~/.hermes/.env` and `~/.hermes/config.yaml` (never committed).

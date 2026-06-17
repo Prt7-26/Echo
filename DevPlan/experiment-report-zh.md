@@ -1,6 +1,6 @@
 # Echo —— 实验评测报告
 
-*本报告所有数字均来自真实的大模型调用，无任何伪造数据；凡结果偏弱或为零者，亦如实报告。汇总统计由 `scripts/eval/analyze.py` 生成（→ [`stats.json`](experiment-figures/stats.json)）；出版级图表由 `scripts/eval/make_figures.py` 渲染至 [`DevPlan/experiment-figures/`](experiment-figures/)，同时输出 PNG（300 dpi）与矢量 PDF。*
+*本报告所有数字均来自真实的大模型调用，无任何伪造数据；凡结果偏弱或为零者，亦如实报告。汇总统计由 `scripts/eval/analyze.py` 生成（→ [`stats.json`](experiment-figures/stats.json)）；报告图表为编辑部风格的矢量图，由 [`generate_svg.py`](experiment-figures/generate_svg.py) 渲染至 [`DevPlan/experiment-figures/`](experiment-figures/)（`.svg`）。同一份数字另有一个可交互的 ECharts 仪表盘 [`charts.html`](experiment-figures/charts.html)（由 [`generate_html.py`](experiment-figures/generate_html.py) 生成，浏览器打开即可）。*
 
 > **口头结题须知**：以下每一项实验都在真实模型上实际跑过。proposal 中规划的"真实用户（Telegram）研究"**不在本轮范围内**，属于 future work，请勿当作已完成来展示。
 
@@ -65,13 +65,13 @@ Ground truth 是**预先植入**而非推断的：每个 persona 的偏好规则
 
 **在 PersonaMem 上，Echo 的 M5 记忆比冷模型和朴素全历史 RAG 都更准地回忆用户偏好，且只注入约三分之一的上下文**（图 1）。跨 3 seed（n = 540 探针），准确率从 46.8% ± 1.7%（无记忆）经 55.2% ± 3.0%（全历史，注入 8254 字符）升到 **64.6% ± 1.0%**（Echo M5，注入 2653 字符）——比冷模型 **+17.8 pt**、比全历史 RAG **+9.4 pt**，而上下文仅约 **⅓**。误差棒很窄，三组干净分离。
 
-![图 1](experiment-figures/personamem_accuracy.png)
+![图 1](experiment-figures/personamem_accuracy.svg)
 
 *__图 1 | PersonaMem (COLM 2025)：偏好回忆。__ 各组的偏好探针准确率。柱为 3 seed 均值，误差棒为跨 seed 的 ±1 SD，柱内文字为平均注入上下文。n = 540 探针。*
 
 **在 PrefEval 上，Echo 从 200 条偏好的池子里检索出唯一相关的那条，把遵从率从 13% 拉到 82%，距 oracle 上限仅 8 pt**（图 2）。冷模型只有 13% ± 1.4% 遵从——复现了 PrefEval"偏好不在上下文里时遵从崩塌"的结论。当目标偏好混在 199 条干扰项中，Echo 的检索把遵从率拉到 **82% ± 3.7%**，而 oracle（直接把偏好递给模型）为 90% ± 2.2%（n = 300，3 seed）。
 
-![图 2](experiment-figures/prefeval_adherence.png)
+![图 2](experiment-figures/prefeval_adherence.svg)
 
 *__图 2 | PrefEval (ICLR 2025)：生成中的偏好遵从。__ 各组遵从率；柱为 3 seed 均值，误差棒 ±1 SD。目标偏好从 200 条池子里检索。n = 300。*
 
@@ -84,7 +84,7 @@ Ground truth 是**预先植入**而非推断的：每个 persona 的偏好规则
 
 Echo 在头一两轮内即爬升——学会该特异规则的代价只付一次——随后稳定贴近天花板。相比上一版（δ ≈ 0.27、Echo ≈ 2.3），M5 画像合并把效果从"显著但部分"推到"大效应、接近天花板"。残余差距来自个别多约束 persona（如英式拼写三连规则）偶尔漏一条——mimo 的指令遵循上限，见 §4.6。
 
-![图 3](experiment-figures/satisfaction_curve.png)
+![图 3](experiment-figures/satisfaction_curve.svg)
 
 *__图 3 | 全对话过程中的主动满意度。__ 独立 GLM-5.2 对每轮首个输出的满意度打分（1–5），为 15 persona × 3 seed 的均值（每轮 n = 45）；阴影带为 95% 置信区间。效应量按 persona/seed/turn 配对（n = 450）。*
 
@@ -92,7 +92,7 @@ Echo 在头一两轮内即爬升——学会该特异规则的代价只付一次
 
 **在 15% 信号噪声下，Echo 仍以零误报抓出全部静默错误技能，而频率衰减的 baseline 一个都抓不到**（图 4a）。确定性 harness（5 seed）中，Echo 在 n_bad = 3 时抓出 **3 / 3**、在 n_bad = 10 时抓出 **10 / 10**——每个 seed 都相同（min = max），且保留了全部好技能（误报 0）。仅按频率/时近度衰减、不用用户信号的 Baseline B 在两种设定下都抓 **0**。其机理见最终置信度分布（图 4b）：坏技能塌到均值约 0.13、低于退役阈值 c_retire = 0.10，好技能稳在约 0.85——这种干净的分离不依赖调参。
 
-![图 4](experiment-figures/error_propagation_deterministic.png)
+![图 4](experiment-figures/error_propagation_deterministic.svg)
 
 *__图 4 | 错误传播（确定性 harness；5 seed、15% 噪声）。__ **(a)** Echo 与频率衰减 Baseline B 抓出的静默错误技能数；误差棒为跨 seed 的 min–max（宽度为零——所有 seed 一致）。**(b)** Echo 的最终置信度相对复审阈值（c_min = 0.30）与退役阈值（c_retire = 0.10）干净地区分好/坏技能。散点为各 seed 均值，横线为组均值。*
 
@@ -106,7 +106,7 @@ Echo 在头一两轮内即爬升——学会该特异规则的代价只付一次
 - **稳态开销**（图 5b）：日常对话只产生 Layer B——每轮约 201 token，相对约 803 token 的 agent 回复约 **+25%**。**proposal 的"<15%"不成立**，因为 Layer B 每轮都跑，如实更正。这些 token 在廉价辅助档、且 fire-and-forget 不占用户感知延迟。
 - **Layer C 是稀有事件**：450 turn 里仅触发 **13 次（≈每 35 turn 1 次）**、每次约 2039 token；**45 个 echo run 里 36 个全程没触发 judge**。而且这还是**每个 run 都植了坏技能**的高压设定；正常使用下 Layer C ≈ 0。
 
-![图 5](experiment-figures/overhead.png)
+![图 5](experiment-figures/overhead.svg)
 
 *__图 5 | 系统开销。__ **(a)** 每 10-turn run 的平均 token，拆为 agent 回复、Echo Layer B（每轮）与 Layer C（告警时）；Echo 的公平 agent-token 增量为 +5.3% vs A。**(b)** 每轮稳态成本只有 Layer B（+25%）；judge（Layer C）在植坏高压测试下约每 35 turn 触发 1 次、正常使用 ≈ 0。计量受 judge 异步线程跨 run 落点影响，有 ±少量噪声。*
 
@@ -114,7 +114,7 @@ Echo 在头一两轮内即爬升——学会该特异规则的代价只付一次
 
 **确定性、植入 ground truth 的检查能隔离每个模块的贡献，且不随 run 规模变化**（图 6）。Echo 的 M1 提名器与 Hermes ≥工具数规则持平（内置场景上 precision 1.00、recall 0.67；图 6b）。M3 漂移检测在该小样本上完美（precision/recall/F1 = 1.00，1 个真阳 + 20 个真阴，已排除检测器物理上无法触发的 9 个预热调用；图 6c）。M4 置信度与植入的真实有用度同向，**Spearman ρ = +0.67**（n = 5 技能；图 6a）。M5 的置信度加权 uplift 在该内置场景上**为零**（带/不带加权 recall@k 均为 0.375；图 6d）——它的真实价值是 §4.1 的 benchmark 检索增益，而非这个玩具库。
 
-![图 6](experiment-figures/micrometrics.png)
+![图 6](experiment-figures/micrometrics.svg)
 
 *__图 6 | 逐模块微指标（确定性、植入 ground truth）。__ **(a)** M4 —— Echo 置信度 vs 植入真实有用度，Spearman ρ = +0.67（虚线为恒等线）。**(b)** M1 —— 提名 precision/recall，Echo vs Hermes 规则。**(c)** M3 —— 漂移 precision/recall/F1（n 小）。**(d)** M5 —— 带/不带置信度加权的检索 recall@k（该内置场景无 uplift）。*
 
@@ -139,8 +139,9 @@ $PY -m scripts.eval.exp_closedloop --turns 10 --seeds 2
 $PY -m scripts.eval.run_micrometrics
 # 汇总统计（stats.json）
 $PY -m scripts.eval.analyze
-# 出版级图表（PNG + 矢量 PDF）
-$PY -m scripts.eval.make_figures
+# 报告图表（.svg）与可交互 ECharts 仪表盘（charts.html）
+$PY DevPlan/experiment-figures/generate_svg.py
+$PY DevPlan/experiment-figures/generate_html.py
 ```
 
 凭据存于 `~/.hermes/.env` 与 `~/.hermes/config.yaml`（绝不入库）。benchmark 数据与原始结果产物在 `scripts/eval/data|results/` 下被 gitignore；入库的数字（`stats.json`、各分片摘要、以及 `satisfaction_curve_ci.json` 旁挂文件）位于 `DevPlan/experiment-figures/`，使每张图都能仅凭仓库重新渲染。

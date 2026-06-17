@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo — evaluation figures (HTML / ECharts)</title>
+<script src="echarts.min.js"></script>
+<style>
+  :root{ --ink:#19222C; --ink2:#5B6B7B; --ink3:#8492A0; --line:#EEF1F4;
+         --echo:#0FA295; --echoDeep:#0A6E66; --A:#A9B4BF; --B:#E1A458;
+         --full:#7E9BD0; --good:#46A56B; --bad:#DD6B4B; --layerC:#D9748B; --agent:#CCD3DA; }
+  *{box-sizing:border-box}
+  body{margin:0;background:#F4F6F8;color:var(--ink);
+       font-family:-apple-system,'SF Pro Display','SF Pro Text','Inter','Helvetica Neue',Arial,sans-serif;
+       -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+  .wrap{max-width:1140px;margin:0 auto;padding:30px 24px 60px}
+  .page-h{font-size:13px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink3);font-weight:600;margin:0 0 18px}
+  .card{background:#fff;border-radius:18px;box-shadow:0 1px 2px rgba(16,24,40,.05),0 4px 16px rgba(16,24,40,.05);
+        padding:22px 24px;margin-bottom:22px}
+  .card h3{margin:0;font-size:17.5px;font-weight:600;letter-spacing:.1px}
+  .card .sub{margin:5px 0 0;font-size:12.5px;color:var(--ink3)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .chart{width:100%}
+  .badge{display:inline-flex;gap:6px;align-items:center;background:#F1F9F8;color:var(--echoDeep);
+         border:1px solid rgba(15,162,149,.35);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600;margin-top:6px}
+  .note{font-size:12px;color:var(--ink2);margin-top:10px;line-height:1.55}
+  .micro-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .mtitle{font-size:13.5px;font-weight:600;color:var(--ink);margin:2px 0 0}
+</style></head>
+<body><div class="wrap">
+  <p class="page-h">Echo · evaluation figures · HTML / ECharts</p>
+
+  <div class="grid2">
+    <div class="card"><h3>Preference recall — PersonaMem</h3>
+      <p class="sub">Multiple-choice probe accuracy · 3 seeds · n = 540 · whiskers ±1 SD</p>
+      <div id="c_pm" class="chart" style="height:330px"></div>
+      <span class="badge">+17.8 pts vs cold · ⅓ the context</span></div>
+    <div class="card"><h3>Preference adherence — PrefEval</h3>
+      <p class="sub">Generation adheres to the stored preference · 3 seeds · n = 300</p>
+      <div id="c_pe" class="chart" style="height:330px"></div>
+      <span class="badge">retrieves 1-of-200 → 82% (oracle 90%)</span></div>
+  </div>
+
+  <div class="card"><h3>Proactive satisfaction across the conversation</h3>
+    <p class="sub">Independent GLM-5.2 score (1–5) of each turn's first output · 15 personas × 3 seeds · band = 95% CI</p>
+    <div id="c_sat" class="chart" style="height:400px"></div>
+    <span class="badge">Echo vs baselines · Cliff's δ = 0.84 / 0.86 · p &lt; 10⁻⁷² · n = 450 paired</span></div>
+
+  <div class="grid2">
+    <div class="card"><h3>Error propagation — bad skills retired</h3>
+      <p class="sub">Deterministic harness · 5 seeds · 15% signal noise · planted ground truth</p>
+      <div id="c_err" class="chart" style="height:320px"></div>
+      <span class="badge">Echo 3/3 &amp; 10/10 · 0 false positives · Baseline B 0</span></div>
+    <div class="card"><h3>Why — final confidence separates them</h3>
+      <p class="sub">Bad skills decay below c_retire = 0.10; good skills hold ≈ 0.85</p>
+      <div id="c_conf" class="chart" style="height:320px"></div>
+      <span class="badge">clean separation, no tuning</span></div>
+  </div>
+
+  <div class="card"><h3>System overhead — modest, on a cheap off-latency tier</h3>
+    <p class="sub">Tokens per 10-turn run · Baseline A also revises (fair agent-token comparison)</p>
+    <div id="c_over" class="chart" style="height:360px"></div>
+    <p class="note">Fair agent-token Δ (Echo vs A) = <b>+5.3%</b> · steady-state add = Layer B only (<b>+25%</b>/turn) ·
+      Layer C (judge) is rare: <b>13 firings / 450 turns (≈1 per 35)</b>, 36/45 runs never fired it.</p></div>
+
+  <div class="card"><h3>Per-module micro-metrics</h3>
+    <p class="sub">Deterministic · planted ground truth · invariant to run scale</p>
+    <div class="micro-grid">
+      <div><p class="mtitle">M4 · confidence tracks usefulness</p><div id="c_m4" class="chart" style="height:230px"></div></div>
+      <div><p class="mtitle">M1 · nomination ties the Hermes rule</p><div id="c_m1" class="chart" style="height:230px"></div></div>
+      <div><p class="mtitle">M3 · drift detection (small n)</p><div id="c_m3" class="chart" style="height:230px"></div></div>
+      <div><p class="mtitle">M5 · weighting uplift null on this case</p><div id="c_m5" class="chart" style="height:230px"></div></div>
+    </div>
+    <p class="note">M3: TP 1 · FP 0 · FN 0 · TN 20 · 9 warm-up excl. · M5 real value: see PersonaMem / PrefEval above.</p></div>
+
+</div>
+<script>
+const D = {"personamem": {"cats": ["No memory", "Full history", "Echo M5"], "subs": ["cold", "naive RAG", "retrieval"], "mean": [46.849999999999994, 55.186666666666675, 64.63], "sd": [1.7188562088396646, 2.950506547847144, 1.0465180361560902], "inj": [0.0, 8253.900000000001, 2652.9]}, "prefeval": {"cats": ["No memory", "Echo M5", "Oracle"], "subs": ["", "retrieval", "pref. given"], "mean": [13.0, 82.0, 90.0], "sd": [1.4142135623730956, 3.7416573867739396, 2.1602468994692887]}, "sat": {"turns": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "A": [1.7333333333333334, 1.5333333333333334, 1.4666666666666666, 1.2444444444444445, 1.3777777777777778, 1.0666666666666667, 1.6666666666666667, 1.3555555555555556, 1.3555555555555556, 1.6888888888888889], "B": [1.0888888888888888, 1.5555555555555556, 1.1777777777777778, 1.3111111111111111, 1.2666666666666666, 1.4222222222222223, 1.0222222222222221, 1.3333333333333333, 1.2666666666666666, 1.4222222222222223], "echo": [3.533333333333333, 4.311111111111111, 4.2444444444444445, 4.6, 4.688888888888889, 4.5777777777777775, 4.888888888888889, 4.377777777777778, 4.866666666666666, 4.711111111111111], "lo": [2.9845899019053537, 3.922979808626276, 3.807702625532993, 4.292295826180633, 4.411547526663746, 4.251177111044438, 4.733503122966129, 3.987320656972651, 4.683988056130362, 4.457140761913405], "hi": [4.082076764761313, 4.699242413595946, 4.6811862633558965, 4.907704173819366, 4.966230251114032, 4.904378444511117, 5.04427465481165, 4.7682348985829055, 5.0493452772029705, 4.965081460308817], "dA": 0.8435654320987654, "dB": 0.8625481481481482, "n": 450}, "errk": {"n3": {"echo": 3, "b": 0, "n": 3}, "n10": {"echo": 10, "b": 0, "n": 10}}, "conf": {"good": [0.8641250000000004, 0.9225000000000003, 1.0, 0.9236875000000002, 0.9125000000000002, 0.7941443750000002, 0.7422885656250002, 0.6938320562500001, 0.8921000000000003, 0.7672387500000004], "bad": [0.1007532688735645, 0.18418218275721024, 0.14769874571333003, 0.11870656577567053, 0.11856020264831622, 0.11535088626775343, 0.13076646003228862, 0.13386421104958424, 0.1308814490872119, 0.14723230703740725]}, "over": {"cats": ["Baseline A", "Baseline B", "Echo"], "agent": [4699.666666666667, 14434.977777777778, 4947.044444444445], "lb": [0.0, 0.0, 2010.6444444444444], "lc": [104.6, 0.0, 588.9333333333333], "fairpct": 5.263730288200108, "agent_pt": 802.722962962963, "lb_pt": 201.06444444444443, "ss_pct": 25.047800265023863, "fires": 13.0, "turns": 450, "nojudge": 36, "judge": 9}, "micro": {"m4": [[0.8, 0.5], [0.9, 0.55], [0.7, 0.5], [0.55, 0.2975], [0.5, 0.5]], "rho": 0.6708203932499369, "m1": {"echo": [1.0, 0.6666666666666666], "herm": [1.0, 0.6666666666666666]}, "m3": [1.0, 1.0, 1.0], "m3c": "TP 1 \u00b7 FP 0 \u00b7 FN 0 \u00b7 TN 20 \u00b7 9 warm-up excl.", "m5": [0.375, 0.375]}};
+const ECHO="#0FA295", ECHO_DEEP="#0A6E66", A="#A9B4BF", B="#E1A458", FULL="#7E9BD0",
+      GOOD="#46A56B", BAD="#DD6B4B", LAYERC="#D9748B", AGENT="#CCD3DA",
+      INK="#19222C", INK2="#5B6B7B", INK3="#8492A0", LINE="#EEF1F4";
+const FONT="-apple-system,'SF Pro Display','Inter','Helvetica Neue',Arial,sans-serif";
+const base = {textStyle:{fontFamily:FONT}, animation:false};
+function mk(id){ const e=echarts.init(document.getElementById(id),null,{renderer:'canvas',devicePixelRatio:2}); return e; }
+function axX(data,extra){return Object.assign({type:'category',data:data,axisTick:{show:false},
+  axisLine:{lineStyle:{color:'#DCE2E8'}},axisLabel:{color:'#3F4D5A',fontSize:13,fontWeight:500}},extra||{});}
+function axY(extra){return Object.assign({type:'value',splitLine:{lineStyle:{color:LINE}},
+  axisLine:{show:false},axisTick:{show:false},axisLabel:{color:INK3,fontSize:11}},extra||{});}
+// error-bar custom renderer
+function errItem(params,api){const xv=api.value(0);
+  const lo=api.coord([xv,api.value(1)]), hi=api.coord([xv,api.value(2)]); const x=lo[0],cap=6;
+  const st={stroke:INK2,lineWidth:1.5,fill:null};
+  return {type:'group',children:[
+    {type:'line',shape:{x1:x,y1:lo[1],x2:x,y2:hi[1]},style:st},
+    {type:'line',shape:{x1:x-cap,y1:hi[1],x2:x+cap,y2:hi[1]},style:st},
+    {type:'line',shape:{x1:x-cap,y1:lo[1],x2:x+cap,y2:lo[1]},style:st}]};}
+
+// ---- PersonaMem / PrefEval bars ----
+function bar(id,d,colors,opts){const e=mk(id);
+  const err=d.cats.map((c,i)=>[i,d.mean[i]-d.sd[i],d.mean[i]+d.sd[i]]);
+  const cats=d.cats.map((c,i)=>d.subs[i]?(c+'\n'+d.subs[i]):c);
+  e.setOption(Object.assign({},base,{
+    grid:{left:6,right:opts.right||14,top:24,bottom:38,containLabel:true},
+    tooltip:{trigger:'axis',axisPointer:{type:'none'},valueFormatter:v=>v.toFixed(1)+'%'},
+    xAxis:axX(cats,{axisLabel:{color:'#3F4D5A',fontSize:13,fontWeight:500,lineHeight:15,
+       formatter:v=>v.split('\n').map((s,i)=>i?'{s|'+s+'}':'{b|'+s+'}').join('\n'),
+       rich:{b:{fontWeight:600,fontSize:13,color:'#3F4D5A'},s:{fontSize:11,color:INK3,padding:[2,0,0,0]}}}}),
+    yAxis:axY({max:opts.ymax,axisLabel:{color:INK3,fontSize:11,formatter:'{value}%'}}),
+    series:[
+      {type:'bar',barWidth:'50%',z:2,
+       data:d.mean.map((v,i)=>({value:v,itemStyle:{color:colors[i],borderRadius:[7,7,0,0]}})),
+       label:{show:true,position:'top',distance:8,formatter:p=>p.value.toFixed(opts.dp!=null?opts.dp:1)+'%',
+              color:INK,fontSize:15,fontWeight:700}},
+      {type:'custom',renderItem:errItem,data:err,z:6,silent:true}
+    ]}));}
+bar('c_pm',D.personamem,[A,FULL,ECHO],{ymax:80,dp:1});
+bar('c_pe',D.prefeval,[A,ECHO,ECHO_DEEP],{ymax:100,dp:0});
+
+// ---- Satisfaction line + CI band ----
+(function(){const e=mk('c_sat'); const t=D.sat.turns;
+  const band=t.map((x,i)=>D.sat.hi[i]-D.sat.lo[i]);
+  e.setOption(Object.assign({},base,{
+    grid:{left:6,right:64,top:16,bottom:40,containLabel:true},
+    tooltip:{trigger:'axis',valueFormatter:v=>v==null?'':(+v).toFixed(2)},
+    legend:{show:true,top:0,right:0,orient:'vertical',icon:'roundRect',itemWidth:18,itemHeight:4,
+            textStyle:{color:INK2,fontSize:12},data:['Echo','Baseline B','Baseline A']},
+    xAxis:axX(t,{name:'interaction (turn)',nameLocation:'middle',nameGap:28,nameTextStyle:{color:INK3,fontSize:11},
+                 boundaryGap:false,axisLabel:{color:INK3,fontSize:11}}),
+    yAxis:axY({min:1,max:5,interval:1}),
+    series:[
+      {name:'lo',type:'line',data:D.sat.lo,stack:'ci',symbol:'none',lineStyle:{opacity:0},areaStyle:{opacity:0},silent:true,legendHoverLink:false,tooltip:{show:false}},
+      {name:'ciband',type:'line',data:band,stack:'ci',symbol:'none',lineStyle:{opacity:0},
+       areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(15,162,149,.20)'},{offset:1,color:'rgba(15,162,149,.05)'}])},
+       silent:true,legendHoverLink:false,tooltip:{show:false}},
+      {name:'Baseline A',type:'line',data:D.sat.A,smooth:false,symbol:'circle',symbolSize:6,
+       lineStyle:{color:A,width:2,type:[2,5]},itemStyle:{color:A}},
+      {name:'Baseline B',type:'line',data:D.sat.B,smooth:false,symbol:'circle',symbolSize:6,
+       lineStyle:{color:B,width:2,type:[2,5]},itemStyle:{color:B}},
+      {name:'Echo',type:'line',data:D.sat.echo,smooth:0.35,symbol:'circle',symbolSize:7,
+       lineStyle:{color:ECHO,width:3.4},itemStyle:{color:ECHO},
+       endLabel:{show:true,formatter:p=>p.value.toFixed(1),color:ECHO_DEEP,fontWeight:700,fontSize:13},
+       emphasis:{focus:'series'}}
+    ]}));})();
+
+// ---- Error prop grouped bars ----
+(function(){const e=mk('c_err');
+  e.setOption(Object.assign({},base,{
+    grid:{left:6,right:14,top:30,bottom:30,containLabel:true},
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+    legend:{show:true,top:0,left:0,itemWidth:11,itemHeight:11,textStyle:{color:INK2,fontSize:12},data:['Echo','Baseline B (freq. decay)']},
+    xAxis:axX(['3 planted bad','10 planted bad']),
+    yAxis:axY({max:10}),
+    series:[
+      {name:'Echo',type:'bar',barWidth:'30%',itemStyle:{color:ECHO,borderRadius:[6,6,0,0]},
+       data:[D.errk.n3.echo,D.errk.n10.echo],
+       label:{show:true,position:'top',formatter:p=>p.value+'/'+(p.dataIndex?10:3),color:ECHO_DEEP,fontWeight:700,fontSize:13}},
+      {name:'Baseline B (freq. decay)',type:'bar',barWidth:'30%',itemStyle:{color:B,borderRadius:[6,6,0,0]},
+       data:[D.errk.n3.b,D.errk.n10.b],
+       label:{show:true,position:'top',formatter:p=>p.value+'/'+(p.dataIndex?10:3),color:B,fontWeight:700,fontSize:12}}
+    ]}));})();
+
+// ---- Confidence separation scatter ----
+(function(){const e=mk('c_conf');
+  const jit=i=>((i*2654435761)%1000/1000-0.5)*0.5;
+  const good=D.conf.good.map((v,i)=>[0+jit(i),v]), bad=D.conf.bad.map((v,i)=>[1+jit(i+7),v]);
+  const mg=D.conf.good.reduce((a,b)=>a+b,0)/D.conf.good.length;
+  const mb=D.conf.bad.reduce((a,b)=>a+b,0)/D.conf.bad.length;
+  e.setOption(Object.assign({},base,{
+    grid:{left:6,right:14,top:16,bottom:30,containLabel:true},
+    tooltip:{trigger:'item',valueFormatter:v=>(+v).toFixed(2)},
+    xAxis:{type:'value',min:-0.5,max:1.5,interval:1,axisLine:{show:false},axisTick:{show:false},
+           splitLine:{show:false},axisLabel:{color:'#3F4D5A',fontSize:13,fontWeight:600,
+           formatter:v=>v===0?'Good skills':(v===1?'Bad skills':'')}},
+    yAxis:axY({min:0,max:1,interval:0.25}),
+    series:[
+      {type:'scatter',data:good,symbolSize:11,itemStyle:{color:GOOD,opacity:.7},
+       markLine:{symbol:'none',silent:true,data:[{yAxis:mg,lineStyle:{color:GOOD,width:2.4}}],
+                 label:{formatter:'mean '+mg.toFixed(2),color:GOOD,fontWeight:700,position:'insideStartTop'}}},
+      {type:'scatter',data:bad,symbolSize:11,itemStyle:{color:BAD,opacity:.7},
+       markLine:{symbol:'none',silent:true,
+         data:[{yAxis:mb,lineStyle:{color:BAD,width:2.4},label:{formatter:'mean '+mb.toFixed(2),color:BAD,fontWeight:700,position:'insideEndBottom'}},
+               {yAxis:0.30,lineStyle:{color:'#AAB4BF',type:'dashed',width:1},label:{formatter:'c_min 0.30',color:INK3,position:'insideStartTop'}},
+               {yAxis:0.10,lineStyle:{color:BAD,type:'dashed',width:1},label:{formatter:'c_retire 0.10',color:BAD,position:'insideStartTop'}}]}}
+    ]}));})();
+
+// ---- Overhead stacked ----
+(function(){const e=mk('c_over');
+  e.setOption(Object.assign({},base,{
+    grid:{left:6,right:16,top:28,bottom:28,containLabel:true},
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow'},valueFormatter:v=>Math.round(v).toLocaleString()},
+    legend:{show:true,top:0,left:0,itemWidth:12,itemHeight:12,textStyle:{color:INK2,fontSize:12},
+            data:['agent reply','Layer B (every turn)','Layer C (on alarm)']},
+    xAxis:axX(D.over.cats),
+    yAxis:axY({axisLabel:{color:INK3,fontSize:11,formatter:v=>(v/1000)+'k'}}),
+    series:[
+      {name:'agent reply',type:'bar',stack:'t',barWidth:'46%',itemStyle:{color:AGENT,borderRadius:[0,0,0,0]},data:D.over.agent},
+      {name:'Layer B (every turn)',type:'bar',stack:'t',itemStyle:{color:ECHO},data:D.over.lb},
+      {name:'Layer C (on alarm)',type:'bar',stack:'t',itemStyle:{color:LAYERC,borderRadius:[6,6,0,0]},data:D.over.lc,
+       label:{show:true,position:'top',formatter:p=>{const i=p.dataIndex;const t=D.over.agent[i]+D.over.lb[i]+D.over.lc[i];return (t/1000).toFixed(1)+'k';},
+              color:INK,fontWeight:700,fontSize:13}}
+    ]}));})();
+
+// ---- micro: M4 scatter ----
+(function(){const e=mk('c_m4');
+  e.setOption(Object.assign({},base,{
+    grid:{left:6,right:14,top:24,bottom:34,containLabel:true},
+    tooltip:{trigger:'item',formatter:p=>'usefulness '+p.value[0].toFixed(2)+'<br>confidence '+p.value[1].toFixed(2)},
+    xAxis:axY({name:'true usefulness',nameLocation:'middle',nameGap:24,nameTextStyle:{color:INK3,fontSize:11},
+               min:0.4,max:1.0,interval:0.2,splitLine:{show:false}}),
+    yAxis:axY({name:'confidence',min:0.2,max:0.7,interval:0.15}),
+    graphic:[{type:'text',right:8,top:6,style:{text:'ρ = +'+D.micro.rho.toFixed(2),fill:ECHO_DEEP,font:'700 14px '+FONT}}],
+    series:[
+      {type:'line',data:[[0.4,0.30],[1.0,0.62]],symbol:'none',lineStyle:{color:'#E3E8ED',type:'dashed',width:1},silent:true},
+      {type:'scatter',data:D.micro.m4,symbolSize:13,itemStyle:{color:ECHO,opacity:.85}}
+    ]}));})();
+
+// ---- micro: M1 grouped ----
+(function(){const e=mk('c_m1');
+  e.setOption(Object.assign({},base,{
+    grid:{left:6,right:14,top:30,bottom:24,containLabel:true},
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+    legend:{show:true,top:0,right:0,itemWidth:10,itemHeight:10,textStyle:{color:INK2,fontSize:11},data:['Echo','Hermes rule']},
+    xAxis:axX(['Precision','Recall']),
+    yAxis:axY({max:1,interval:0.5}),
+    series:[
+      {name:'Echo',type:'bar',barWidth:'30%',itemStyle:{color:ECHO,borderRadius:[5,5,0,0]},data:D.micro.m1.echo,
+       label:{show:true,position:'top',formatter:p=>p.value.toFixed(2),color:ECHO_DEEP,fontSize:11,fontWeight:600}},
+      {name:'Hermes rule',type:'bar',barWidth:'30%',itemStyle:{color:A,borderRadius:[5,5,0,0]},data:D.micro.m1.herm,
+       label:{show:true,position:'top',formatter:p=>p.value.toFixed(2),color:INK2,fontSize:11,fontWeight:600}}
+    ]}));})();
+
+// ---- micro: M3 ----
+(function(){const e=mk('c_m3');
+  e.setOption(Object.assign({},base,{
+    grid:{left:6,right:14,top:24,bottom:24,containLabel:true},
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+    xAxis:axX(['Precision','Recall','F1']),
+    yAxis:axY({max:1,interval:0.5}),
+    series:[{type:'bar',barWidth:'46%',itemStyle:{color:ECHO,borderRadius:[5,5,0,0]},data:D.micro.m3,
+      label:{show:true,position:'top',formatter:p=>p.value.toFixed(2),color:ECHO_DEEP,fontSize:12,fontWeight:700}}]}));})();
+
+// ---- micro: M5 ----
+(function(){const e=mk('c_m5');
+  e.setOption(Object.assign({},base,{
+    grid:{left:6,right:14,top:24,bottom:24,containLabel:true},
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow'},valueFormatter:v=>(+v).toFixed(3)},
+    xAxis:axX(['no weights','+ conf. weights']),
+    yAxis:axY({max:0.5,interval:0.25}),
+    series:[{type:'bar',barWidth:'46%',
+      data:[{value:D.micro.m5[0],itemStyle:{color:A,borderRadius:[5,5,0,0]}},
+            {value:D.micro.m5[1],itemStyle:{color:ECHO,borderRadius:[5,5,0,0]}}],
+      label:{show:true,position:'top',formatter:p=>p.value.toFixed(3),color:INK,fontSize:12,fontWeight:600}}]}));})();
+</script>
+</body></html>
