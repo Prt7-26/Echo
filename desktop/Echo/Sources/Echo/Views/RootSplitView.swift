@@ -37,10 +37,9 @@ struct RootSplitView: View {
             .background(Theme.contentBackground)
         }
         .frame(minWidth: Tokens.Size.windowMinWidth, minHeight: Tokens.Size.windowMinHeight)
-        // AppKit 窗口背板：在 SwiftUI 承载视图「下面」挂一层 .behindWindow 玻璃，透出桌面。
-        // sidebar 透明 → 露出它；detail 实底 → 遮住它。只 sidebar 区与桌面合成，不卡。
-        // 不碰 window.isOpaque（SwiftUI 默认即可），调度中心正常。
-        .background(AppKitWindowBackdrop())
+        // 纯原生半透 sidebar（NavigationSplitView 自带系统材质，sidebar 不铺背景=透明=露出材质，
+        // detail 铺实底）。唯一加挂：ActiveVibrancy 把系统材质设常驻 .active，让失焦也保持半透。
+        .background(ActiveVibrancy())
     }
 }
 

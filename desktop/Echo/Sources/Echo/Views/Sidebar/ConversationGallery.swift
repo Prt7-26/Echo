@@ -23,8 +23,8 @@ struct ConversationGallery: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             SidebarToolbar(app: app).topBarScrim()
         }
-        // sidebar 不铺任何背景 → 保持透明 → 露出 AppKitWindowBackdrop 的窗口背板玻璃
-        // （透出桌面/壁纸）。卡片是实底 contentCard，浮在透明大底之上（WeChat/Siri 结构）。
+        // sidebar 不铺任何背景 → 保持透明 → 露出 NavigationSplitView 自带的系统半透
+        // sidebar 材质（透出桌面/壁纸）。卡片是实底 contentCard，浮在其上（WeChat/Siri 结构）。
     }
 
     /// 置顶优先，其余按时间倒序。
