@@ -2,6 +2,11 @@ import SwiftUI
 import Observation
 import EchoKit
 
+/// 轻量 UI 打点（写 stderr，终端可见）。交互频率低，常开无害；卡死时终端最后一行即定位入口。
+@inline(never) func uiLog(_ s: String) {
+    FileHandle.standardError.write(Data(("[echo-ui] " + s + "\n").utf8))
+}
+
 /// 应用级状态。Phase 1 用 mock 填充；Phase 3 接 GatewayClient 事件流。
 @MainActor
 @Observable
@@ -97,6 +102,7 @@ final class AppState {
     // MARK: - 意图（Phase 1 仅本地模拟；Phase 3 接 gateway）
 
     func selectConversation(_ id: String) {
+        uiLog("selectConversation \(id)")
         selectedConversationId = id
         clarifyPrompt = nil; scopeQuestion = nil
         if let coordinator {
@@ -109,6 +115,7 @@ final class AppState {
     }
 
     func newConversation() {
+        uiLog("newConversation")
         selectedConversationId = nil
         transcript = []; ratingQueue = []
         scopeQuestion = nil; clarifyPrompt = nil
@@ -116,6 +123,7 @@ final class AppState {
     }
 
     func toggleEchoPanel() {
+        uiLog("toggleEchoPanel")
         showEchoPanel.toggle()
         guard showEchoPanel else { return }
         if let coordinator { coordinator.refreshEchoPanel() }
@@ -151,6 +159,7 @@ final class AppState {
     }
 
     func deleteConversation(_ id: String) {
+        uiLog("deleteConversation \(id)")
         conversations.removeAll { $0.id == id }
         coordinator?.deleteSession(id)   // 也删后端，否则重启会复现
         if selectedConversationId == id { newConversation() }
@@ -159,12 +168,14 @@ final class AppState {
     func send() {
         let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        uiLog("send len=\(text.count)")
         composerText = ""
         transcript.append(.user(.init(id: UUID().uuidString, text: text)))
         if let coordinator { Task { await coordinator.submit(text) } }
     }
 
     func stop() {
+        uiLog("stop")
         isResponding = false
         statusLine = nil
         if let coordinator { Task { await coordinator.interrupt() } }

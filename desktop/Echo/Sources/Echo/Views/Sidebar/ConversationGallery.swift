@@ -24,9 +24,15 @@ struct ConversationGallery: View {
             SidebarToolbar(app: app).topBarScrim()
         }
         // 更透：用 .underWindowBackground（标准材质里最见底的一档）盖掉系统 .sidebar 材质，
-        // 自己掌控透明度。前置的 .behindWindow 视图会遮住系统那层，不会叠成双层霜白；
-        // 配合 WindowVibrancyConfigurator 的透明窗口，壁纸大面积透出来（比 .sidebar 更透）。
-        .background(VisualEffectBackground(material: .underWindowBackground).ignoresSafeArea())
+        // 自己掌控透明度。配合 WindowVibrancyConfigurator 的透明窗口，壁纸大面积透出来。
+        // ECHO_NO_VIBRANCY=1 时整块用实底（A/B 排查彩虹球是否源于 vibrancy 合成）。
+        .background {
+            if ProcessInfo.processInfo.environment["ECHO_NO_VIBRANCY"] != "1" {
+                VisualEffectBackground(material: .underWindowBackground).ignoresSafeArea()
+            } else {
+                Theme.contentBackground.ignoresSafeArea()
+            }
+        }
     }
 
     /// 置顶优先，其余按时间倒序。

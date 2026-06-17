@@ -24,18 +24,29 @@ struct VisualEffectBackground: NSViewRepresentable {
 /// 透出桌面/壁纸的前提——否则毛玻璃只能贴着白色窗口背板模糊，看起来发白（用户反馈「白白的」）。
 /// 右侧对话区各面板都铺了 `Theme.contentBackground` 实底，所以只有 sidebar 会透，内容区不受影响。
 struct WindowVibrancyConfigurator: NSViewRepresentable {
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    final class Coordinator { var configured = false }
+
     func makeNSView(context: Context) -> NSView {
         let v = NSView()
-        apply(from: v)
+        configureOnce(v, context.coordinator)
         return v
     }
-    func updateNSView(_ nsView: NSView, context: Context) { apply(from: nsView) }
 
-    private func apply(from view: NSView) {
+    /// 关键：只在「还没配过」时配一次。绝不在每次 update 都改窗口属性——否则点击触发的
+    /// 玻璃 morph 动画会每帧改 isOpaque/backgroundColor → 窗口重合成 → 又触发 update，
+    /// 在非不透明窗口 + Liquid Glass 下滚成重合成风暴 / 主线程卡死（彩虹球）。
+    func updateNSView(_ nsView: NSView, context: Context) {
+        configureOnce(nsView, context.coordinator)
+    }
+
+    private func configureOnce(_ view: NSView, _ coord: Coordinator) {
+        guard !coord.configured else { return }
         DispatchQueue.main.async { [weak view] in
-            guard let window = view?.window else { return }
+            guard let window = view?.window else { return }  // 窗口还没 attach → 等下次 update 再试
             window.isOpaque = false
             window.backgroundColor = .clear
+            coord.configured = true
         }
     }
 }
