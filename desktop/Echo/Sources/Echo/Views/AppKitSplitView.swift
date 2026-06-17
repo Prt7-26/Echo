@@ -63,6 +63,9 @@ struct AppKitSplitView: NSViewControllerRepresentable {
                 return
             }
             installed = true
+            if ProcessInfo.processInfo.environment["ECHO_DUMP_VIEWS"] == "1" {
+                FileHandle.standardError.write(Data("[echo-ui] windowNumber=\(window.windowNumber)\n".utf8))
+            }
             let nc = NotificationCenter.default
             let names: [Notification.Name] = [
                 NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,

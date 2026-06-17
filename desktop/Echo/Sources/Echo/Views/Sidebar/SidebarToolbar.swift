@@ -6,6 +6,8 @@ struct SidebarToolbar: View {
 
     var body: some View {
         HStack(spacing: Tokens.Spacing.tight) {
+            Spacer()   // 按钮靠右上角（对齐 Siri；左上角留给 traffic-light）
+
             Menu {
                 Button("全部") {}
                 Button("仅置顶") {}
@@ -23,8 +25,6 @@ struct SidebarToolbar: View {
             }
             .buttonStyle(.glassIcon)
             .help("新建对话")
-
-            Spacer()
         }
         .font(.system(size: 13, weight: .medium))
         .foregroundStyle(.secondary)
