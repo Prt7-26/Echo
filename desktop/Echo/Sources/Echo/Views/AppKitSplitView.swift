@@ -13,7 +13,7 @@ struct AppKitSplitView: NSViewControllerRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSViewController(context: Context) -> NSSplitViewController {
-        let split = NSSplitViewController()
+        let split = EchoSplitViewController()
         split.view.wantsLayer = true
 
         // 侧栏：普通 split item，面板底层是我自己的 vibrancy（不用系统 .sidebar 自动层）。
@@ -70,36 +70,48 @@ struct AppKitSplitView: NSViewControllerRepresentable {
             let names: [Notification.Name] = [
                 NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
                 NSWindow.didBecomeMainNotification, NSWindow.didResignMainNotification,
-                NSWindow.didResizeNotification, NSWindow.didMoveNotification,
             ]
             for name in names {
                 observers.append(nc.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
                     MainActor.assumeIsolated { DispatchQueue.main.async { self?.relock() } }
                 })
             }
-            // 启动后系统还会再布局几次标题栏 → 多补几拍红绿灯微移。
-            for delay in [0.1, 0.3, 0.6, 1.0, 1.5] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.nudgeTrafficLights() }
-            }
         }
 
-        /// 把我的 vibrancy 锁回 .active（失焦也透）。
-        func relock() { effect?.state = .active; nudgeTrafficLights() }
+        /// 把我的 vibrancy 锁回 .active（失焦也透）。红绿灯微移交给 viewDidLayout（无可见跳动）。
+        func relock() { effect?.state = .active }
+    }
+}
 
-        /// 红绿灯往右下微移，与顶栏按钮齐平。需多次重新应用（系统会在布局时弹回）。
-        func nudgeTrafficLights() {
-            guard let window = windowProvider?() else { return }
-            let env = ProcessInfo.processInfo.environment
-            let dx = CGFloat(Double(env["ECHO_TL_DX"] ?? "") ?? 2)     // 右移
-            let dyDown = CGFloat(Double(env["ECHO_TL_DY"] ?? "") ?? 1) // 下移
-            for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
-                guard let b = window.standardWindowButton(type), let sup = b.superview else { continue }
-                let flipped = sup.isFlipped
-                var o = b.frame.origin
-                o.x += dx
-                o.y += flipped ? dyDown : -dyDown   // 非翻转视图 y 减小=下移
-                b.setFrameOrigin(o)
+/// NSSplitViewController 子类：在 viewDidLayout（绘制前的布局阶段）把红绿灯微移到位，
+/// 用户从第一帧起看到的就是最终位置——不像启动后定时器那样会「打开后又移动一下」。
+/// 记录系统默认位置只记一次、每次都「默认+偏移」，避免反复累加漂移。
+final class EchoSplitViewController: NSSplitViewController {
+    private var defaultOrigins: [NSWindow.ButtonType: NSPoint] = [:]
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        nudgeTrafficLights()
+    }
+
+    private func nudgeTrafficLights() {
+        guard let window = view.window else { return }
+        let env = ProcessInfo.processInfo.environment
+        let dx = CGFloat(Double(env["ECHO_TL_DX"] ?? "") ?? 1)     // 右移
+        let dyDown = CGFloat(Double(env["ECHO_TL_DY"] ?? "") ?? 2) // 下移
+        for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            guard let b = window.standardWindowButton(type), let sup = b.superview else { continue }
+            // 首次记录系统默认原点（此时尚未被我移动过），之后始终「默认+偏移」。
+            // 守卫：按钮还没被系统定位好（原点 ≤0）时先不记录，等定位好那一拍再记，避免记错。
+            if defaultOrigins[type] == nil {
+                guard b.frame.origin.x > 0 else { continue }
+                defaultOrigins[type] = b.frame.origin
             }
+            guard let base = defaultOrigins[type] else { continue }
+            var o = base
+            o.x += dx
+            o.y += sup.isFlipped ? dyDown : -dyDown   // 非翻转视图 y 减小=下移
+            if b.frame.origin != o { b.setFrameOrigin(o) }
         }
     }
 }
