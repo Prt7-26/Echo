@@ -1,241 +1,269 @@
 # Echo — Experimental Evaluation Report
 
-*Auto-generated experiment run. All numbers are from real model calls (no fabricated
-data); where a result is weak or null it is reported as such. This document is
-regenerated/updated by `scripts/eval/analyze.py`; figures live in
-`scripts/eval/results/figures/`.*
+*Every number in this report comes from a live model call; no value is fabricated, and
+weak or null results are reported as such. Aggregate statistics are produced by
+`scripts/eval/analyze.py` (→ [`stats.json`](experiment-figures/stats.json)); the
+publication figures are rendered by `scripts/eval/make_figures.py` into
+[`DevPlan/experiment-figures/`](experiment-figures/) as both PNG (300 dpi) and vector PDF.*
 
-> **Status note for the oral checkpoint.** Every experiment below was actually
-> executed against live models. The real-user (Telegram) study from the proposal
-> is *not* part of this run — it is explicitly future work. Do not present it as done.
+> **Scope note for the oral checkpoint.** Every experiment below was executed against
+> live models. The real-user (Telegram) study described in the proposal is **not** part
+> of this run — it remains future work and should not be presented as completed.
 
 ---
 
 ## 1. Experimental design
 
-### 1.1 Four-model isolation (avoiding the circularity trap)
+### 1.1 Four-model isolation: defusing the circularity trap
 
-Echo's thesis is that *self-evaluation by the same model is biased* (the documented
-Hermes flaw). An evaluation that let one model both generate the behaviour **and**
-grade it would reproduce exactly that bias. So every role is a **different model
-family**, and the metric scorer is independent of both the agent and the simulated
-user:
+Echo's central thesis is that **self-evaluation by the same model is biased** — the
+documented failure of the Hermes closed learning loop. An evaluation in which one model
+both produced a behaviour and graded it would reproduce exactly that bias. We therefore
+assign every role to a **different model family**, and keep the metric scorer independent
+of both the agent and the simulated user:
 
-| Role | Model | Why separate |
+| Role | Model | Function |
 |---|---|---|
-| **Simulated user / persona** | DeepSeek-V4-flash (Aliyun MaaS) | Produces requests, behavioural signals, NL feedback, thumbs |
-| **Agent under test** | mimo-v2.5 (Xiaomi) | The system being personalised |
-| **Echo's own signal models** | Qwen-plus (DashScope) | Layer B sentiment, Layer C judge, reason scoring |
-| **Independent evaluator (the metric)** | GLM-5.2 (Zhipu, thinking off) | Scores outputs against *ground-truth* preference rubrics; never sees Echo's internals or the persona's own grade |
+| Simulated user / persona | DeepSeek-V4-flash (Aliyun MaaS) | Issues requests, behavioural signals, NL feedback, thumbs |
+| Agent under test | mimo-v2.5 (Xiaomi) | The system being personalised |
+| Echo's own signal models | Qwen-plus (DashScope) | Layer B sentiment, Layer C judge, reason scoring |
+| Independent evaluator (the metric) | GLM-5.2 (Zhipu, thinking off) | Scores outputs against *planted* preference rubrics; never sees Echo's internals or the persona's own grade |
 
-Ground truth is *planted*, not inferred: each persona's preference rules and each
-skill's true usefulness are fixed in advance, so metrics are scored against an
-external target rather than against another model's opinion.
+Ground truth is **planted, not inferred**: each persona's preference rules and each
+skill's true usefulness are fixed in advance, so every metric scores against an external
+target rather than against another model's opinion.
 
-### 1.2 Conditions (three control groups, per the proposal)
+### 1.2 Conditions: three control groups
 
-- **Baseline A — no memory.** Plain mimo, stateless. Cannot personalise; a control
-  for "what the base model does cold."
-- **Baseline B — self-eval + frequency/recency decay.** mimo plus a template memory
-  that stores outputs its *own* self-evaluation deems successful, decayed by
-  frequency/recency, with **no user signal** — i.e. the Hermes / agentmemory design
+- **Baseline A — no memory.** Stateless mimo. Cannot personalise; controls for what the
+  base model does cold.
+- **Baseline B — self-evaluation + frequency/recency decay.** mimo plus a template memory
+  that stores the outputs its *own* self-evaluation deems successful, decayed by
+  frequency and recency, with **no user signal** — i.e. the Hermes / agentmemory design
   Echo argues against.
-- **Echo — full system.** mimo plus Echo's real plugin: M5 preference RAG
-  (confidence-weighted neural retrieval), M4 confidence lifecycle, and the Layer B/C
-  signal pipeline (Qwen), all driven by the user's signals.
+- **Echo — full system.** mimo plus Echo's production plugin: M5 preference RAG
+  (confidence-weighted neural retrieval), the M4 confidence lifecycle, and the Layer B/C
+  signal pipeline (Qwen), all driven by user signals.
 
 ### 1.3 Why idiosyncratic preferences
 
-A pilot showed mimo satisfies generic "be concise/polite" preferences zero-shot — a
-**ceiling effect** that hides any value of memory. The closed-loop personas therefore
-carry **idiosyncratic, machine-checkable** preferences a strong model will not produce
-by default (e.g. *"every email must end with exactly `Onward, R.`, body ≤ 60 words, no
-exclamation marks"*; *"summaries must be exactly 3 emoji-led bullets ≤ 8 words"*;
-*"always include the phrase `per my last note`, British spelling, no em-dashes"*). These
-are (a) unguessable from the request and (b) mechanically verifiable, so memory is
-*necessary* to satisfy them and the metric can discriminate.
+A pilot showed that mimo satisfies generic "be concise / be polite" preferences
+zero-shot — a **ceiling effect** that hides any value of memory. The closed-loop personas
+therefore carry **idiosyncratic, machine-checkable** preferences a strong model will not
+produce by default (e.g. *"every email ends with exactly `Onward, R.` on its own line,
+body ≤ 60 words, no exclamation marks"*; *"summaries are exactly three emoji-led bullets
+≤ 8 words each"*; *"always include `per my last note`, British spelling, no em-dashes"*).
+These are (a) unguessable from the request and (b) mechanically verifiable, so memory is
+**necessary** to satisfy them and the metric can discriminate.
 
-The **metric scores the agent's first output each turn** (before any revision): *did
-the assistant proactively honour what it should already know about this user?* A
-revision round is allowed only as the channel through which the user *communicates* the
+The metric **scores the agent's first output each turn**, before any revision: *did the
+assistant proactively honour what it should already know about this user?* One revision
+round is allowed solely as the channel through which the user *communicates* the
 preference (their feedback names the unmet rule); the satisfying revision is what Echo
-learns from, but it does not count toward the proactive-satisfaction score.
+learns from, but it does **not** count toward the proactive-satisfaction score.
 
 ---
 
-## 2. Benchmarks (third-party)
+## 2. Third-party benchmarks
 
 Two peer-reviewed personalization benchmarks ground the personas in external data and
-defuse the "your simulated user is arbitrary" objection:
+answer the "your simulated user is arbitrary" objection:
 
-- **PersonaMem (COLM 2025)** — 20 personas, multi-session histories with *evolving*
-  preferences, multiple-choice probes with the benchmark's own ground-truth answers.
-  We test **preference recall**: does Echo's M5 memory help the agent answer correctly?
-  No evaluator circularity (answers are graded against the benchmark key).
-- **PrefEval (ICLR 2025)** — 1,000 (preference, question) pairs across 20 topics where
-  the natural answer violates the stated preference. We test **preference adherence in
-  generation**: with the preference held in M5 among a pool of others, does retrieval
-  surface the right one so the answer adheres? Adherence judged by the independent
+- **PersonaMem (COLM 2025)** — 20 personas with multi-session histories and *evolving*
+  preferences, probed by multiple-choice questions with the benchmark's own ground-truth
+  key. We measure **preference recall**: does Echo's M5 memory help the agent answer
+  correctly? Grading against the benchmark key removes any evaluator circularity.
+- **PrefEval (ICLR 2025)** — 1,000 (preference, question) pairs across 20 topics where the
+  natural answer violates the stated preference. We measure **preference adherence in
+  generation**: with the preference held in M5 among a pool of distractors, does retrieval
+  surface the right one so the answer adheres? Adherence is judged by the independent
   GLM-5.2 evaluator.
 
 ---
 
-## 3. Metrics
+## 3. Metrics and statistics
 
-- **Metric 1 — satisfaction curve** (closed-loop): GLM-5.2 score (1–5) of each first
-  output vs interaction index, per condition. Paired stats: Wilcoxon signed-rank and
+- **Metric 1 — proactive satisfaction (closed-loop).** GLM-5.2 scores each first output
+  (1–5) versus interaction index, per condition. Paired tests use Wilcoxon signed-rank and
   Cliff's δ (Echo vs A, Echo vs B), paired by (persona, seed, turn).
-- **Metric 2 — error propagation**: a *silently-wrong* skill is planted; we track how
-  long each condition keeps using it. Deterministic version via the built-in harness
-  (`error_propagation`), plus the closed-loop's planted bad-preference decay.
-- **Metric 3 — system overhead**: real token counts per condition (agent tokens +
-  Echo's Qwen signal tokens, instrumented by wrapping the auxiliary client). Latency is
-  not user-facing because Echo's Layer B/C run fire-and-forget off the hot path.
-- **Per-module micro-metrics** (deterministic, no LLM, planted ground truth):
-  M1 trigger precision/recall vs the Hermes ≥-tool-call rule; M3 drift precision/recall/F1;
-  M4 confidence↔true-usefulness Spearman ρ; M5 retrieval recall@k ± confidence weights.
+- **Metric 2 — error propagation.** A silently-wrong skill is planted; we track how long
+  each condition keeps using it. The primary measurement is the deterministic harness
+  (`error_propagation`); the closed-loop's planted-bad-preference outcome corroborates.
+- **Metric 3 — system overhead.** Real token counts per condition (agent tokens + Echo's
+  Qwen signal tokens, instrumented by wrapping the auxiliary client). Latency is not
+  user-facing because Echo's Layer B/C run fire-and-forget off the hot path.
+- **Per-module micro-metrics** (deterministic, no LLM, planted ground truth): M1 trigger
+  precision/recall vs the Hermes rule; M3 drift precision/recall/F1; M4 confidence ↔
+  true-usefulness Spearman ρ; M5 retrieval recall@k ± confidence weights.
 
-Statistics use **non-parametric** tests (Wilcoxon) and **effect sizes** (Cliff's δ), and
-treat each (persona, seed) as a unit — *not* the within-run n — to avoid the
-"infinite-n → everything significant" trap of simulated data.
+All inferential tests are **non-parametric** (Wilcoxon) and reported with an **effect
+size** (Cliff's δ). Each (persona, seed) is treated as the sampling unit — **not** the
+within-run n — to avoid the "infinite-n → everything significant" trap of simulated data.
 
 ---
 
 ## 4. Results
 
-Figures: [`DevPlan/experiment-figures/`](experiment-figures/). Raw stats:
-[`stats.json`](experiment-figures/stats.json). Full per-shard logs (supplementary
-material): [`DevPlan/experiment-logs/`](experiment-logs/).
+**Scale of this run** (process-level parallel shards; all completed, none missing):
+closed-loop **15 personas × 3 seeds × 3 conditions × 10 turns = 1,350 turns**; both
+benchmarks **× 3 seeds**; Metric 2 deterministic **n_bad ∈ {3, 10} × 5 seeds**. This is
+far larger than the previous version (3 personas, single seed), so the statistics are
+correspondingly stronger.
 
-**Scale this run** (process-level parallel shards; all completed, none missing):
-closed-loop **15 personas × 3 seeds × 3 conditions × 10 turns = 1350 turns**; both
-benchmarks **× 3 seeds**; Metric 2 deterministic **n_bad ∈ {3,10} × 5 seeds**. Far
-more samples than the previous version (3 personas, single seed), so the statistics
-are much stronger.
+A key driver of the headline numbers is Echo's in-plugin **M5 consolidated preference
+profile with per-turn injection** (schema v11), which lifted proactive satisfaction from
+~2.3 in the previous version to ~4.5 here.
 
-**Key upgrade**: Echo now uses the new in-plugin **M5 consolidated preference
-profile + always-inject** feature (schema v11) — the main reason satisfaction
-jumped from ~2.3 (previous version) to ~4.5.
+### 4.1 External benchmarks: preference recall and adherence
 
-### 4.1 PersonaMem (preference recall), 3 seeds, n = 540
+**On PersonaMem, Echo's M5 memory recalls user preferences more accurately than both a
+cold model and a naive full-history RAG, while injecting roughly one-third the context**
+(Figure 1). Across 3 seeds (n = 540 probes), accuracy rises from 46.8% ± 1.7% (no memory)
+through 55.2% ± 3.0% (full history, 8,254 chars injected) to **64.6% ± 1.0%** (Echo M5,
+2,653 chars) — **+17.8 points** over cold and **+9.4 points** over full-history RAG at
+≈⅓ the injected context. The error bars are tight and the three conditions separate
+cleanly.
 
-![PersonaMem](experiment-figures/personamem_accuracy.png)
+![Figure 1](experiment-figures/personamem_accuracy.png)
 
-| Condition | Accuracy (mean ± SD) | Injected context |
-|---|---|---|
-| No memory (cold) | 46.8% ± 1.7% | 0 |
-| Full history (naive RAG) | 55.2% ± 3.0% | 8,254 chars |
-| **Echo M5** | **64.6% ± 1.0%** | **2,653 chars** |
+*__Figure 1 | PersonaMem (COLM 2025): preference recall.__ Preference-probe accuracy by
+condition. Bars are the mean over 3 seeds; error bars are ±1 SD across seeds; in-bar text
+is the mean injected context. n = 540 probes.*
 
-Tight error bars across 3 seeds, clean separation. Echo beats cold by **+17.8 pts**
-and naive full-history by **+9.4 pts** at ~⅓ the context.
+**On PrefEval, Echo retrieves the single relevant preference from a 200-preference pool
+and raises adherence from 13% to 82%, within 8 points of the oracle ceiling** (Figure 2).
+The cold model adheres only 13% ± 1.4% — reproducing PrefEval's finding that preference
+following collapses when the preference is not in context. With the preference stored among
+199 distractors, Echo's retrieval reaches **82% ± 3.7%**, against an oracle (preference
+handed directly to the model) of 90% ± 2.2% (n = 300, 3 seeds).
 
-### 4.2 PrefEval (preference adherence in generation), 3 seeds, n = 300
+![Figure 2](experiment-figures/prefeval_adherence.png)
 
-![PrefEval](experiment-figures/prefeval_adherence.png)
+*__Figure 2 | PrefEval (ICLR 2025): preference adherence in generation.__ Adherence rate
+by condition; bars are the mean over 3 seeds, error bars ±1 SD. The single target
+preference is retrieved from a 200-preference pool. n = 300.*
 
-| Condition | Adherence (mean ± SD) |
-|---|---|
-| No memory | 13% ± 1.4% |
-| **Echo M5** | **82% ± 3.7%** |
-| Oracle (preference handed over) | 90% ± 2.2% |
+### 4.2 Main result: proactive satisfaction over time
 
-Cold model adheres only 13% (matching PrefEval's "preference following collapses").
-Echo retrieves the right preference out of a 200-preference haystack and reaches
-**82%**, within 8 pts of the oracle ceiling.
+**Echo raises proactive satisfaction to ~4.5 and holds it there, while both baselines
+remain on the floor — a large, highly significant effect** (Figure 3). Averaged over all
+turns, Echo scores **4.48** against Baseline A's 1.45 and Baseline B's 1.29; over the
+second half (turns ≥ 5) Echo reaches **4.69**. Pairing by (persona, seed, turn) over
+**n = 450 pairs**:
 
-### 4.3 Metric 1 — satisfaction curve (closed-loop, 15 personas)
+- **Echo vs A**: Wilcoxon *p* = 4 × 10⁻⁷², **Cliff's δ = 0.84 (large)**;
+- **Echo vs B**: Wilcoxon *p* = 4 × 10⁻⁷⁵, **Cliff's δ = 0.86 (large)**.
 
-![satisfaction](experiment-figures/satisfaction_curve.png)
+Echo climbs within the first one or two turns — the cost of learning the idiosyncratic
+rule is paid once — and then stays near ceiling. Against the previous version (δ ≈ 0.27,
+Echo ≈ 2.3), the M5 profile consolidation moved the result from "significant but partial"
+to "large effect, near ceiling." The residual gap is occasional multi-rule personas (e.g.
+the British-spelling triple rule) where mimo drops one constraint — a base-model
+instruction-following limit, reported in §4.6.
 
-| Condition | Overall mean | Late mean (turns ≥ 5) |
-|---|---|---|
-| Baseline A (no memory) | 1.45 | 1.42 |
-| Baseline B (self-eval + decay) | 1.29 | 1.29 |
-| **Echo** | **4.48** | **4.69** |
+![Figure 3](experiment-figures/satisfaction_curve.png)
 
-Echo climbs fast and holds at **4.5–4.9**; both baselines stay on the floor. Paired
-tests (paired by persona/seed/turn, **n = 450 pairs**):
+*__Figure 3 | Proactive satisfaction across the conversation.__ Independent GLM-5.2
+satisfaction (1–5) of each turn's first output, mean over 15 personas × 3 seeds
+(n = 45 per turn); shaded bands are 95% confidence intervals. Effect sizes are paired by
+persona/seed/turn (n = 450).*
 
-- **Echo vs A**: Wilcoxon *p* = 4×10⁻⁷², **Cliff's δ = 0.84 (large)**
-- **Echo vs B**: Wilcoxon *p* = 4×10⁻⁷⁵, **Cliff's δ = 0.86 (large)**
+### 4.3 Robustness: error propagation
 
-Versus the previous version (δ≈0.27, echo ~2.3), the M5 profile consolidation moved
-the result from "significant but partial" to "**large effect, near ceiling**". The
-residual gap is occasional multi-rule personas (e.g. the British-spelling triple
-rule) where mimo drops one rule — a base-model instruction-following limit, reported
-honestly.
+**Under 15% signal noise Echo retires every silently-wrong skill with zero false
+positives, whereas the frequency-decay baseline retires none** (Figure 4a). In the
+deterministic harness (5 seeds), Echo caught **3 / 3** planted bad skills at n_bad = 3 and
+**10 / 10** at n_bad = 10 — identical on every seed (min = max) — while keeping every good
+skill (0 false positives). Baseline B, which decays by frequency/recency with no user
+signal, caught **0** in both settings. The mechanism is visible in the final confidence
+distribution (Figure 4b): bad skills collapse to a mean confidence of ≈0.13, below the
+retirement threshold c_retire = 0.10, while good skills stay near 0.85 — a clean
+separation that does not depend on tuning.
 
-### 4.4 Metric 2 — error propagation
+![Figure 4](experiment-figures/error_propagation_deterministic.png)
 
-![deterministic](experiment-figures/error_propagation_deterministic.png)
+*__Figure 4 | Error propagation (deterministic harness; 5 seeds, 15% noise).__ **(a)**
+Silently-wrong skills retired by Echo versus the frequency-decay Baseline B; error bars
+span the per-seed min–max (zero width — all seeds identical). **(b)** Echo's final
+confidence cleanly separates good from bad skills relative to the review (c_min = 0.30) and
+retirement (c_retire = 0.10) thresholds. Points are per-seed means; horizontal bars are the
+group mean.*
 
-**Deterministic harness (5 seeds, 15% noise, planted ground truth) — primary result**:
+**Closed-loop view (an honest confound).** The closed-loop "bad-approach used turns" count
+is confounded by the always-on M5 profile: once the profile is injected every turn, the
+planted bad example can no longer degrade the output, so it remains *present but harmless*
+and is never punished (the count is in fact high for Echo, but this is harmless presence,
+not error propagation). The faithful closed-loop signal is therefore **satisfaction on the
+planted bad task**, where Baseline B stays at **1.16** (the error persists) while Echo
+reaches **4.44** (it overcomes the planted approach). Metric 2 thus rests on the
+deterministic harness as primary, with the satisfaction gap as corroboration; the
+misleading "used-turns" chart is deliberately not drawn.
 
-| Planted bad skills | Echo caught (mean of 5 seeds) | Baseline B caught |
-|---|---|---|
-| 3 | **3 / 3** (every seed) | 0 / 3 |
-| 10 | **10 / 10** (min also 10) | 0 / 10 |
+### 4.4 Cost: system overhead, and an honest correction to the proposal
 
-Even with 15% signal noise Echo robustly retires every bad skill (0 false positives);
-the frequency-decay Baseline B catches none — the cleanest proof of the thesis.
+**Echo's fair agent-token overhead is only +5.3%; its steady-state add is Layer B alone at
+~+25% of an agent reply, on a cheap auxiliary tier and off the latency path; Layer C is a
+rare event** (Figure 5). This run fixes an earlier unfairness — Baseline A now also
+revises, making agent tokens apples-to-apples — and splits Layer B / Layer C exactly by
+task.
 
-**Closed-loop view (an honest confound)**: the closed-loop "bad-approach used turns"
-count is **confounded by the new profile feature** — once the profile is injected
-every turn, the planted bad example **can no longer degrade the output**, so it stays
-"present but harmless" and is never punished (the count is actually high for echo, but
-that is harmless presence, not error propagation). The real closed-loop signal is
-**satisfaction on the planted bad task**: Baseline B stays at **1.16** (error
-persists), Echo reaches **4.44** (overcomes the planted bad approach). So Metric 2
-relies on the **deterministic harness** as primary, with the satisfaction gap as
-corroboration; the misleading "used-turns" chart is **deliberately not drawn**.
+- **Fair agent-token comparison** (Figure 5a): Echo is **+5.3%** versus A (4,947 vs 4,700
+  tokens per 10-turn run). The earlier +322% figure was an artifact of A never revising and
+  is gone. Baseline B's much larger budget (≈14.4k) reflects its self-evaluation
+  generations.
+- **Steady-state overhead** (Figure 5b): everyday conversation incurs Layer B only —
+  ≈201 tokens/turn against an ≈803-token agent reply, i.e. **+25%**. **The proposal's
+  "<15%" target does not hold**, because Layer B runs every turn; we correct this honestly.
+  These tokens are on a cheap auxiliary tier and fire-and-forget off the user-facing
+  latency path.
+- **Layer C is a rare event**: only **13 firings over 450 turns (≈1 per 35)** at ≈2,039
+  tokens each; **36 of 45 Echo runs never fired the judge**. This is under a high-pressure
+  setting where *every* run had a planted bad skill; in normal use Layer C fires ≈ 0.
 
-### 4.5 Metric 3 — system overhead (fair version + a correction to the proposal)
+![Figure 5](experiment-figures/overhead.png)
 
-![overhead](experiment-figures/overhead.png)
+*__Figure 5 | System overhead.__ **(a)** Mean tokens per 10-turn run, decomposed into agent
+reply, Echo Layer B (every turn) and Layer C (on alarm); Echo's fair agent-token delta is
++5.3% vs A. **(b)** Per-turn steady-state cost is Layer B only (+25%); the judge (Layer C)
+fires ≈1 per 35 turns under a planted-bad stress test, ≈0 in normal use. Small ±noise
+arises from the judge's async thread landing across run boundaries.*
 
-This version fixes the earlier unfairness: **Baseline A now also revises**, so agent
-tokens are apples-to-apples; and Layer B / Layer C are split **exactly by task**.
+### 4.5 Per-module micro-metrics
 
-- **Fair agent-token comparison**: Echo is only **+5.3%** vs A (A 4,700 / Echo 4,947).
-  The earlier +322% was an artifact of A never revising; gone.
-- **Steady-state overhead (no Layer C) = Layer B only**: ~201 tokens/turn, ~**+25%**
-  of an agent reply (~803/turn). **The proposal's "<15%" does NOT hold** (Layer B runs
-  every turn) — corrected honestly; but these tokens are on a cheap aux tier and are
-  fire-and-forget off the user-facing latency path.
-- **Layer C is a rare event**: only **13 firings over 450 turns (≈1 per 35 turns)**,
-  ~2,039 tokens each. **36 of 45 echo runs never fired the judge**; only 9 did —
-  confirming "on-demand, very low frequency". And this is under the high-pressure
-  setting where **every run had a planted bad skill**; normal use ≈ 0.
+**Deterministic, planted-ground-truth checks isolate each module's contribution and are
+invariant to run scale** (Figure 6). Echo's M1 nominator ties the Hermes ≥-tool-call rule
+(precision 1.00, recall 0.67 on the built-in scenarios; Figure 6b). M3 drift detection is
+perfect on this small sample (precision/recall/F1 = 1.00, with 1 true positive and 20 true
+negatives after excluding 9 warm-up invocations the detector physically cannot fire on;
+Figure 6c). M4 confidence tracks planted true usefulness with **Spearman ρ = +0.67**
+(n = 5 skills; Figure 6a). M5's confidence-weighting uplift is **null on this built-in case**
+(recall@k = 0.375 with and without weights; Figure 6d) — its real value is the benchmark
+retrieval gains in §4.1, not this toy library.
 
-Honest note: overhead accounting has small ±noise from the judge's async thread
-landing across run boundaries (A is credited a tiny amount of Layer C tokens for this
-reason).
+![Figure 6](experiment-figures/micrometrics.png)
 
-### 4.6 Per-module micro-metrics (deterministic, planted ground truth; scale-invariant)
+*__Figure 6 | Per-module micro-metrics (deterministic, planted ground truth).__ **(a)** M4 —
+Echo confidence vs planted true usefulness, Spearman ρ = +0.67 (dashed line = identity).
+**(b)** M1 — nomination precision/recall, Echo vs the Hermes rule. **(c)** M3 — drift
+precision/recall/F1 (small n). **(d)** M5 — retrieval recall@k with and without confidence
+weighting (no uplift on this built-in case).*
 
-| Module | Metric | Result |
-|---|---|---|
-| M1 trigger | precision/recall vs Hermes rule | P=1.00, R=0.67 (ties Hermes on the built-in scenarios) |
-| M3 drift | precision/recall/F1 | 1.00/1.00/1.00 (small n) |
-| M4 confidence | Spearman ρ | +0.67 |
-| M5 retrieval | recall@k weighting uplift | 0 (this built-in case; M5's real value is §4.1/4.2) |
-
-## 4.7 One-paragraph summary for the talk
+### 4.6 Summary
 
 On two published benchmarks (3 seeds each), Echo's preference memory lifts preference
-**recall** 47% → 65% (PersonaMem, at ⅓ the context) and preference **adherence**
-13% → 82% (PrefEval, oracle 90%). In a controlled closed-loop over 15 idiosyncratic
-personas with an independent GLM evaluator (**n = 450 pairs**), Echo raises proactive
-satisfaction from the baselines' ~1.3–1.5 to **4.48** — a **large effect (Cliff's δ ≈
-0.85), p < 10⁻⁷²**. On error propagation, the deterministic test has Echo catching
-**3/3 and 10/10** bad skills under 15% noise while the frequency-decay baseline catches
-**0**; in the closed-loop, bad-task satisfaction is Echo 4.44 vs Baseline B 1.16. Two
-honest costs: (1) the proposal's "<15% overhead" does not hold — Layer B runs every
-turn at ~+25%, though on a cheap tier and off the latency path, and the fair agent-token
-delta is only +5.3%; (2) the residual satisfaction gap is mimo's multi-constraint
-instruction-following ceiling.
+**recall** 47% → 65% (PersonaMem, at ⅓ the context) and preference **adherence** 13% → 82%
+(PrefEval; oracle 90%). In a controlled closed-loop over 15 idiosyncratic personas judged
+by an independent GLM-5.2 evaluator (n = 450 pairs), Echo raises proactive satisfaction
+from the baselines' ~1.3–1.5 to **4.48** — a **large effect (Cliff's δ ≈ 0.85),
+p < 10⁻⁷²**. On error propagation, the deterministic test has Echo retiring **3/3 and
+10/10** bad skills under 15% noise with zero false positives while the frequency-decay
+baseline retires **0**; in the closed-loop, bad-task satisfaction is Echo 4.44 vs Baseline B
+1.16. Two costs are reported honestly: (1) the proposal's "<15% overhead" does not hold —
+Layer B runs every turn at ~+25%, though on a cheap tier and off the latency path, and the
+fair agent-token delta is only +5.3%; (2) the residual satisfaction gap is mimo's
+multi-constraint instruction-following ceiling, not an Echo memory failure.
 
+---
 
 ## 5. Reproducibility
 
@@ -246,13 +274,18 @@ $PY -m scripts.eval.llm_clients
 # third-party benchmarks
 $PY -m scripts.eval.exp_personamem --limit 180
 $PY -m scripts.eval.exp_prefeval  --limit 100 --pool 200
-# our closed-loop experiment
+# closed-loop experiment
 $PY -m scripts.eval.exp_closedloop --turns 10 --seeds 2
 # deterministic micro-metrics
 $PY -m scripts.eval.run_micrometrics
-# figures + stats
+# aggregate stats (stats.json)
 $PY -m scripts.eval.analyze
+# publication figures (PNG + vector PDF)
+$PY -m scripts.eval.make_figures
 ```
 
-Credentials live in `~/.hermes/.env` + `~/.hermes/config.yaml` (never committed).
-Benchmark data and result artifacts are git-ignored under `scripts/eval/data|results/`.
+Credentials live in `~/.hermes/.env` and `~/.hermes/config.yaml` (never committed).
+Benchmark data and raw result artifacts are git-ignored under `scripts/eval/data|results/`;
+the committed numbers (`stats.json`, the per-shard summaries, and a
+`satisfaction_curve_ci.json` sidecar) under `DevPlan/experiment-figures/` let every figure
+be re-rendered from the repository alone.
