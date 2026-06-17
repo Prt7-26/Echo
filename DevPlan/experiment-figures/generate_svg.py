@@ -263,8 +263,8 @@ def satisfaction():
         # endpoint label
         lab = d["mean"][-1]
         s += T(sx(xmax) + 10, sy(lab) + 4, f"{lab:.1f}", "val", "start", extra=f' fill="{col}"')
-    # legend (right)
-    lx, ly = W - mR + 16, mT + 18
+    # legend (right) — placed in the empty mid-band so Echo's top endpoint label can't collide
+    lx, ly = W - mR + 16, 156
     for i, (key, name, col, hero) in enumerate(spec):
         yy = ly + i * 26
         s += L(lx, yy, lx + 22, yy, col, 3 if hero else 1.8)
@@ -322,9 +322,9 @@ def error_prop():
         s += T(x2 + bw / 2, plot_b - 8, f"{bv:.0f}/{n}", "valsm", "middle", extra=f' fill="{B_AMBER}"')
         s += T(gx, plot_b + 22, lab, "cat", "middle")
         s += T(gx, plot_b + 38, "bad skills", "note", "middle")
-    # mini legend for panel a
-    s += C(aL + 8, aT + 6, 5, ECHO); s += T(aL + 18, aT + 10, "Echo", "note")
-    s += C(aL + 78, aT + 6, 5, B_AMBER); s += T(aL + 88, aT + 10, "Baseline B (freq. decay)", "note")
+    # mini legend for panel a — stacked, kept well left of the full-height 10/10 bar
+    s += C(aL + 8, aT + 16, 5, ECHO); s += T(aL + 18, aT + 20, "Echo", "note")
+    s += C(aL + 8, aT + 34, 5, B_AMBER); s += T(aL + 18, aT + 38, "Baseline B (freq. decay)", "note")
 
     # ---- panel b (right): confidence separation ----
     bL, bR, bT, bB = 430, W - 30, 96, 70
@@ -349,8 +349,8 @@ def error_prop():
             body += C(cx + jit, bsy(v), 3.4, col, extra=' fill-opacity="0.7"')
         m = sum(vals) / len(vals)
         body += L(cx - 26, bsy(m), cx + 26, bsy(m), col, 2.4)
-        body += T(cx, bsy(m) - 10 if label == "Good" else bsy(m) + 18, f"mean {m:.2f}",
-                  "valsm", "middle", extra=f' fill="{col}"')
+        # label to the RIGHT of the strip, at mean-line height — never over the points
+        body += T(cx + 32, bsy(m) + 3.5, f"mean {m:.2f}", "valsm", "start", extra=f' fill="{col}"')
         body += T(cx, pb + 22, label + " skills", "cat", "middle")
         return body
     s += strip(bL + (bR - bL) * 0.30, good, GOOD, "Good")
