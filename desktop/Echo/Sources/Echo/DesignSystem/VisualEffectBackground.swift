@@ -47,13 +47,16 @@ struct WindowVibrancyConfigurator: NSViewRepresentable {
             window.isOpaque = false
             window.backgroundColor = .clear
             // 非不透明窗口默认可能被窗口服务器排除出 Mission Control/Exposé 动画（停在原处不缩放）。
-            // 显式规整为「正常受管理窗口」：参与 Spaces/调度中心、正常层级、有阴影。
+            // 显式规整为「正常受管理窗口」：参与 Spaces/调度中心、正常层级。
             window.level = .normal
-            window.hasShadow = true
             window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenPrimary]
+            // 关键：透明窗口必须关阴影。hasShadow=true 时 AppKit 会从内容 alpha 反复重算
+            // 阴影形状，侧栏 vibrancy 的 alpha 一变（点击/玻璃动画）就触发重算 → 主线程卡死
+            // （沙滩球）。代价仅是窗口少一圈投影，换来不卡。
+            window.hasShadow = false
             coord.configured = true
             FileHandle.standardError.write(Data(
-                "[echo-ui] window configured: opaque=\(window.isOpaque) level=\(window.level.rawValue) behavior=\(window.collectionBehavior.rawValue)\n".utf8))
+                "[echo-ui] window configured: opaque=\(window.isOpaque) level=\(window.level.rawValue) shadow=\(window.hasShadow) behavior=\(window.collectionBehavior.rawValue)\n".utf8))
         }
     }
 }
