@@ -65,6 +65,7 @@ class TestSchemaCreation:
             "idx_echo_preference_skill",
             "idx_echo_preference_score",
             "idx_echo_user_request_ts",
+            "idx_echo_profile_unique",
         }
 
     def test_records_schema_version(self, conn):

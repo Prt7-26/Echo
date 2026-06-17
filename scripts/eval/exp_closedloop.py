@@ -157,6 +157,20 @@ class EchoDriver:
         self.echo_db, self.prag, self.conf = echo_db, prag, conf
         self.nl, self.ca, self.sc = nl_classifier, ca, sc
         self.conn = echo_db.get_echo_conn()
+        # Upgrades 1+2 are now REAL Echo plugin features (schema v11
+        # echo_preference_profile + preference_rag.add_preference_clauses /
+        # get_profile_clauses). The driver just calls them, so the experiment
+        # exercises the genuine feature, not an in-memory stand-in. User-global
+        # scope (skill_id=None) since these personas' quirks span their tasks.
+
+    def add_feedback(self, text: str) -> None:
+        self.prag.add_preference_clauses(text, skill_id=None)
+
+    def profile_clauses(self) -> list:
+        return self.prag.get_profile_clauses(None)
+
+    def profile_text(self) -> str:
+        return self.prag.format_profile_for_injection(self.profile_clauses())
 
     def anchor(self, skill_id: str, confidence: float = 0.5):
         now = time.time()
@@ -258,14 +272,19 @@ def run_condition(condition: str, persona: Persona, seed: int, n_turns: int,
         dominant_skill = f"good_{tkey}"
 
         if condition == "echo":
-            skill_ids = [f"good_{tt.key}" for tt in persona.task_types]
+            # Upgrade 2: ALWAYS inject the whole consolidated standing profile
+            # (the learned good preferences) — never gamble on top-k for a rule
+            # the user already taught us.
+            if echo.profile_clauses():
+                injected.append(echo.profile_text())
+            # The planted WRONG preference still lives in M5 with a decaying
+            # confidence, so it can mislead early and then drop out (Metric 2).
             if bad_key:
-                skill_ids.append(f"bad_{bad_key}")
-            ex = echo.retrieve(request, skill_ids)
-            injected = [e.agent_output for e in ex]
-            if ex:
-                dominant_skill = ex[0].skill_id or dominant_skill
-                used_bad = (ex[0].skill_id or "").startswith("bad_")
+                bex = echo.retrieve(request, [f"bad_{bad_key}"])
+                if bex:
+                    injected = [e.agent_output for e in bex] + injected
+                    used_bad = True
+                    dominant_skill = bex[0].skill_id or dominant_skill
         elif condition == "B":
             injected = bmem.retrieve(tkey)
             used_bad = bool(bad_key == tkey and bmem.store.get(tkey) and
@@ -281,8 +300,11 @@ def run_condition(condition: str, persona: Persona, seed: int, n_turns: int,
         # A revision is how the preference gets *communicated* (the persona's
         # feedback names the unmet rule). The satisfying revision is what memory
         # learns — but it does NOT count toward the proactive-satisfaction metric.
+        # All conditions revise when the user is dissatisfied — A too, so the
+        # agent-token comparison is apples-to-apples (a real stateless agent
+        # would also retry on pushback). A simply can't *remember* the lesson.
         final_out, final_react, rounds = first_out, react, 1
-        if react.get("revise") and condition != "A":
+        if react.get("revise"):
             fb = react.get("feedback", "")
             out2 = agent_output(
                 agent, request + f"\n\nThe user was not satisfied: \"{fb}\". "
@@ -307,12 +329,12 @@ def run_condition(condition: str, persona: Persona, seed: int, n_turns: int,
                 record_signal(invocation_id=inv, layer="A", signal_type="user_turn")
             echo.feedback(inv_skill, react["thumb"], react.get("feedback", ""), rounds)
             # Learn from the USER'S SIGNAL: when the first output missed, the
-            # persona's feedback states the unmet preference — store THAT (the
-            # user's words) so it can be injected on similar future tasks. This is
-            # the user-signal-driven core; Baseline B never does it.
+            # persona's feedback states the unmet preference — MERGE it into the
+            # consolidated profile (de-duplicated), so partial per-turn notes
+            # accumulate into one complete, always-injected rule-set.
             fb = react.get("feedback", "").strip()
             if react["thumb"] < 0 and fb:
-                echo.store_good(request, f"User preference: {fb}", f"good_{tkey}")
+                echo.add_feedback(fb)
             try:
                 from plugins.echo_signals.baseline import finalize_invocation
                 finalize_invocation(inv)
@@ -362,16 +384,24 @@ def main() -> int:
     # judge, reason scoring). The plugin imports call_llm at call time, so
     # patching the module attribute is picked up.
     import agent.auxiliary_client as aux
+    from collections import defaultdict as _dd
     _orig_call = aux.call_llm
-    SIG = {"prompt": 0, "completion": 0, "calls": 0}
+    # Bucket by Hermes aux task so we can separate Layer B (echo_classifier,
+    # every-turn) from Layer C (echo_judge, on-alarm) EXACTLY — no inference.
+    SIG = {"prompt": 0, "completion": 0, "calls": 0,
+           "task_tokens": _dd(int), "task_calls": _dd(int)}
 
     def _wrapped_call(*a, **k):
         r = _orig_call(*a, **k)
         try:
             u = r.usage
+            tok = int(u.prompt_tokens or 0) + int(u.completion_tokens or 0)
             SIG["prompt"] += int(u.prompt_tokens or 0)
             SIG["completion"] += int(u.completion_tokens or 0)
             SIG["calls"] += 1
+            t = k.get("task", "?")
+            SIG["task_tokens"][t] += tok
+            SIG["task_calls"][t] += 1
         except Exception:
             pass
         return r
@@ -399,19 +429,29 @@ def main() -> int:
                 echo_db.reset_for_tests()
                 embeddings.install_active_encoder()
                 # snapshot token counters for per-condition Metric 3
-                a0 = dict(clients["agent"].usage.as_dict()); s0 = dict(SIG)
+                a0 = dict(clients["agent"].usage.as_dict())
+                sp0, sc0 = SIG["prompt"] + SIG["completion"], SIG["calls"]
+                lb0 = SIG["task_tokens"]["echo_classifier"]; lbc0 = SIG["task_calls"]["echo_classifier"]
+                lc0 = SIG["task_tokens"]["echo_judge"]; lcc0 = SIG["task_calls"]["echo_judge"]
                 try:
                     run_condition(cond, persona, seed, args.turns, clients, fout)
                 except Exception as e:
                     print(f"   !! run failed: {type(e).__name__}: {e}")
                 a1 = clients["agent"].usage.as_dict()
+                lc_calls = SIG["task_calls"]["echo_judge"] - lcc0
                 per_run_usage.append({
                     "condition": cond, "persona": persona.pid, "seed": seed,
                     "turns": args.turns,
                     "agent_tokens": a1["total_tokens"] - a0["total_tokens"],
                     "agent_calls": a1["calls"] - a0["calls"],
-                    "signal_tokens": (SIG["prompt"] + SIG["completion"]) - (s0["prompt"] + s0["completion"]),
-                    "signal_calls": SIG["calls"] - s0["calls"],
+                    "signal_tokens": (SIG["prompt"] + SIG["completion"]) - sp0,
+                    "signal_calls": SIG["calls"] - sc0,
+                    # exact per-layer split (Layer B = every turn, Layer C = on alarm)
+                    "layerB_tokens": SIG["task_tokens"]["echo_classifier"] - lb0,
+                    "layerB_calls": SIG["task_calls"]["echo_classifier"] - lbc0,
+                    "layerC_tokens": SIG["task_tokens"]["echo_judge"] - lc0,
+                    "layerC_calls": lc_calls,
+                    "layerC_firings": lc_calls / 3.0,   # JUDGE_VOTES=3 per firing
                 })
     fout.close()
     usage = {k: v.usage.as_dict() for k, v in clients.items()}

@@ -38,6 +38,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import re
 import struct
 import time
 from dataclasses import dataclass
@@ -46,6 +47,96 @@ from typing import Callable, Optional, Sequence
 from .db import get_echo_conn
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Consolidated preference profile (schema v11)
+#
+# Top-k retrieval over individual liked-turn examples can miss a standing rule
+# the user already taught — it only surfaces the k most similar. So Echo also
+# keeps a DE-DUPLICATED set of standing preference clauses distilled from user
+# feedback, and injects the whole profile every turn. This is what makes a
+# preference the user stated once stick on every subsequent reply.
+# ---------------------------------------------------------------------------
+
+
+def _split_clauses(text: str) -> list[str]:
+    """Break a feedback string into individual preference clauses, stripping the
+    'Rule N violated:' / 'Next time:' scaffolding users (and our eval persona)
+    tend to add."""
+    text = re.sub(r"(?i)\b(rule\s*\d+\s*(was\s*)?(violated|obeyed|missed)?\s*[:\-]?)", "", text)
+    text = re.sub(r"(?i)\bnext time[:,]?", "", text)
+    out = []
+    # Split on ';' / newline / sentence-ending period (period FOLLOWED BY
+    # whitespace) — NOT on a period inside a quoted sign-off like "Onward, R."
+    # (that period is followed by a quote, not a space), so exact required
+    # phrases survive intact.
+    for clause in re.split(r"[;\n]|\.\s", text):
+        c = clause.strip(" -•\t")
+        if len(c) >= 5:
+            out.append(c)
+    return out
+
+
+def _clause_key(c: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", c.lower())[:64]
+
+
+def add_preference_clauses(text: str, skill_id: Optional[str] = None) -> int:
+    """Merge a user's stated preference into the consolidated profile.
+
+    Splits ``text`` into clauses and inserts each (de-duplicated). ``skill_id``
+    NULL stores a USER-GLOBAL style preference (injected for every skill); a
+    non-NULL skill_id scopes it to one skill. Returns how many NEW clauses were
+    added. Idempotent: re-stating the same rule is a no-op.
+    """
+    if not text or not text.strip():
+        return 0
+    conn = get_echo_conn()
+    now = time.time()
+    n = 0
+    for c in _split_clauses(text):
+        key = _clause_key(c)
+        if not key:
+            continue
+        try:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO echo_preference_profile "
+                "(skill_id, clause, clause_key, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (skill_id, c, key, now, now),
+            )
+            if cur.rowcount:
+                n += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("add_preference_clauses insert failed: %s", exc, exc_info=True)
+    conn.commit()
+    return n
+
+
+def get_profile_clauses(skill_id: Optional[str] = None) -> list[str]:
+    """Return the standing preference clauses that apply: always the user-global
+    ones (skill_id IS NULL), plus the active skill's own when skill_id given."""
+    conn = get_echo_conn()
+    if skill_id:
+        rows = conn.execute(
+            "SELECT clause FROM echo_preference_profile "
+            "WHERE skill_id IS NULL OR skill_id = ? ORDER BY profile_id",
+            (skill_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT clause FROM echo_preference_profile "
+            "WHERE skill_id IS NULL ORDER BY profile_id"
+        ).fetchall()
+    return [r["clause"] for r in rows]
+
+
+def format_profile_for_injection(clauses: Sequence[str]) -> str:
+    if not clauses:
+        return ""
+    return ("Known standing preferences of THIS user — honour every one of them "
+            "exactly in your reply:\n" + "\n".join(f"- {c}" for c in clauses))
 
 
 # ---------------------------------------------------------------------------
@@ -723,16 +814,31 @@ def on_pre_llm_call_inject(
 
     # (a) Exclusion caution for the active skill — makes the Layer C judge's
     # exclusion verdict actually reach the agent.
+    active_skill = None
     try:
-        skill_id, exclusions = _active_skill_exclusions()
-        if skill_id and exclusions:
-            caution = format_exclusions_for_injection(skill_id, exclusions)
+        active_skill, exclusions = _active_skill_exclusions()
+        if active_skill and exclusions:
+            caution = format_exclusions_for_injection(active_skill, exclusions)
             if caution:
                 blocks.append(caution)
     except Exception as exc:
         logger.debug("exclusion injection failed: %s", exc, exc_info=True)
 
-    # (b) M5 few-shot preference examples.
+    # (b) Consolidated standing preference profile — ALWAYS injected (global +
+    # active skill), so a rule the user already taught is never dropped by the
+    # top-k retrieval below.
+    try:
+        clauses = get_profile_clauses(active_skill)
+        if clauses:
+            block = format_profile_for_injection(clauses)
+            if block:
+                blocks.append(block)
+            logger.info("Echo M5: injected %d standing preference clause(s) "
+                        "(skill=%s)", len(clauses), active_skill)
+    except Exception as exc:
+        logger.debug("profile injection failed: %s", exc, exc_info=True)
+
+    # (c) M5 few-shot preference examples.
     try:
         weights = _build_confidence_weights()
         examples = retrieve_topk(

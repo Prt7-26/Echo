@@ -77,7 +77,12 @@ import sqlite3
 #          of once, because a fast model can ignore the first injected nudge.
 #          Re-injection stops as soon as a skill is created in the session or
 #          the cap is hit.
-ECHO_SCHEMA_VERSION = 10
+# v10 → v11: added echo_preference_profile — a de-duplicated set of standing
+#          preference clauses (distilled from user feedback) that M5 injects in
+#          full every turn, so a rule the user already taught is never dropped
+#          by top-k retrieval. NULL skill_id = user-global; created by a plain
+#          CREATE TABLE IF NOT EXISTS so existing DBs pick it up automatically.
+ECHO_SCHEMA_VERSION = 11
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +211,24 @@ CREATE TABLE IF NOT EXISTS echo_preference_example (
     CHECK (rating BETWEEN 1 AND 5)
 );
 
+-- v11: M5 consolidated preference profile. Top-k retrieval over individual
+-- liked-turn examples can miss a standing rule the user already taught (it
+-- only surfaces the k most similar). So Echo also maintains a DE-DUPLICATED
+-- set of standing preference CLAUSES distilled from user feedback, and injects
+-- the whole profile every turn. skill_id NULL = a user-global style preference
+-- (applies to every skill); a non-NULL skill_id scopes the clause to one skill.
+CREATE TABLE IF NOT EXISTS echo_preference_profile (
+    profile_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    skill_id     TEXT,
+    clause       TEXT    NOT NULL,
+    clause_key   TEXT    NOT NULL,
+    created_at   REAL    NOT NULL,
+    updated_at   REAL    NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_echo_profile_unique
+    ON echo_preference_profile(IFNULL(skill_id, ''), clause_key);
+
 CREATE INDEX IF NOT EXISTS idx_echo_confidence_status
     ON echo_skill_confidence(status, confidence ASC);
 
@@ -328,6 +351,7 @@ ECHO_TABLES = (
     "echo_skill_content_hash",
     "echo_session_tool_count",
     "echo_session_nomination",
+    "echo_preference_profile",
 )
 
 
