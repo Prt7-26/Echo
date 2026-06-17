@@ -37,9 +37,9 @@ struct RootSplitView: View {
             .background(Theme.contentBackground)
         }
         .frame(minWidth: Tokens.Size.windowMinWidth, minHeight: Tokens.Size.windowMinHeight)
-        // 规整承载窗口（正常受管理窗口）。默认稳定路线：窗口不透明、绝不卡；
-        // ECHO_GLASS_WINDOW=1 才开非不透明的「透壁纸路线」。详见 WindowVibrancyConfigurator。
-        .background(WindowVibrancyConfigurator())
+        // 不再手动改窗口透明度（那会卡、还破坏调度中心）。交给 SwiftUI 原生：
+        // NavigationSplitView 的 sidebar 自带系统半透材质透出桌面，且只透 sidebar 区、
+        // 不碰整窗合成——既是 WeChat/Siri 的正确结构，又是正常受管理窗口（调度中心正常）。
     }
 }
 
