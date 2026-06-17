@@ -23,10 +23,9 @@ struct ConversationGallery: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             SidebarToolbar(app: app).topBarScrim()
         }
-        // 侧栏底层：自己掌控的 NSVisualEffectView，满铺（无边框）+ 常驻 .active（失焦也透）+
-        // .behindWindow（透出壁纸）。不再被动依赖 NavigationSplitView 那层不可控的系统材质。
-        // 卡片是实底 contentCard，浮在其上（WeChat/Siri 的「透明大底+不透明内容层」结构）。
-        .background(VisualEffectBackground(material: .underWindowBackground, state: .active).ignoresSafeArea())
+        // 侧栏不铺任何背景 → 透明 → 露出 NavigationSplitView 自带的系统 sidebar 材质（唯一
+        // 能真正透出桌面的层；自己造的 NSVisualEffectView 在 SwiftUI .background 里不透）。
+        // 卡片是实底 contentCard 浮在其上。失焦保活/去边框由 ActiveVibrancy 直接调这层系统材质。
     }
 
     /// 置顶优先，其余按时间倒序。
