@@ -57,98 +57,93 @@ Ground truth 是**预先植入**的、而非推断出来的：每个 persona 的
 
 ## 4. 结果
 
-图表见 [`DevPlan/experiment-figures/`](experiment-figures/)；原始统计见 [`stats.json`](experiment-figures/stats.json)。
+图表见 [`DevPlan/experiment-figures/`](experiment-figures/)；原始统计见 [`stats.json`](experiment-figures/stats.json)；**全部分片日志(补充材料)** 见 [`DevPlan/experiment-logs/`](experiment-logs/)。
 
-### 4.1 第三方 benchmark —— PersonaMem（偏好回忆），n = 180
+**本轮规模**(进程级并行分片，全部完成、无缺失):闭环 **15 persona × 3 seed × 3 条件 × 10 turn = 1350 turn**;两个 benchmark **各 3 seed**;Metric 2 确定性 **n_bad∈{3,10}、各 5 seed**。相比上一版(3 persona、单 seed)样本量大幅提升,统计显著性大大增强。
+
+**关键升级**:本轮 Echo 启用了新做进插件的 **M5 偏好画像合并 + 每轮全注入**(schema v11)——这是满意度从上一版 ~2.3 跃升到 ~4.5 的主因。
+
+### 4.1 PersonaMem(偏好回忆),3 seed,n = 540
 
 ![PersonaMem](experiment-figures/personamem_accuracy.png)
 
-| 组别 | 准确率 | 注入上下文 |
+| 组别 | 准确率(均值 ± SD) | 注入上下文 |
 |---|---|---|
-| 无记忆（冷） | 48.9% | 0 |
-| 全历史（朴素 RAG） | 54.4% | 8,279 字符 |
-| **Echo M5（检索）** | **64.4%** | **2,649 字符** |
+| 无记忆(冷) | 46.8% ± 1.7% | 0 |
+| 全历史(朴素 RAG) | 55.2% ± 3.0% | 8254 字符 |
+| **Echo M5** | **64.6% ± 1.0%** | **2653 字符** |
 
-Echo 的置信度加权神经检索比冷模型高 **+15.6 个百分点**、比朴素全历史高 **+10.0 个百分点**，而注入上下文只有约 **1/3**。朴素全历史用了 3 倍 token 却只比冷模型高 5.6 个点——把整段对话一股脑塞进去会把关键偏好淹没在噪声里，而这正是 M5 语义检索所规避的失败模式。按问题类型细分见 [`personamem_by_type.png`](experiment-figures/personamem_by_type.png)。
+3 个 seed 误差棒很窄、三组干净分离。Echo 比冷模型 **+17.8 pt**、比朴素全历史 **+9.4 pt**,且只用约 **1/3 上下文**。
 
-### 4.2 第三方 benchmark —— PrefEval（生成中的偏好遵从），n = 100
+### 4.2 PrefEval(生成中的偏好遵从),3 seed,n = 300
 
 ![PrefEval](experiment-figures/prefeval_adherence.png)
 
-| 组别 | 遵从率 |
+| 组别 | 遵从率(均值 ± SD) |
 |---|---|
-| 无记忆 | 16% |
-| **Echo M5** | **86%** |
-| Oracle（偏好直接给模型） | 93% |
+| 无记忆 | 13% ± 1.4% |
+| **Echo M5** | **82% ± 3.7%** |
+| Oracle(直接给偏好) | 90% ± 2.2% |
 
-这是最亮眼的外部结果。在"自然答案会违反用户偏好"的问题上，冷模型只有 **16%** 遵从——与 PrefEval 论文"偏好遵从会崩塌"的结论一致。当偏好被存入 M5、**混在 20 个主题共 200 条偏好之中**时，Echo 能检索出正确的那条，遵从率跃升到 **86%**，距离 oracle 上限（93%）仅差 7 个点。也就是说，可达增益的绝大部分都被检索捕获了；与 oracle 的残差是 M5 的检索 miss，而非方法本身的天花板。
+冷模型只有 13% 遵从(与 PrefEval"偏好遵从崩塌"结论一致);Echo 从 200 条偏好的干草堆里检索出对的那条,遵从率拉到 **82%**,距 oracle 上限仅 8 pt。
 
-### 4.3 Metric 1 —— 满意度曲线（闭环，我们自己的实验）
+### 4.3 Metric 1 —— 满意度曲线(闭环,15 persona)
 
 ![satisfaction](experiment-figures/satisfaction_curve.png)
 
-GLM 判定的首个输出满意度均值（1–5），3 personas × 2 seeds × 10 turns：
-
-| 组别 | 总体均值 | 后段均值（turn ≥ 5） |
+| 组别 | 总体均值 | 后段均值(turn≥5) |
 |---|---|---|
-| Baseline A（无记忆） | 1.07 | 1.11 |
-| Baseline B（自评 + 衰减） | 1.03 | 1.03 |
-| **Echo** | **2.10** | **2.28** |
+| Baseline A(无记忆) | 1.45 | 1.42 |
+| Baseline B(自评+衰减) | 1.29 | 1.29 |
+| **Echo** | **4.48** | **4.69** |
 
-Echo 的曲线**上升并进入平台**（约第 3 轮升到 ~2.3 并保持），两个 baseline 始终贴在地板上——因为 A 没有记忆、B 用自评而非用户反馈，都学不会这种特异偏好。配对检验（按 persona/seed/turn 配对，n = 60 对）：
+Echo 曲线快速爬升并稳定在 **4.5–4.9**,两个 baseline 始终贴地。配对检验(按 persona/seed/turn 配对,**n = 450 对**):
 
-- **Echo vs A**：Wilcoxon *p* = 8.8 × 10⁻⁵，Cliff's δ = 0.26（小到中等）
-- **Echo vs B**：Wilcoxon *p* = 6.9 × 10⁻⁵，Cliff's δ = 0.28（小到中等）
+- **Echo vs A**:Wilcoxon *p* = 4×10⁻⁷²,**Cliff's δ = 0.84(大效应)**
+- **Echo vs B**:Wilcoxon *p* = 4×10⁻⁷⁵,**Cliff's δ = 0.86(大效应)**
 
-**诚实说明。** Echo 把满意度大致**翻倍**且效应高度显著，但它停在 **2.3 / 5 而非 5**。每个 persona 同时强制 3 条硬规则；用户通过反馈分轮次逐条揭示，而 mimo 即便被提醒也无法稳定在首次就满足全部三条（尤其是格式严格的 persona）。所以 Echo 能在 10 轮内可靠地学会并应用**三条中的一到两条**——一个真实、显著但**部分**的增益，并非"已解决"。更长的交互窗口、以及把指标从"全有全无"改成"按条计分"，应该还能进一步抬高；此处按原样报告。
+相比上一版(δ≈0.27、echo 仅 2.3),M5 画像合并把效果从"显著但部分"推到"**大效应、接近天花板**"。残余差距来自个别多约束 persona(如英式拼写三连规则)偶尔漏一条——mimo 的多约束遵循上限,如实保留。
 
 ### 4.4 Metric 2 —— 错误传播
 
-![error propagation](experiment-figures/error_propagation.png)
 ![deterministic](experiment-figures/error_propagation_deterministic.png)
 
-植入一个**静默错误**技能（一条貌似合理实则错误的"偏好记忆"）。
+**确定性 harness(5 seed、15% 噪声、植入 ground truth)—— 主结果**:
 
-- **闭环**中坏方法被持续使用的平均轮数：Baseline B = **5.0**（每次都被自评再次确认、从不丢弃），**Echo = 2.0**（约 2 轮后随着用户负向信号衰减其置信度、M5 把它降权而抛弃），Baseline A = 0.0（无记忆，所以从不使用——但也从不**复用**任何好东西）。
-- **确定性 harness**（植入 ground truth）：**Echo 抓出 3/3** 个坏技能并把其置信度压到 0.071（退休）；**Baseline B 抓出 0/3**（自评 + 频率衰减都发现不了）。这是对核心论点最干净的证明：**行为分布偏移检测能抓到同源自评结构上抓不到的静默错误技能。**
+| 植入坏技能数 | Echo 抓出(5 seed 均值) | Baseline B 抓出 |
+|---|---|---|
+| 3 | **3 / 3**(每个 seed 都是) | 0 / 3 |
+| 10 | **10 / 10**(min 也是 10) | 0 / 10 |
 
-### 4.5 Metric 3 —— 系统开销（对 proposal 的一处更正）
+即使加 15% 信号噪声,Echo 仍稳定抓出全部坏技能(误报 0),频率衰减的 Baseline B 一个都抓不到——核心论点最硬的证明。
+
+**闭环视角(诚实说明一处混淆)**:闭环里"坏方法被使用轮数"这个计数**被新画像功能搞混淆了**——画像每轮全注入后,植入的坏样例**不再能拖坏输出**,于是它"在场但无害"、从不被惩罚(该计数 echo 反而偏高,但那是"无害地在场",不是"错误传播")。真正的闭环错误传播看**坏任务上的满意度**:Baseline B 停在 **1.16**(错误持续),Echo 达到 **4.44**(克服了植入的坏方法)。所以 Metric 2 **以确定性 harness 为主**、闭环以满意度差为佐证;那张会误导的"使用轮数"图我**直接不画**。
+
+### 4.5 Metric 3 —— 系统开销(公平版 + 对 proposal 的更正)
 
 ![overhead](experiment-figures/overhead.png)
 
-每个 10 轮 run 的平均 token：
+本版修正了上次的不公平:**Baseline A 现在也修订**,agent-token apples-to-apples;并按 task **精确拆分** Layer B / Layer C。
 
-| 组别 | Agent（mimo） | Echo 信号（Qwen） | 合计 |
-|---|---|---|---|
-| Baseline A | 2,184 | 0 | 2,184 |
-| Baseline B | 13,642 | 0 | 13,642 |
-| **Echo** | 4,368 | 4,842 | **9,210** |
+- **Agent token 公平对比**:Echo 比 A 仅 **+5.3%**(A 4700 / Echo 4947)。上次那个 +322% 是"A 不修订"造成的假象,已消除。
+- **日常稳态开销(无 Layer C)= 只有 Layer B**:每轮约 201 token,相对一次 agent 回复(~803/轮)约 **+25%**。**proposal 的"<15%"不成立**(Layer B 每轮都跑),如实更正;但这些 token 在便宜辅助模型档、且 fire-and-forget 不占用户延迟。
+- **Layer C 是稀有事件**:450 turn 里只触发 **13 次(≈每 35 turn 1 次)**,每次约 2039 token。45 个 echo run 里 **36 个全程 0 次 judge**、仅 9 个触发过——证实"按需诊断、频率极低"。而且这还是**每个 run 都植了坏技能**的高压设定;正常使用 ≈ 0。
 
-**proposal 中"< 15% token 开销"的说法在此并不成立**，我们如实报告。两点发现：
+诚实标注:开销计量受 judge 异步线程跨 run 落点影响,有 ±少量噪声(A 也记到极少量 Layer C token,即此故)。
 
-1. **相对无状态地板 A：+322%。** 但 A 是个不现实的地板——它从不修订、从不个性化，做的是最少的事。Echo 的 *agent* token 增量主要来自修订轮（偏好得以学习的通道），而 A 在构造上根本无法修订。
-2. **相对可比的个性化 baseline B：Echo 反而便宜约 32%**（9,210 vs 13,642），因为 B 的"每轮自评 + 总是修订"循环比 Echo 的信号管线更费 agent token。
-
-proposal 的推理是"Layer A 免费、Layer C 罕发"——这两点都对——但它**忽略了 Layer B 情感分类每轮都跑**，这才是信号开销的大头（此处约 4.8k Qwen token/run）。缓解因素：这些 token 在**更便宜的辅助模型档位**上，且所有 Layer B/C 调用都是 **fire-and-forget、不在用户感知延迟路径上**。结论：相对"什么都不做"Echo 并非"几乎免费"，但它**比它想取代的那个自评 baseline 更便宜**，且开销不在关键路径上。
-
-### 4.6 逐模块微指标（确定性、植入 ground truth）
+### 4.6 逐模块微指标(确定性、植入 ground truth,不随规模变)
 
 | 模块 | 指标 | 结果 |
 |---|---|---|
-| **M1** 触发 | precision / recall（对比 Hermes ≥工具数规则） | Echo P=1.00, R=0.67 —— 在这些场景上与 Hermes 规则**打平** |
-| **M3** 漂移 | precision / recall / F1 | **1.00 / 1.00 / 1.00**（n 小：TP=1, TN=20） |
-| **M4** 置信度 | Spearman ρ（置信度 ↔ 真实有用度） | **ρ = +0.67**（n=5 技能） |
-| **M5** 检索 | recall@k（带/不带置信度加权） | 0.375 / 0.375，**uplift = 0**（此场景） |
+| M1 触发 | precision/recall vs Hermes 规则 | P=1.00, R=0.67(内置场景上与 Hermes 持平) |
+| M3 漂移 | precision/recall/F1 | 1.00/1.00/1.00(n 小) |
+| M4 置信度 | Spearman ρ | +0.67 |
+| M5 检索 | recall@k 加权 uplift | 0(此内置场景;M5 真实价值见 4.1/4.2) |
 
-诚实解读：**M3、M4 很强**（漂移检测在植入漂移上完美；置信度排序与真实有用度相关性良好）。**M1 仅打平**内置场景上的 Hermes 规则——这些特定场景没有触发 Echo 提名器的优势（save-intent / 复现），所以 M1 的真实价值更应由线上 save-intent 路径展示，而非此微指标。**M5 的置信度加权 uplift 在此为 0**，因为内置场景里的技能没有"退化"到足以让加权重排检索——M5 的**真实价值在上面的 PersonaMem/PrefEval 上体现**，而非这个确定性微案例。
+## 4.7 一段话总结(可直接用于演讲)
 
----
+在两个已发表 benchmark 上(各 3 seed),Echo 的偏好记忆把偏好**回忆**从 47% 提到 65%(PersonaMem,仅 1/3 上下文)、把偏好**遵从**从 13% 提到 82%(PrefEval,oracle 90%)。在 15 个高特异性 persona、独立 GLM 评分的受控闭环里(**n = 450 配对**),Echo 把主动满意度从 baseline 的 ~1.3–1.5 提到 **4.48**,**大效应(Cliff's δ ≈ 0.85)、p < 10⁻⁷²**。错误传播上,确定性测试中 Echo 在 15% 噪声下仍抓出 **3/3 和 10/10** 坏技能、频率衰减 baseline 抓 **0**;闭环里坏任务满意度 Echo 4.44 vs Baseline B 1.16。诚实代价两条:(1) 开销上 proposal 的"<15%"不成立——Layer B 每轮常驻、约 +25%,但在廉价档、不占延迟,公平比 agent token 仅 +5.3%;(2) 满意度残余差距来自 mimo 的多约束遵循上限。
 
-## 4.7 一段话总结（可直接用于演讲）
-
-在两个独立的已发表 benchmark 上，Echo 的偏好记忆把偏好**回忆**从 49% 提到 64%（PersonaMem，且仅用 1/3 上下文），把偏好**遵从**从 16% 提到 86%（PrefEval，oracle 为 93%）。在一个以 DeepSeek 模拟用户、GLM-5.2 独立评分的受控闭环里，Echo 把主动满意度大致翻倍（1.07 → 2.10，*p* < 10⁻⁴），而两个不使用用户信号的 baseline 始终持平；面对植入的静默错误技能，Echo 约 2 轮即抛弃、确定性测试中 3/3 全抓，而自评 baseline 永远留着它（0/3）。诚实代价：满意度停在 ~2.3/5（10 轮内为部分解决而非彻底解决），且 proposal 的"<15% 开销"不成立——Layer B 每轮都跑——但 Echo 仍比自评 baseline 便宜约 32%，且不增加用户感知延迟。
-
----
 
 ## 5. 可复现性
 

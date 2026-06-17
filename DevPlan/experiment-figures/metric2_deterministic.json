@@ -1,0 +1,136 @@
+{
+  "n_bad_3": {
+    "n_bad": 3,
+    "seeds": 5,
+    "noise": 0.15,
+    "echo_caught_mean": 3,
+    "echo_caught_min": 3,
+    "echo_caught_max": 3,
+    "baseline_b_caught_mean": 0,
+    "echo_good_false_positives_mean": 0,
+    "per_seed": [
+      {
+        "n_bad": 3,
+        "n_good": 2,
+        "echo_bad_caught": 3,
+        "echo_catch_rate": 1.0,
+        "echo_good_false_positives": 0,
+        "baseline_b_bad_caught": 0,
+        "baseline_b_catch_rate": 0.0,
+        "echo_mean_conf_bad": 0.1007532688735645,
+        "echo_mean_conf_good": 0.8641250000000004
+      },
+      {
+        "n_bad": 3,
+        "n_good": 2,
+        "echo_bad_caught": 3,
+        "echo_catch_rate": 1.0,
+        "echo_good_false_positives": 0,
+        "baseline_b_bad_caught": 0,
+        "baseline_b_catch_rate": 0.0,
+        "echo_mean_conf_bad": 0.18418218275721024,
+        "echo_mean_conf_good": 0.9225000000000003
+      },
+      {
+        "n_bad": 3,
+        "n_good": 2,
+        "echo_bad_caught": 3,
+        "echo_catch_rate": 1.0,
+        "echo_good_false_positives": 0,
+        "baseline_b_bad_caught": 0,
+        "baseline_b_catch_rate": 0.0,
+        "echo_mean_conf_bad": 0.14769874571333003,
+        "echo_mean_conf_good": 1.0
+      },
+      {
+        "n_bad": 3,
+        "n_good": 2,
+        "echo_bad_caught": 3,
+        "echo_catch_rate": 1.0,
+        "echo_good_false_positives": 0,
+        "baseline_b_bad_caught": 0,
+        "baseline_b_catch_rate": 0.0,
+        "echo_mean_conf_bad": 0.11870656577567053,
+        "echo_mean_conf_good": 0.9236875000000002
+      },
+      {
+        "n_bad": 3,
+        "n_good": 2,
+        "echo_bad_caught": 3,
+        "echo_catch_rate": 1.0,
+        "echo_good_false_positives": 0,
+        "baseline_b_bad_caught": 0,
+        "baseline_b_catch_rate": 0.0,
+        "echo_mean_conf_bad": 0.11856020264831622,
+        "echo_mean_conf_good": 0.9125000000000002
+      }
+    ]
+  },
+  "n_bad_10": {
+    "n_bad": 10,
+    "seeds": 5,
+    "noise": 0.15,
+    "echo_caught_mean": 10,
+    "echo_caught_min": 10,
+    "echo_caught_max": 10,
+    "baseline_b_caught_mean": 0,
+    "echo_good_false_positives_mean": 0,
+    "per_seed": [
+      {
+        "n_bad": 10,
+        "n_good": 5,
+        "echo_bad_caught": 10,
+        "echo_catch_rate": 1.0,
+        "echo_good_false_positives": 0,
+        "baseline_b_bad_caught": 0,
+        "baseline_b_catch_rate": 0.0,
+        "echo_mean_conf_bad": 0.11535088626775343,
+        "echo_mean_conf_good": 0.7941443750000002
+      },
+      {
+        "n_bad": 10,
+        "n_good": 5,
+        "echo_bad_caught": 10,
+        "echo_catch_rate": 1.0,
+        "echo_good_false_positives": 0,
+        "baseline_b_bad_caught": 0,
+        "baseline_b_catch_rate": 0.0,
+        "echo_mean_conf_bad": 0.13076646003228862,
+        "echo_mean_conf_good": 0.7422885656250002
+      },
+      {
+        "n_bad": 10,
+        "n_good": 5,
+        "echo_bad_caught": 10,
+        "echo_catch_rate": 1.0,
+        "echo_good_false_positives": 0,
+        "baseline_b_bad_caught": 0,
+        "baseline_b_catch_rate": 0.0,
+        "echo_mean_conf_bad": 0.13386421104958424,
+        "echo_mean_conf_good": 0.6938320562500001
+      },
+      {
+        "n_bad": 10,
+        "n_good": 5,
+        "echo_bad_caught": 10,
+        "echo_catch_rate": 1.0,
+        "echo_good_false_positives": 0,
+        "baseline_b_bad_caught": 0,
+        "baseline_b_catch_rate": 0.0,
+        "echo_mean_conf_bad": 0.1308814490872119,
+        "echo_mean_conf_good": 0.8921000000000003
+      },
+      {
+        "n_bad": 10,
+        "n_good": 5,
+        "echo_bad_caught": 10,
+        "echo_catch_rate": 1.0,
+        "echo_good_false_positives": 0,
+        "baseline_b_bad_caught": 0,
+        "baseline_b_catch_rate": 0.0,
+        "echo_mean_conf_bad": 0.14723230703740725,
+        "echo_mean_conf_good": 0.7672387500000004
+      }
+    ]
+  }
+}

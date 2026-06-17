@@ -149,40 +149,30 @@ def fig_error_prop(stats):
     mm = _load_json("micrometrics.json") or {}
     out = {}
     if rows:
-        # turns the planted bad approach was actually used, per condition
-        used = defaultdict(list)
-        runs = defaultdict(int)
-        for r in rows:
-            pass
+        # NOTE: the closed-loop "bad-approach used turns" count is CONFOUNDED by
+        # the always-on M5 profile — once the profile is injected the planted bad
+        # example no longer degrades the output, so it stays "present" but
+        # harmless and is never punished. We record it for transparency but do
+        # NOT chart it as persistence (it would misleadingly show echo high). The
+        # real closed-loop error-propagation signal is the satisfaction outcome:
+        # Baseline B stays at the floor (errors persist) while Echo recovers.
         per_run = defaultdict(lambda: defaultdict(int))
         for r in rows:
-            k = (r["condition"], r["persona"], r["seed"])
-            per_run[k]["used"] += int(r.get("used_bad", 0))
+            per_run[(r["condition"], r["persona"], r["seed"])]["used"] += int(r.get("used_bad", 0))
         agg = defaultdict(list)
         for (c, p, s), d in per_run.items():
             agg[c].append(d["used"])
         out["closedloop_bad_used_turns_mean"] = {c: float(np.mean(v)) for c, v in agg.items()}
-
-        # bad-skill confidence decay (echo), averaged by turn
-        maxt = max(r["turn"] for r in rows)
-        decay = []
-        for t in range(maxt + 1):
-            vals = [r["bad_conf"] for r in rows if r["condition"] == "echo"
-                    and r["turn"] == t and r.get("bad_conf") is not None]
-            decay.append(np.mean(vals) if vals else np.nan)
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.3))
-        ax1.plot(range(len(decay)), decay, "-o", color=ROSE, lw=2)
-        ax1.axhline(0.30, ls="--", color=GREY, label="pending-review (0.30)")
-        ax1.axhline(0.10, ls=":", color="black", label="retired (0.10)")
-        ax1.set_xlabel("turn"); ax1.set_ylabel("planted bad-skill confidence")
-        ax1.set_title("Echo decays the planted bad skill"); ax1.legend(fontsize=8)
-        cs = list(out["closedloop_bad_used_turns_mean"])
-        ax2.bar([{"A": "A", "B": "B", "echo": "Echo"}.get(c, c) for c in cs],
-                [out["closedloop_bad_used_turns_mean"][c] for c in cs],
-                color=[{"A": GREY, "B": AMBER, "echo": TEAL}.get(c, GREY) for c in cs])
-        ax2.set_ylabel("turns the bad approach kept being used")
-        ax2.set_title("Bad-approach persistence (lower = better)")
-        fig.tight_layout(); fig.savefig(FIG / "error_propagation.png"); plt.close(fig)
+        out["closedloop_note"] = ("bad-used count is confounded by the always-on profile "
+                                  "(bad example becomes harmless); use deterministic Metric 2 "
+                                  "+ the satisfaction gap instead.")
+        # Mean satisfaction on the planted bad task — the honest closed-loop view.
+        bad_sat = {}
+        for c in ("A", "B", "echo"):
+            v = [r["eval_score"] for r in rows if r["condition"] == c and r.get("is_bad_task")]
+            if v:
+                bad_sat[c] = float(np.mean(v))
+        out["closedloop_bad_task_satisfaction"] = bad_sat
 
     # Deterministic Metric 2 — prefer the new seeded sweep (n_bad 3 & 10, 5 seeds)
     det = _load_json("metric2_deterministic.json")

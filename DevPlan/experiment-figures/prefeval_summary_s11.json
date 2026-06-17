@@ -1,0 +1,16 @@
+{
+  "n": 100,
+  "adherence": {
+    "no_pref": 0.14,
+    "echo_m5": 0.81,
+    "oracle": 0.87
+  },
+  "agent_usage": {
+    "name": "agent(mimo)",
+    "calls": 300,
+    "prompt_tokens": 24055,
+    "completion_tokens": 33220,
+    "total_tokens": 57275,
+    "errors": 0
+  }
+}

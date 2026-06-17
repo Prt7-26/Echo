@@ -1,0 +1,65 @@
+{
+  "n_probes": 180,
+  "accuracy": {
+    "no_mem": 0.4444,
+    "full_hist": 0.5167,
+    "echo_m5": 0.6389
+  },
+  "avg_inject_chars": {
+    "no_mem": 0.0,
+    "full_hist": 8209.4,
+    "echo_m5": 2652.0
+  },
+  "by_type": {
+    "provide_preference_aligned_recommendations": {
+      "n": 22,
+      "no_mem": 0.318,
+      "full_hist": 0.773,
+      "echo_m5": 0.727
+    },
+    "recalling_the_reasons_behind_previous_updates": {
+      "n": 31,
+      "no_mem": 0.839,
+      "full_hist": 0.806,
+      "echo_m5": 0.774
+    },
+    "recall_user_shared_facts": {
+      "n": 42,
+      "no_mem": 0.167,
+      "full_hist": 0.262,
+      "echo_m5": 0.643
+    },
+    "generalizing_to_new_scenarios": {
+      "n": 13,
+      "no_mem": 0.462,
+      "full_hist": 0.923,
+      "echo_m5": 0.923
+    },
+    "suggest_new_ideas": {
+      "n": 28,
+      "no_mem": 0.286,
+      "full_hist": 0.107,
+      "echo_m5": 0.357
+    },
+    "track_full_preference_evolution": {
+      "n": 41,
+      "no_mem": 0.585,
+      "full_hist": 0.561,
+      "echo_m5": 0.61
+    },
+    "recalling_facts_mentioned_by_the_user": {
+      "n": 3,
+      "no_mem": 0.667,
+      "full_hist": 0.667,
+      "echo_m5": 0.333
+    }
+  },
+  "agent_usage": {
+    "name": "agent(mimo)",
+    "calls": 540,
+    "prompt_tokens": 591078,
+    "completion_tokens": 1080,
+    "total_tokens": 592158,
+    "errors": 0
+  }
+}

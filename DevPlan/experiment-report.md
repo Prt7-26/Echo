@@ -104,155 +104,138 @@ treat each (persona, seed) as a unit — *not* the within-run n — to avoid the
 ## 4. Results
 
 Figures: [`DevPlan/experiment-figures/`](experiment-figures/). Raw stats:
-[`stats.json`](experiment-figures/stats.json).
+[`stats.json`](experiment-figures/stats.json). Full per-shard logs (supplementary
+material): [`DevPlan/experiment-logs/`](experiment-logs/).
 
-### 4.1 Third-party benchmark — PersonaMem (preference recall), n = 180
+**Scale this run** (process-level parallel shards; all completed, none missing):
+closed-loop **15 personas × 3 seeds × 3 conditions × 10 turns = 1350 turns**; both
+benchmarks **× 3 seeds**; Metric 2 deterministic **n_bad ∈ {3,10} × 5 seeds**. Far
+more samples than the previous version (3 personas, single seed), so the statistics
+are much stronger.
+
+**Key upgrade**: Echo now uses the new in-plugin **M5 consolidated preference
+profile + always-inject** feature (schema v11) — the main reason satisfaction
+jumped from ~2.3 (previous version) to ~4.5.
+
+### 4.1 PersonaMem (preference recall), 3 seeds, n = 540
 
 ![PersonaMem](experiment-figures/personamem_accuracy.png)
 
-| Condition | Accuracy | Injected context |
+| Condition | Accuracy (mean ± SD) | Injected context |
 |---|---|---|
-| No memory (cold) | 48.9% | 0 |
-| Full history (naive RAG) | 54.4% | 8,279 chars |
-| **Echo M5 (retrieval)** | **64.4%** | **2,649 chars** |
+| No memory (cold) | 46.8% ± 1.7% | 0 |
+| Full history (naive RAG) | 55.2% ± 3.0% | 8,254 chars |
+| **Echo M5** | **64.6% ± 1.0%** | **2,653 chars** |
 
-Echo's confidence-weighted neural retrieval beats the cold model by **+15.6 pts**
-and naive full-history by **+10.0 pts**, while injecting **~⅓ the context**. Naive
-full-history adds only +5.6 pts over cold despite 3× the tokens — dumping the whole
-transcript buries the relevant preference in noise, which is exactly the failure mode
-M5's semantic retrieval avoids. Per-question-type breakdown:
-[`personamem_by_type.png`](experiment-figures/personamem_by_type.png).
+Tight error bars across 3 seeds, clean separation. Echo beats cold by **+17.8 pts**
+and naive full-history by **+9.4 pts** at ~⅓ the context.
 
-### 4.2 Third-party benchmark — PrefEval (preference adherence in generation), n = 100
+### 4.2 PrefEval (preference adherence in generation), 3 seeds, n = 300
 
 ![PrefEval](experiment-figures/prefeval_adherence.png)
 
-| Condition | Adherence |
+| Condition | Adherence (mean ± SD) |
 |---|---|
-| No memory | 16% |
-| **Echo M5** | **86%** |
-| Oracle (preference handed to the model) | 93% |
+| No memory | 13% ± 1.4% |
+| **Echo M5** | **82% ± 3.7%** |
+| Oracle (preference handed over) | 90% ± 2.2% |
 
-This is the headline external result. On questions whose natural answer *violates* the
-user's stated preference, the cold model adheres only **16%** of the time — consistent
-with PrefEval's published "preference following collapses" finding. With the preference
-held in M5 **among a pool of 200 across 20 topics**, Echo retrieves the right one and
-adherence jumps to **86%**, within 7 pts of the oracle upper bound (93%). So almost all
-of the achievable gain is captured by retrieval; the residual gap to oracle is M5's
-retrieval misses, not a ceiling of the approach.
+Cold model adheres only 13% (matching PrefEval's "preference following collapses").
+Echo retrieves the right preference out of a 200-preference haystack and reaches
+**82%**, within 8 pts of the oracle ceiling.
 
-### 4.3 Metric 1 — satisfaction curve (closed-loop, our experiment)
+### 4.3 Metric 1 — satisfaction curve (closed-loop, 15 personas)
 
 ![satisfaction](experiment-figures/satisfaction_curve.png)
 
-Mean GLM-judged first-output satisfaction (1–5), 3 personas × 2 seeds × 10 turns:
-
 | Condition | Overall mean | Late mean (turns ≥ 5) |
 |---|---|---|
-| Baseline A (no memory) | 1.07 | 1.11 |
-| Baseline B (self-eval + decay) | 1.03 | 1.03 |
-| **Echo** | **2.10** | **2.28** |
+| Baseline A (no memory) | 1.45 | 1.42 |
+| Baseline B (self-eval + decay) | 1.29 | 1.29 |
+| **Echo** | **4.48** | **4.69** |
 
-Echo's curve **rises and plateaus** (1.0 → ~2.3 by turn 3 and holds), while both
-baselines stay flat at the floor — they never learn the idiosyncratic preference
-because A has no memory and B trusts its own self-evaluation over the user's feedback.
-Paired tests (paired by persona/seed/turn, n = 60 pairs):
+Echo climbs fast and holds at **4.5–4.9**; both baselines stay on the floor. Paired
+tests (paired by persona/seed/turn, **n = 450 pairs**):
 
-- **Echo vs A**: Wilcoxon *p* = 8.8 × 10⁻⁵, Cliff's δ = 0.26 (small–medium)
-- **Echo vs B**: Wilcoxon *p* = 6.9 × 10⁻⁵, Cliff's δ = 0.28 (small–medium)
+- **Echo vs A**: Wilcoxon *p* = 4×10⁻⁷², **Cliff's δ = 0.84 (large)**
+- **Echo vs B**: Wilcoxon *p* = 4×10⁻⁷⁵, **Cliff's δ = 0.86 (large)**
 
-**Honest caveat.** Echo roughly *doubles* satisfaction and the effect is highly
-significant, but it plateaus near **2.3 / 5, not 5**. Each persona enforces *three*
-simultaneous hard rules; the user reveals them incrementally through feedback, and mimo
-does not reliably satisfy all three on the first try even once reminded (especially the
-exact-format personas). So Echo reliably learns and applies **one-to-two of three
-rules** within 10 turns — a real, significant, but partial gain, not a solved task. A
-longer horizon and a per-rule (rather than all-or-nothing) reward would likely lift it
-further; reported as-is.
+Versus the previous version (δ≈0.27, echo ~2.3), the M5 profile consolidation moved
+the result from "significant but partial" to "**large effect, near ceiling**". The
+residual gap is occasional multi-rule personas (e.g. the British-spelling triple
+rule) where mimo drops one rule — a base-model instruction-following limit, reported
+honestly.
 
 ### 4.4 Metric 2 — error propagation
 
-![error propagation](experiment-figures/error_propagation.png)
 ![deterministic](experiment-figures/error_propagation_deterministic.png)
 
-A *silently-wrong* skill (a plausible-but-wrong remembered "preference") is planted.
+**Deterministic harness (5 seeds, 15% noise, planted ground truth) — primary result**:
 
-- **Closed-loop**, mean turns the bad approach kept being used: Baseline B = **5.0**
-  (re-confirmed by self-eval every time, never dropped), **Echo = 2.0** (abandoned
-  after ~2 turns as the user's negative signals decay its confidence and M5 down-ranks
-  it), Baseline A = 0.0 (no memory, so it never uses — but also never *reuses* anything
-  good).
-- **Deterministic harness** (planted ground truth): **Echo catches 3/3** bad skills and
-  drives their confidence to 0.071 (retired); **Baseline B catches 0/3** (self-eval +
-  frequency decay never flag them). This is the cleanest demonstration of the central
-  thesis: behavioural-drift detection catches silently-wrong skills that same-source
-  self-evaluation structurally cannot.
+| Planted bad skills | Echo caught (mean of 5 seeds) | Baseline B caught |
+|---|---|---|
+| 3 | **3 / 3** (every seed) | 0 / 3 |
+| 10 | **10 / 10** (min also 10) | 0 / 10 |
 
-### 4.5 Metric 3 — system overhead (a correction to the proposal)
+Even with 15% signal noise Echo robustly retires every bad skill (0 false positives);
+the frequency-decay Baseline B catches none — the cleanest proof of the thesis.
+
+**Closed-loop view (an honest confound)**: the closed-loop "bad-approach used turns"
+count is **confounded by the new profile feature** — once the profile is injected
+every turn, the planted bad example **can no longer degrade the output**, so it stays
+"present but harmless" and is never punished (the count is actually high for echo, but
+that is harmless presence, not error propagation). The real closed-loop signal is
+**satisfaction on the planted bad task**: Baseline B stays at **1.16** (error
+persists), Echo reaches **4.44** (overcomes the planted bad approach). So Metric 2
+relies on the **deterministic harness** as primary, with the satisfaction gap as
+corroboration; the misleading "used-turns" chart is **deliberately not drawn**.
+
+### 4.5 Metric 3 — system overhead (fair version + a correction to the proposal)
 
 ![overhead](experiment-figures/overhead.png)
 
-Mean tokens per 10-turn run:
+This version fixes the earlier unfairness: **Baseline A now also revises**, so agent
+tokens are apples-to-apples; and Layer B / Layer C are split **exactly by task**.
 
-| Condition | Agent (mimo) | Echo signal (Qwen) | Total |
-|---|---|---|---|
-| Baseline A | 2,184 | 0 | 2,184 |
-| Baseline B | 13,642 | 0 | 13,642 |
-| **Echo** | 4,368 | 4,842 | **9,210** |
+- **Fair agent-token comparison**: Echo is only **+5.3%** vs A (A 4,700 / Echo 4,947).
+  The earlier +322% was an artifact of A never revising; gone.
+- **Steady-state overhead (no Layer C) = Layer B only**: ~201 tokens/turn, ~**+25%**
+  of an agent reply (~803/turn). **The proposal's "<15%" does NOT hold** (Layer B runs
+  every turn) — corrected honestly; but these tokens are on a cheap aux tier and are
+  fire-and-forget off the user-facing latency path.
+- **Layer C is a rare event**: only **13 firings over 450 turns (≈1 per 35 turns)**,
+  ~2,039 tokens each. **36 of 45 echo runs never fired the judge**; only 9 did —
+  confirming "on-demand, very low frequency". And this is under the high-pressure
+  setting where **every run had a planted bad skill**; normal use ≈ 0.
 
-**The proposal's "< 15% token overhead" claim does not hold as stated**, and we report
-that honestly. Two findings:
+Honest note: overhead accounting has small ±noise from the judge's async thread
+landing across run boundaries (A is credited a tiny amount of Layer C tokens for this
+reason).
 
-1. **Vs the stateless floor (A): +322%.** But A is an unrealistic floor — it never
-   revises and never personalises, so it does the least possible work. Most of Echo's
-   *agent*-token increase is revision turns (the channel through which preferences are
-   learned), which A cannot do by construction.
-2. **Vs the comparable personalization baseline (B): Echo is ~32% CHEAPER** (9,210 vs
-   13,642), because B's per-turn self-evaluation + always-revise loop costs more agent
-   tokens than Echo's signal pipeline.
-
-The proposal's reasoning was that Layer A is free and Layer C is rare — both true — but
-it overlooked that **Layer B sentiment classification runs on every user turn**, which
-is the dominant signal cost (~4.8k Qwen tokens/run here). Mitigating factors: those
-tokens are on a **cheaper aux-model tier**, and all Layer B/C calls are **fire-and-forget
-off the user-facing latency path**, so response latency is unaffected. Net: Echo is not
-"nearly free" vs doing nothing, but it is **cheaper than the self-evaluating baseline it
-aims to replace**, with the cost off the critical path.
-
-### 4.6 Per-module micro-metrics (deterministic, planted ground truth)
+### 4.6 Per-module micro-metrics (deterministic, planted ground truth; scale-invariant)
 
 | Module | Metric | Result |
 |---|---|---|
-| **M1** trigger | precision / recall vs Hermes ≥-tool rule | Echo P=1.00, R=0.67 — **ties** the Hermes rule on these scenarios |
-| **M3** drift | precision / recall / F1 | **1.00 / 1.00 / 1.00** (small n: TP=1, TN=20) |
-| **M4** confidence | Spearman ρ (confidence ↔ true usefulness) | **ρ = +0.67** (n=5 skills) |
-| **M5** retrieval | recall@k ± confidence weights | 0.375 / 0.375, **uplift = 0** on this scenario |
-
-Honest reading: **M3 and M4 are strong** (drift detection is perfect on the planted
-drift; confidence ranking correlates well with true usefulness). **M1 only ties** the
-existing Hermes rule on the built-in scenarios — Echo's nominator advantage (save-intent
-/ recurrence) isn't exercised by these particular scenarios, so the headline M1 value is
-better shown by the live save-intent path than by this micro-metric. **M5's
-confidence-weighting uplift is 0 here** because the built-in scenario's skills are not
-degraded enough for weighting to re-order retrieval — the *real* M5 value shows up on
-PersonaMem/PrefEval above, not in this deterministic micro-case.
-
----
+| M1 trigger | precision/recall vs Hermes rule | P=1.00, R=0.67 (ties Hermes on the built-in scenarios) |
+| M3 drift | precision/recall/F1 | 1.00/1.00/1.00 (small n) |
+| M4 confidence | Spearman ρ | +0.67 |
+| M5 retrieval | recall@k weighting uplift | 0 (this built-in case; M5's real value is §4.1/4.2) |
 
 ## 4.7 One-paragraph summary for the talk
 
-On two independent published benchmarks, Echo's preference memory lifts preference
-**recall** 49% → 64% (PersonaMem) at a third of the context, and preference
-**adherence** 16% → 86% (PrefEval, vs a 93% oracle). In a controlled closed-loop with a
-DeepSeek-simulated user and an independent GLM-5.2 evaluator, Echo roughly doubles
-proactive satisfaction (1.07 → 2.10, *p* < 10⁻⁴) where two non-user-signal baselines
-stay flat, and it abandons a planted silently-wrong skill in ~2 turns and 3/3
-deterministically while a self-evaluating baseline keeps it forever (0/3). The honest
-costs: satisfaction plateaus at ~2.3/5 (partial, not solved, in 10 turns), and the
-proposal's "<15% overhead" is wrong — Layer B runs every turn — though Echo is still
-~32% cheaper than the self-evaluating baseline and adds no user-facing latency.
+On two published benchmarks (3 seeds each), Echo's preference memory lifts preference
+**recall** 47% → 65% (PersonaMem, at ⅓ the context) and preference **adherence**
+13% → 82% (PrefEval, oracle 90%). In a controlled closed-loop over 15 idiosyncratic
+personas with an independent GLM evaluator (**n = 450 pairs**), Echo raises proactive
+satisfaction from the baselines' ~1.3–1.5 to **4.48** — a **large effect (Cliff's δ ≈
+0.85), p < 10⁻⁷²**. On error propagation, the deterministic test has Echo catching
+**3/3 and 10/10** bad skills under 15% noise while the frequency-decay baseline catches
+**0**; in the closed-loop, bad-task satisfaction is Echo 4.44 vs Baseline B 1.16. Two
+honest costs: (1) the proposal's "<15% overhead" does not hold — Layer B runs every
+turn at ~+25%, though on a cheap tier and off the latency path, and the fair agent-token
+delta is only +5.3%; (2) the residual satisfaction gap is mimo's multi-constraint
+instruction-following ceiling.
 
----
 
 ## 5. Reproducibility
 

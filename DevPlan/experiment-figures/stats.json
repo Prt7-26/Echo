@@ -1,24 +1,36 @@
 {
   "personamem": {
-    "accuracy": {
-      "no_mem": 0.4889,
-      "full_hist": 0.5444,
-      "echo_m5": 0.6444
+    "accuracy_mean": {
+      "no_mem": 0.46849999999999997,
+      "full_hist": 0.5518666666666667,
+      "echo_m5": 0.6463
+    },
+    "accuracy_sd": {
+      "no_mem": 0.017188562088396645,
+      "full_hist": 0.02950506547847144,
+      "echo_m5": 0.010465180361560902
     },
     "avg_inject_chars": {
       "no_mem": 0.0,
-      "full_hist": 8279.2,
-      "echo_m5": 2648.5
+      "full_hist": 8253.900000000001,
+      "echo_m5": 2652.9
     },
-    "n": 180
+    "n_total": 540,
+    "seeds": 3
   },
   "prefeval": {
-    "adherence": {
-      "no_pref": 0.16,
-      "echo_m5": 0.86,
-      "oracle": 0.93
+    "adherence_mean": {
+      "no_pref": 0.13,
+      "echo_m5": 0.82,
+      "oracle": 0.9
     },
-    "n": 100
+    "adherence_sd": {
+      "no_pref": 0.014142135623730956,
+      "echo_m5": 0.037416573867739396,
+      "oracle": 0.021602468994692887
+    },
+    "n_total": 300,
+    "seeds": 3
   },
   "metric1_satisfaction": {
     "curve": {
@@ -36,16 +48,16 @@
           9
         ],
         "mean": [
-          1.0,
-          1.0,
-          1.0,
-          1.0,
-          1.0,
-          1.3333333333333333,
-          1.1666666666666667,
-          1.0,
-          1.1666666666666667,
-          1.0
+          1.7333333333333334,
+          1.5333333333333334,
+          1.4666666666666666,
+          1.2444444444444445,
+          1.3777777777777778,
+          1.0666666666666667,
+          1.6666666666666667,
+          1.3555555555555556,
+          1.3555555555555556,
+          1.6888888888888889
         ]
       },
       "B": {
@@ -62,16 +74,16 @@
           9
         ],
         "mean": [
-          1.0,
-          1.1666666666666667,
-          1.0,
-          1.0,
-          1.0,
-          1.1666666666666667,
-          1.0,
-          1.0,
-          1.0,
-          1.0
+          1.0888888888888888,
+          1.5555555555555556,
+          1.1777777777777778,
+          1.3111111111111111,
+          1.2666666666666666,
+          1.4222222222222223,
+          1.0222222222222221,
+          1.3333333333333333,
+          1.2666666666666666,
+          1.4222222222222223
         ]
       },
       "echo": {
@@ -88,68 +100,233 @@
           9
         ],
         "mean": [
-          1.0,
-          1.6666666666666667,
-          2.3333333333333335,
-          2.3333333333333335,
-          2.3333333333333335,
-          2.3333333333333335,
-          1.8333333333333333,
-          2.3333333333333335,
-          2.5,
-          2.3333333333333335
+          3.533333333333333,
+          4.311111111111111,
+          4.2444444444444445,
+          4.6,
+          4.688888888888889,
+          4.5777777777777775,
+          4.888888888888889,
+          4.377777777777778,
+          4.866666666666666,
+          4.711111111111111
         ]
       }
     },
     "overall_mean": {
-      "A": 1.0666666666666667,
-      "B": 1.0333333333333334,
-      "echo": 2.1
+      "A": 1.448888888888889,
+      "B": 1.2866666666666666,
+      "echo": 4.48
     },
     "late_mean_turns>=half": {
-      "A": 1.1111111111111112,
-      "B": 1.0277777777777777,
-      "echo": 2.2777777777777777
+      "A": 1.4185185185185185,
+      "B": 1.288888888888889,
+      "echo": 4.685185185185185
     },
     "echo_vs_A": {
-      "n_pairs": 60,
-      "mean_1": 2.1,
-      "mean_2": 1.0666666666666667,
-      "cliffs_delta": 0.2627777777777778,
-      "wilcoxon_p": 8.771116046234339e-05
+      "n_pairs": 450,
+      "mean_1": 4.48,
+      "mean_2": 1.448888888888889,
+      "cliffs_delta": 0.8435654320987654,
+      "wilcoxon_p": 4.1661920917378987e-72
     },
     "echo_vs_B": {
-      "n_pairs": 60,
-      "mean_1": 2.1,
-      "mean_2": 1.0333333333333334,
-      "cliffs_delta": 0.27555555555555555,
-      "wilcoxon_p": 6.887215595255096e-05
+      "n_pairs": 450,
+      "mean_1": 4.48,
+      "mean_2": 1.2866666666666666,
+      "cliffs_delta": 0.8625481481481482,
+      "wilcoxon_p": 3.7347716518706407e-75
     }
   },
   "metric2_error_propagation": {
     "closedloop_bad_used_turns_mean": {
       "A": 0.0,
       "B": 5.0,
-      "echo": 2.0
+      "echo": 10.0
+    },
+    "closedloop_note": "bad-used count is confounded by the always-on profile (bad example becomes harmless); use deterministic Metric 2 + the satisfaction gap instead.",
+    "closedloop_bad_task_satisfaction": {
+      "A": 1.52,
+      "B": 1.1644444444444444,
+      "echo": 4.444444444444445
     },
     "deterministic": {
-      "echo_caught": "3/3",
-      "baseline_b_caught": "0/3",
-      "echo_mean_conf_bad": 0.07112087856808602
+      "n_bad_3": {
+        "n_bad": 3,
+        "seeds": 5,
+        "noise": 0.15,
+        "echo_caught_mean": 3,
+        "echo_caught_min": 3,
+        "echo_caught_max": 3,
+        "baseline_b_caught_mean": 0,
+        "echo_good_false_positives_mean": 0,
+        "per_seed": [
+          {
+            "n_bad": 3,
+            "n_good": 2,
+            "echo_bad_caught": 3,
+            "echo_catch_rate": 1.0,
+            "echo_good_false_positives": 0,
+            "baseline_b_bad_caught": 0,
+            "baseline_b_catch_rate": 0.0,
+            "echo_mean_conf_bad": 0.1007532688735645,
+            "echo_mean_conf_good": 0.8641250000000004
+          },
+          {
+            "n_bad": 3,
+            "n_good": 2,
+            "echo_bad_caught": 3,
+            "echo_catch_rate": 1.0,
+            "echo_good_false_positives": 0,
+            "baseline_b_bad_caught": 0,
+            "baseline_b_catch_rate": 0.0,
+            "echo_mean_conf_bad": 0.18418218275721024,
+            "echo_mean_conf_good": 0.9225000000000003
+          },
+          {
+            "n_bad": 3,
+            "n_good": 2,
+            "echo_bad_caught": 3,
+            "echo_catch_rate": 1.0,
+            "echo_good_false_positives": 0,
+            "baseline_b_bad_caught": 0,
+            "baseline_b_catch_rate": 0.0,
+            "echo_mean_conf_bad": 0.14769874571333003,
+            "echo_mean_conf_good": 1.0
+          },
+          {
+            "n_bad": 3,
+            "n_good": 2,
+            "echo_bad_caught": 3,
+            "echo_catch_rate": 1.0,
+            "echo_good_false_positives": 0,
+            "baseline_b_bad_caught": 0,
+            "baseline_b_catch_rate": 0.0,
+            "echo_mean_conf_bad": 0.11870656577567053,
+            "echo_mean_conf_good": 0.9236875000000002
+          },
+          {
+            "n_bad": 3,
+            "n_good": 2,
+            "echo_bad_caught": 3,
+            "echo_catch_rate": 1.0,
+            "echo_good_false_positives": 0,
+            "baseline_b_bad_caught": 0,
+            "baseline_b_catch_rate": 0.0,
+            "echo_mean_conf_bad": 0.11856020264831622,
+            "echo_mean_conf_good": 0.9125000000000002
+          }
+        ]
+      },
+      "n_bad_10": {
+        "n_bad": 10,
+        "seeds": 5,
+        "noise": 0.15,
+        "echo_caught_mean": 10,
+        "echo_caught_min": 10,
+        "echo_caught_max": 10,
+        "baseline_b_caught_mean": 0,
+        "echo_good_false_positives_mean": 0,
+        "per_seed": [
+          {
+            "n_bad": 10,
+            "n_good": 5,
+            "echo_bad_caught": 10,
+            "echo_catch_rate": 1.0,
+            "echo_good_false_positives": 0,
+            "baseline_b_bad_caught": 0,
+            "baseline_b_catch_rate": 0.0,
+            "echo_mean_conf_bad": 0.11535088626775343,
+            "echo_mean_conf_good": 0.7941443750000002
+          },
+          {
+            "n_bad": 10,
+            "n_good": 5,
+            "echo_bad_caught": 10,
+            "echo_catch_rate": 1.0,
+            "echo_good_false_positives": 0,
+            "baseline_b_bad_caught": 0,
+            "baseline_b_catch_rate": 0.0,
+            "echo_mean_conf_bad": 0.13076646003228862,
+            "echo_mean_conf_good": 0.7422885656250002
+          },
+          {
+            "n_bad": 10,
+            "n_good": 5,
+            "echo_bad_caught": 10,
+            "echo_catch_rate": 1.0,
+            "echo_good_false_positives": 0,
+            "baseline_b_bad_caught": 0,
+            "baseline_b_catch_rate": 0.0,
+            "echo_mean_conf_bad": 0.13386421104958424,
+            "echo_mean_conf_good": 0.6938320562500001
+          },
+          {
+            "n_bad": 10,
+            "n_good": 5,
+            "echo_bad_caught": 10,
+            "echo_catch_rate": 1.0,
+            "echo_good_false_positives": 0,
+            "baseline_b_bad_caught": 0,
+            "baseline_b_catch_rate": 0.0,
+            "echo_mean_conf_bad": 0.1308814490872119,
+            "echo_mean_conf_good": 0.8921000000000003
+          },
+          {
+            "n_bad": 10,
+            "n_good": 5,
+            "echo_bad_caught": 10,
+            "echo_catch_rate": 1.0,
+            "echo_good_false_positives": 0,
+            "baseline_b_bad_caught": 0,
+            "baseline_b_catch_rate": 0.0,
+            "echo_mean_conf_bad": 0.14723230703740725,
+            "echo_mean_conf_good": 0.7672387500000004
+          }
+        ]
+      }
     }
   },
   "metric3_overhead": {
     "mean_agent_tokens": {
-      "A": 2184.0,
-      "B": 13641.666666666666,
-      "echo": 4368.333333333333
+      "A": 4699.666666666667,
+      "B": 14434.977777777778,
+      "echo": 4947.044444444445
     },
-    "mean_signal_tokens": {
+    "mean_layerB_tokens": {
       "A": 0.0,
       "B": 0.0,
-      "echo": 4842.166666666667
+      "echo": 2010.6444444444444
     },
-    "echo_overhead_pct_vs_A": 321.7261904761905
+    "mean_layerC_tokens": {
+      "A": 104.6,
+      "B": 0.0,
+      "echo": 588.9333333333333
+    },
+    "fair_agent_tokens_A_vs_echo": {
+      "A": 4699.666666666667,
+      "echo": 4947.044444444445,
+      "echo_vs_A_pct": 5.263730288200108
+    },
+    "steady_state": {
+      "layerB_tokens_per_turn": 201.06444444444443,
+      "fair_agent_tokens_per_turn": 802.722962962963,
+      "steady_overhead_pct_per_turn": 25.047800265023863,
+      "note": "daily conversation = Layer B only, no Layer C"
+    },
+    "layerC_incident": {
+      "total_firings": 13.0,
+      "total_echo_turns": 450,
+      "firing_rate_per_turn": 0.028888888888888888,
+      "tokens_per_firing": 2038.6153846153845,
+      "runs_with_no_judge": 36,
+      "runs_with_judge": 9,
+      "note": "every run had a PLANTED bad skill; normal use ~ 0 firings"
+    },
+    "mean_satisfaction_by_judge_presence": {
+      "no_judge_runs_overhead_tokens": 6561.555555555556,
+      "judge_runs_overhead_tokens": 11486.888888888889
+    }
   },
   "micrometrics": {
     "M1_trigger": {
