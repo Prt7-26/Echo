@@ -37,13 +37,9 @@ struct RootSplitView: View {
             .background(Theme.contentBackground)
         }
         .frame(minWidth: Tokens.Size.windowMinWidth, minHeight: Tokens.Size.windowMinHeight)
-        // 让承载窗口非不透明：sidebar 的 .behindWindow vibrancy 才能真正透出桌面。
-        // 诊断开关：ECHO_NO_VIBRANCY=1 时保持窗口不透明（A/B 排查彩虹球是否源于透明窗口+玻璃合成）。
-        .background {
-            if ProcessInfo.processInfo.environment["ECHO_NO_VIBRANCY"] != "1" {
-                WindowVibrancyConfigurator()
-            }
-        }
+        // 规整承载窗口（正常受管理窗口）。默认稳定路线：窗口不透明、绝不卡；
+        // ECHO_GLASS_WINDOW=1 才开非不透明的「透壁纸路线」。详见 WindowVibrancyConfigurator。
+        .background(WindowVibrancyConfigurator())
     }
 }
 

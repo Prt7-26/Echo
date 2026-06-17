@@ -20,12 +20,19 @@ struct VisualEffectBackground: NSViewRepresentable {
     }
 }
 
-/// 把承载窗口设为「非不透明 + 透明背景」。这是 `.behindWindow` vibrancy 能真正
-/// 透出桌面/壁纸的前提——否则毛玻璃只能贴着白色窗口背板模糊，看起来发白（用户反馈「白白的」）。
-/// 右侧对话区各面板都铺了 `Theme.contentBackground` 实底，所以只有 sidebar 会透，内容区不受影响。
+/// 规整承载窗口。默认走「稳定路线」：保持窗口不透明 + 正常受管理 + 有阴影——
+/// 彻底避免非不透明窗口在本机引发的合成卡顿（按钮卡、调度中心激活卡、阴影重算卡）。
+///
+/// `ECHO_GLASS_WINDOW=1` 才开「透壁纸路线」：把窗口设非不透明 + 透明背景 + 关阴影，
+/// 让侧栏 `.behindWindow` vibrancy 真正透出桌面——代价是窗口服务器每次重合成它都可能卡
+/// （从调度中心激活等），仅推荐不在意此点、追求极致透壁纸时开启。
 struct WindowVibrancyConfigurator: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
     final class Coordinator { var configured = false }
+
+    private var glassWindow: Bool {
+        ProcessInfo.processInfo.environment["ECHO_GLASS_WINDOW"] == "1"
+    }
 
     func makeNSView(context: Context) -> NSView {
         let v = NSView()
@@ -33,30 +40,32 @@ struct WindowVibrancyConfigurator: NSViewRepresentable {
         return v
     }
 
-    /// 关键：只在「还没配过」时配一次。绝不在每次 update 都改窗口属性——否则点击触发的
-    /// 玻璃 morph 动画会每帧改 isOpaque/backgroundColor → 窗口重合成 → 又触发 update，
-    /// 在非不透明窗口 + Liquid Glass 下滚成重合成风暴 / 主线程卡死（彩虹球）。
+    /// 只在「还没配过」时配一次（updateNSView 频繁调用，绝不每次改窗口属性）。
     func updateNSView(_ nsView: NSView, context: Context) {
         configureOnce(nsView, context.coordinator)
     }
 
     private func configureOnce(_ view: NSView, _ coord: Coordinator) {
         guard !coord.configured else { return }
+        let glass = glassWindow
         DispatchQueue.main.async { [weak view] in
             guard let window = view?.window else { return }  // 窗口还没 attach → 等下次 update 再试
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            // 非不透明窗口默认可能被窗口服务器排除出 Mission Control/Exposé 动画（停在原处不缩放）。
-            // 显式规整为「正常受管理窗口」：参与 Spaces/调度中心、正常层级。
+            // 两条路线都规整为正常受管理窗口（参与 Spaces/调度中心、正常层级）。
             window.level = .normal
             window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenPrimary]
-            // 关键：透明窗口必须关阴影。hasShadow=true 时 AppKit 会从内容 alpha 反复重算
-            // 阴影形状，侧栏 vibrancy 的 alpha 一变（点击/玻璃动画）就触发重算 → 主线程卡死
-            // （沙滩球）。代价仅是窗口少一圈投影，换来不卡。
-            window.hasShadow = false
+            if glass {
+                // 透壁纸路线：非不透明 + 透明背景 + 关阴影（透明窗口阴影重算会卡）。
+                window.isOpaque = false
+                window.backgroundColor = .clear
+                window.hasShadow = false
+            } else {
+                // 稳定路线：保持不透明 + 有阴影（默认即如此，显式声明以防被改）。
+                window.isOpaque = true
+                window.hasShadow = true
+            }
             coord.configured = true
             FileHandle.standardError.write(Data(
-                "[echo-ui] window configured: opaque=\(window.isOpaque) level=\(window.level.rawValue) shadow=\(window.hasShadow) behavior=\(window.collectionBehavior.rawValue)\n".utf8))
+                "[echo-ui] window configured (glass=\(glass)): opaque=\(window.isOpaque) shadow=\(window.hasShadow) behavior=\(window.collectionBehavior.rawValue)\n".utf8))
         }
     }
 }
