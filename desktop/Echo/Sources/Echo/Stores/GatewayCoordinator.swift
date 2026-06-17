@@ -32,7 +32,9 @@ final class GatewayCoordinator {
         }
         resolved = r
         // 事件泵只建一次（events 流在 client 生命周期内复用，跨重连不变）。
-        pump = Task { [weak self] in
+        // 用 detached：迭代循环跑在后台执行器，不占 MainActor。每条事件再 await 跳到
+        // MainActor 的 route（顺序由 await 串行保证），流式洪峰时主线程只做轻量归约、不被迭代占满。
+        pump = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self, let events = await self.clientEvents() else { return }
             for await ev in events { await self.route(ev) }
         }
@@ -47,6 +49,7 @@ final class GatewayCoordinator {
         do {
             let transport = try StdioSubprocessTransport(pythonPath: r.python, repoRoot: r.repoRoot)
             await client.connect(transport)
+            await client.setCallTimeout(12)   // 调用卡住时 12s 即失败，UI 不至于死等 30s
             backoff.reset()
             await loadSessions()
         } catch {

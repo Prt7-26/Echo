@@ -170,21 +170,51 @@ final class AppState {
         if let coordinator { Task { await coordinator.interrupt() } }
     }
 
+    /// 中间态：把历史消息「解析好的」形态，可跨执行器传递（MarkdownBlock/String 均 Sendable）。
+    enum PreparedHistoryItem: Sendable {
+        case user(String)
+        case assistant([MarkdownBlock])
+    }
+
     /// 回放 session.resume 的历史消息到 transcript。
+    /// Markdown 解析（长会话可能几十条）放到后台执行器，主线程只做轻量映射+赋值，避免打开会话卡顿。
     func loadHistory(_ messages: [TranscriptMessage]) {
-        var items: [TranscriptItem] = []
-        for m in messages {
+        // 先抽成 Sendable 的 (role,text)，再 detach 解析。
+        let raw: [(isUser: Bool, text: String)] = messages.compactMap { m in
             switch m.role {
-            case .user:
-                items.append(.user(.init(id: UUID().uuidString, text: m.text ?? "")))
-            case .assistant:
-                items.append(.assistant(.init(id: UUID().uuidString,
-                                              blocks: Self.renderBlocks(from: m.text ?? ""))))
-            case .system, .tool:
-                break
+            case .user: return (true, m.text ?? "")
+            case .assistant: return (false, m.text ?? "")
+            case .system, .tool: return nil
             }
         }
-        transcript = items
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let prepared: [PreparedHistoryItem] = raw.map {
+                $0.isUser ? .user($0.text) : .assistant(MarkdownParser.parse($0.text))
+            }
+            await self?.applyPreparedHistory(prepared)
+        }
+    }
+
+    /// 在主线程把解析好的历史落成 transcript（轻量映射）。
+    func applyPreparedHistory(_ items: [PreparedHistoryItem]) {
+        transcript = items.map { item in
+            switch item {
+            case .user(let t):
+                return .user(.init(id: UUID().uuidString, text: t))
+            case .assistant(let blocks):
+                return .assistant(.init(id: UUID().uuidString, blocks: blocks.map(Self.mapBlock)))
+            }
+        }
+    }
+
+    /// Kit MarkdownBlock → UI ResponseBlock（纯映射，可在任意执行器调用）。
+    nonisolated static func mapBlock(_ block: MarkdownBlock) -> ResponseBlock {
+        switch block {
+        case .paragraph(let p): return .paragraph(p)
+        case .heading(_, let t): return .heading(t)
+        case .bullets(let items): return .bullets(items)
+        case .code(let lang, let body): return .code(language: lang, text: body)
+        }
     }
 
     func applySessionList(_ items: [SessionListItem]) {
@@ -223,7 +253,7 @@ final class AppState {
             beginAssistantTurn()
         case .messageDelta(let d):
             streamingText += d.text
-            isResponding = true
+            if !isResponding { isResponding = true }   // 避免每条 delta 都触发 observable 失效
             scheduleStreamFlush()          // 合批到 ~16ms 一刷，高频流式不抖
         case .messageComplete(let c):
             completeAssistantTurn(text: c.text, usage: c.usage, reasoning: c.reasoning)
@@ -322,16 +352,9 @@ final class AppState {
         }
     }
 
-    /// Kit Markdown 块 → UI ResponseBlock。
+    /// Kit Markdown 块 → UI ResponseBlock（流式收尾在主线程用；历史回放走 mapBlock 后台解析）。
     static func renderBlocks(from text: String) -> [ResponseBlock] {
         guard !text.isEmpty else { return [] }
-        return MarkdownParser.parse(text).map { block in
-            switch block {
-            case .paragraph(let p): return .paragraph(p)
-            case .heading(_, let t): return .heading(t)
-            case .bullets(let items): return .bullets(items)
-            case .code(let lang, let body): return .code(language: lang, text: body)
-            }
-        }
+        return MarkdownParser.parse(text).map(Self.mapBlock)
     }
 }

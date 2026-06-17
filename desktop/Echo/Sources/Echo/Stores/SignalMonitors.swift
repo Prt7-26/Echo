@@ -55,13 +55,15 @@ final class SignalMonitors {
 
     private func startFocusObservers() {
         let nc = NotificationCenter.default
+        // queue:.main → 回调一定在主线程；用 assumeIsolated 安全地访问 MainActor 隔离的 sink
+        // （否则 Swift 6 严格并发会警告「main actor-isolated 'sink' from Sendable closure」）。
         focusObservers.append(nc.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                self?.sink(ClipboardSignalBody(kind: "window_focus"))
+                MainActor.assumeIsolated { self?.sink(ClipboardSignalBody(kind: "window_focus")) }
             })
         focusObservers.append(nc.addObserver(
             forName: NSApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                self?.sink(ClipboardSignalBody(kind: "window_blur"))
+                MainActor.assumeIsolated { self?.sink(ClipboardSignalBody(kind: "window_blur")) }
             })
     }
 }

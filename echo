@@ -113,8 +113,9 @@ EOF
 }
 
 dash_is_up() {
-  curl -sf "http://${DASH_HOST}:${DASH_PORT}/api/plugins/echo_signals/status" \
-       >/dev/null 2>&1
+  # 探活查公开根路径 `/`（200）而非 /api/*（带鉴权，未带 token 会 401 → 误判没起）。
+  # 用 -s 不用 -f：只要连得上、有响应就算「在跑」，与 HTTP 状态码无关。
+  curl -s -o /dev/null -m 3 "http://${DASH_HOST}:${DASH_PORT}/" >/dev/null 2>&1
 }
 
 start_dashboard_bg() {
@@ -231,9 +232,18 @@ case "$cmd" in
     if [[ "$connect" == "1" ]]; then
       export ECHO_APP_CONNECT=1
       c_dim "Echo: connecting to live gateway (spawns python -m tui_gateway.entry)"
-      # Echo 信号（评分/scope/M1 候选/偏好）走 dashboard REST → 确保它在跑。
-      # 聊天链路本身不依赖 dashboard，所以失败不阻塞，只降级信号面板。
-      start_dashboard_bg || c_warn "Echo signals需 dashboard；启动失败，仅聊天可用"
+      # Echo 信号（评分/scope/M1 候选/偏好）走 dashboard REST。聊天链路不依赖它，
+      # 所以这里只「确保有一个在跑」，绝不阻塞 App 启动：已在跑就用现成的；没起就
+      # 后台拉起、立刻继续（App 端轮询信号时它已就绪）。
+      if dash_is_up; then
+        c_dim "Echo: dashboard already up at http://${DASH_HOST}:${DASH_PORT}"
+      else
+        c_dim "Echo: starting dashboard in background for signals (non-blocking)…"
+        nohup "$PYBIN" -m hermes_cli.main dashboard \
+              --host "$DASH_HOST" --port "$DASH_PORT" --no-open \
+              >"$DASH_LOG_FILE" 2>&1 &
+        echo $! > "$DASH_PID_FILE"
+      fi
     else
       c_dim "Echo: mock walkthrough (no backend). drop --mock for live."
     fi
