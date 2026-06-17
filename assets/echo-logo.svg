@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 300" font-family="Helvetica Neue, Arial, sans-serif">
+  <defs>
+    <radialGradient id="pulse" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#5eead4"/>
+      <stop offset="45%" stop-color="#0fb5ae"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </radialGradient>
+  </defs>
+  <!-- sonar / echo pulse icon (transparent bg) -->
+  <g transform="translate(155,150)" fill="none" stroke="url(#pulse)" stroke-linecap="round">
+    <circle r="42"  stroke-width="9"  opacity="1"/>
+    <circle r="74"  stroke-width="8"  opacity="0.72"/>
+    <circle r="106" stroke-width="7"  opacity="0.46"/>
+    <circle r="138" stroke-width="6"  opacity="0.24"/>
+  </g>
+  <circle cx="155" cy="150" r="16" fill="#5eead4"/>
+  <!-- wordmark -->
+  <text x="330" y="196" font-size="150" font-weight="800" fill="#0fb5ae" letter-spacing="-2">Echo</text>
+</svg>

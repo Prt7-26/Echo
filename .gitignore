@@ -132,3 +132,6 @@ DevPlan/presentation/
 
 # Exported README PDFs — rebuilt locally, not versioned
 /README*.pdf
+
+# Internal planning, proposal, experiment artifacts — not in the public repo
+DevPlan/

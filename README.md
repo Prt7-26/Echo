@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="DevPlan/Echo.png" alt="Echo" width="320">
+  <img src="assets/echo-logo.png" alt="Echo" width="360">
 </p>
 
 <h1 align="center">Echo</h1>
@@ -35,6 +35,10 @@ stop trusting the agent's opinion of its own work and use the user's reactions i
 | Any skill, once made, is offered everywhere. | Echo asks where a skill applies, and the auditor can exclude it from the contexts where it does badly. |
 
 ## How it works
+
+<p align="center">
+  <img src="assets/echo-architecture.png" alt="Echo architecture" width="92%">
+</p>
 
 Echo hooks the agent loop and writes its own `echo_*` tables into the SQLite DB the agent
 already uses. Three signal layers feed five modules.
@@ -91,7 +95,6 @@ Most of the tree is the Hermes codebase Echo is built on. Echo's own code is mos
 | [`tests/plugins/echo_signals/`](tests/plugins/echo_signals/) | unit tests |
 | [`desktop/Echo/`](desktop/Echo/) | the native macOS app |
 | [`scripts/eval/`](scripts/eval/) | evaluation harness and metric scripts |
-| [`DevPlan/`](DevPlan/) | the proposal, schema spec, design docs, and experiment report |
 | [`docs/hermes-architecture.html`](docs/hermes-architecture.html) | a reading aid for the Hermes internals |
 
 Echo also edits Hermes itself in a few places (the gateway and the web/TUI front ends), so
@@ -105,9 +108,8 @@ simulated user, one as an independent scorer, one as the agent under test, and E
 signal models. It runs against two public preference benchmarks
 ([PersonaMem](https://huggingface.co/datasets/bowen-upenn/PersonaMem) and
 [PrefEval](https://huggingface.co/datasets/siyanzhao/prefeval_explicit)) and a simulated-user
-closed loop. The full method and numbers — including where the original cost target wasn't met
-— are in [`DevPlan/experiment-report.md`](DevPlan/experiment-report.md) (English) and
-[`experiment-report-zh.md`](DevPlan/experiment-report-zh.md) (中文).
+closed loop. We report the full method and numbers — including where the original cost target
+wasn't met.
 
 ## Credits & license
 
