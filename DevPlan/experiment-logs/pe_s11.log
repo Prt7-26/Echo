@@ -1,0 +1,20 @@
+# pe_s11
+# /Users/mac/.hermes/hermes-agent/venv/bin/python -m scripts.eval.exp_prefeval --limit 100 --pool 200 --seed 11 --tag s11
+
+  [10/100] adherence={'no_pref': 0.2, 'echo_m5': 1.0, 'oracle': 0.8}
+  [20/100] adherence={'no_pref': 0.15, 'echo_m5': 0.9, 'oracle': 0.85}
+  [30/100] adherence={'no_pref': 0.1, 'echo_m5': 0.8, 'oracle': 0.87}
+  [40/100] adherence={'no_pref': 0.15, 'echo_m5': 0.8, 'oracle': 0.88}
+  [50/100] adherence={'no_pref': 0.14, 'echo_m5': 0.82, 'oracle': 0.84}
+  [60/100] adherence={'no_pref': 0.15, 'echo_m5': 0.8, 'oracle': 0.85}
+  [70/100] adherence={'no_pref': 0.14, 'echo_m5': 0.79, 'oracle': 0.86}
+  [80/100] adherence={'no_pref': 0.12, 'echo_m5': 0.8, 'oracle': 0.86}
+  [90/100] adherence={'no_pref': 0.13, 'echo_m5': 0.8, 'oracle': 0.87}
+  [100/100] adherence={'no_pref': 0.14, 'echo_m5': 0.81, 'oracle': 0.87}
+
+=== PrefEval ===
+ {
+  "no_pref": 0.14,
+  "echo_m5": 0.81,
+  "oracle": 0.87
+}

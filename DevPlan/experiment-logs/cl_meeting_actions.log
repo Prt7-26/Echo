@@ -1,0 +1,15 @@
+# cl_meeting_actions
+# /Users/mac/.hermes/hermes-agent/venv/bin/python -m scripts.eval.exp_closedloop --personas meeting_actions --seeds 3 --turns 10 --conditions A,B,echo --out /Users/mac/code/Echo/scripts/eval/results/shards/cl_meeting_actions.jsonl --usage-out /Users/mac/code/Echo/scripts/eval/results/shards/usage_meeting_actions.json
+
+[setup] isolated Echo DB at /var/folders/mb/b5mndrkj6n30p9w2wwl4w74h0000gn/T/echo_cl_a42xcl1h/state.db
+[1/9] meeting_actions seed=0 cond=A (0s elapsed)
+[2/9] meeting_actions seed=0 cond=B (176s elapsed)
+[3/9] meeting_actions seed=0 cond=echo (381s elapsed)
+[4/9] meeting_actions seed=1 cond=A (519s elapsed)
+[5/9] meeting_actions seed=1 cond=B (709s elapsed)
+[6/9] meeting_actions seed=1 cond=echo (929s elapsed)
+[7/9] meeting_actions seed=2 cond=A (1094s elapsed)
+[8/9] meeting_actions seed=2 cond=B (1301s elapsed)
+[9/9] meeting_actions seed=2 cond=echo (1512s elapsed)
+
+DONE in 1689s. usage -> {'agent': {'name': 'agent(mimo)', 'calls': 188, 'prompt_tokens': 58294, 'completion_tokens': 24809, 'total_tokens': 83103, 'errors': 0}, 'persona': {'name': 'persona(deepseek)', 'calls': 158, 'prompt_tokens': 55398, 'completion_tokens': 85771, 'total_tokens': 141169, 'errors': 0}, 'eval': {'name': 'evaluator(glm-5.2)', 'calls': 90, 'prompt_tokens': 30279, 'completion_tokens': 630, 'total_tokens': 30909, 'errors': 0}}

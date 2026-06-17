@@ -1,0 +1,15 @@
+# cl_caption_tight
+# /Users/mac/.hermes/hermes-agent/venv/bin/python -m scripts.eval.exp_closedloop --personas caption_tight --seeds 3 --turns 10 --conditions A,B,echo --out /Users/mac/code/Echo/scripts/eval/results/shards/cl_caption_tight.jsonl --usage-out /Users/mac/code/Echo/scripts/eval/results/shards/usage_caption_tight.json
+
+[setup] isolated Echo DB at /var/folders/mb/b5mndrkj6n30p9w2wwl4w74h0000gn/T/echo_cl_p8ko_efk/state.db
+[1/9] caption_tight seed=0 cond=A (0s elapsed)
+[2/9] caption_tight seed=0 cond=B (139s elapsed)
+[3/9] caption_tight seed=0 cond=echo (296s elapsed)
+[4/9] caption_tight seed=1 cond=A (421s elapsed)
+[5/9] caption_tight seed=1 cond=B (566s elapsed)
+[6/9] caption_tight seed=1 cond=echo (716s elapsed)
+[7/9] caption_tight seed=2 cond=A (833s elapsed)
+[8/9] caption_tight seed=2 cond=B (994s elapsed)
+[9/9] caption_tight seed=2 cond=echo (1171s elapsed)
+
+DONE in 1273s. usage -> {'agent': {'name': 'agent(mimo)', 'calls': 185, 'prompt_tokens': 44292, 'completion_tokens': 9473, 'total_tokens': 53765, 'errors': 0}, 'persona': {'name': 'persona(deepseek)', 'calls': 155, 'prompt_tokens': 39353, 'completion_tokens': 72238, 'total_tokens': 111591, 'errors': 0}, 'eval': {'name': 'evaluator(glm-5.2)', 'calls': 90, 'prompt_tokens': 19389, 'completion_tokens': 630, 'total_tokens': 20019, 'errors': 0}}

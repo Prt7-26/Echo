@@ -1,0 +1,52 @@
+[run_all] launching 21 shards, concurrency=6
+[run_all] cl_code_snake done rc=0 (1276s)  log=results/logs/cl_code_snake.log
+[run_all] cl_bullet_format done rc=0 (1286s)  log=results/logs/cl_bullet_format.log
+[run_all] cl_british_phrase done rc=0 (1348s)  log=results/logs/cl_british_phrase.log
+[run_all] cl_signoff_quirk done rc=0 (1413s)  log=results/logs/cl_signoff_quirk.log
+[run_all] cl_recipe_metric done rc=0 (1730s)  log=results/logs/cl_recipe_metric.log
+[run_all] cl_fitness_format done rc=0 (1875s)  log=results/logs/cl_fitness_format.log
+[run_all] cl_support_reply done rc=0 (1129s)  log=results/logs/cl_support_reply.log
+[run_all] cl_caption_tight done rc=0 (1274s)  log=results/logs/cl_caption_tight.log
+[run_all] cl_academic_abstract done rc=0 (1447s)  log=results/logs/cl_academic_abstract.log
+[run_all] cl_legal_plain done rc=0 (1528s)  log=results/logs/cl_legal_plain.log
+[run_all] cl_haiku_season done rc=0 (1092s)  log=results/logs/cl_haiku_season.log
+[run_all] cl_report_numbers done rc=0 (1545s)  log=results/logs/cl_report_numbers.log
+[run_all] cl_translate_keep done rc=0 (1377s)  log=results/logs/cl_translate_keep.log
+[run_all] pm_s8 done rc=0 (1132s)  log=results/logs/pm_s8.log
+[run_all] pm_s7 done rc=0 (1180s)  log=results/logs/pm_s7.log
+[run_all] cl_product_you done rc=0 (1555s)  log=results/logs/cl_product_you.log
+[run_all] cl_meeting_actions done rc=0 (1690s)  log=results/logs/cl_meeting_actions.log
+[run_all] pm_s9 done rc=0 (1147s)  log=results/logs/pm_s9.log
+[run_all] pe_s11 done rc=0 (1879s)  log=results/logs/pe_s11.log
+[run_all] pe_s13 done rc=0 (1951s)  log=results/logs/pe_s13.log
+[run_all] pe_s12 done rc=0 (2006s)  log=results/logs/pe_s12.log
+[run_all] all shards done in 5960s
+[run_all] merging closed-loop shards ...
+[run_all] merged 1350 run-records, 135 per-run usage entries
+[run_all] Metric 2 deterministic (n_bad 3 & 10, 5 seeds) ...
+  n_bad_3: echo 3/3 (min 3), B 0/3
+  n_bad_10: echo 10/10 (min 10), B 0/10
+[run_all] micro-metrics (M1/M3/M4/M5 + det error-prop) ...
+building Echo artifact from built-in scenarios …
+artifact -> /Users/mac/code/Echo/scripts/eval/results/micrometrics_artifact.jsonl
+running M1_trigger …
+   {"echo_precision": 1.0, "echo_recall": 0.6666666666666666, "hermes_precision": 1.0, "hermes_recall": 0.6666666666666666, "n_relevant": 3, "n_echo_flagged": 2, "n_hermes_flagged": 2}
+running M3_drift …
+   {"precision": 1.0, "recall": 1.0, "f1": 1.0, "tp": 1, "fp": 0, "fn": 0, "tn": 20, "excluded_warmup": 9}
+running M4_confidence …
+   {"spearman_rho": 0.6708203932499369, "n_pairs": 5, "pairs": [{"skill_id": "marketing-email-1", "confidence": 0.5, "true_usefulness": 0.8}, {"skill_id": "marketing-email-2", "confidence": 0.55, "true_u
+running M5_retrieval …
+   {"recall_with_confidence_weights": 0.375, "recall_no_weights": 0.375, "uplift": 0.0}
+running Metric2_error_propagation …
+   {"n_bad": 3, "n_good": 2, "echo_bad_caught": 3, "echo_catch_rate": 1.0, "echo_good_false_positives": 0, "baseline_b_bad_caught": 0, "baseline_b_catch_rate": 0.0, "echo_mean_conf_bad": 0.07112087856808
+
+saved -> /Users/mac/code/Echo/scripts/eval/results/micrometrics.json
+[run_all] analysing ...
+figures -> ['error_propagation.png', 'error_propagation_deterministic.png', 'overhead.png', 'personamem_accuracy.png', 'personamem_by_type.png', 'prefeval_adherence.png', 'satisfaction_curve.png']
+stats   -> /Users/mac/code/Echo/scripts/eval/results/stats.json
+{
+  "A": 1.448888888888889,
+  "B": 1.2866666666666666,
+  "echo": 4.48
+}
+[run_all] DONE

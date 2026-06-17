@@ -1,0 +1,33 @@
+# pm_s9
+# /Users/mac/.hermes/hermes-agent/venv/bin/python -m scripts.eval.exp_personamem --limit 180 --seed 9 --tag s9
+
+[setup] isolated Echo DB at /var/folders/mb/b5mndrkj6n30p9w2wwl4w74h0000gn/T/echo_pm_ofzenj2j/state.db
+[data] 20 personas, 589 probes total
+[probes] evaluating 180 probes across 20 personas
+  [10/180] acc={'no_mem': '0.30', 'full_hist': '0.60', 'echo_m5': '0.50'}
+  [20/180] acc={'no_mem': '0.45', 'full_hist': '0.60', 'echo_m5': '0.65'}
+  [30/180] acc={'no_mem': '0.50', 'full_hist': '0.57', 'echo_m5': '0.63'}
+  [40/180] acc={'no_mem': '0.42', 'full_hist': '0.62', 'echo_m5': '0.60'}
+  [50/180] acc={'no_mem': '0.44', 'full_hist': '0.60', 'echo_m5': '0.62'}
+  [60/180] acc={'no_mem': '0.45', 'full_hist': '0.57', 'echo_m5': '0.62'}
+  [70/180] acc={'no_mem': '0.46', 'full_hist': '0.59', 'echo_m5': '0.61'}
+  [80/180] acc={'no_mem': '0.46', 'full_hist': '0.56', 'echo_m5': '0.60'}
+  [90/180] acc={'no_mem': '0.43', 'full_hist': '0.53', 'echo_m5': '0.58'}
+  [100/180] acc={'no_mem': '0.44', 'full_hist': '0.51', 'echo_m5': '0.58'}
+  [110/180] acc={'no_mem': '0.44', 'full_hist': '0.51', 'echo_m5': '0.60'}
+  [120/180] acc={'no_mem': '0.44', 'full_hist': '0.53', 'echo_m5': '0.61'}
+  [130/180] acc={'no_mem': '0.44', 'full_hist': '0.52', 'echo_m5': '0.59'}
+  [140/180] acc={'no_mem': '0.44', 'full_hist': '0.51', 'echo_m5': '0.59'}
+  [150/180] acc={'no_mem': '0.46', 'full_hist': '0.52', 'echo_m5': '0.61'}
+  [160/180] acc={'no_mem': '0.46', 'full_hist': '0.53', 'echo_m5': '0.63'}
+  [170/180] acc={'no_mem': '0.45', 'full_hist': '0.52', 'echo_m5': '0.65'}
+  [180/180] acc={'no_mem': '0.44', 'full_hist': '0.52', 'echo_m5': '0.64'}
+
+=== PersonaMem result ===
+{
+  "no_mem": 0.4444,
+  "full_hist": 0.5167,
+  "echo_m5": 0.6389
+}
+avg injected chars: {'no_mem': 0.0, 'full_hist': 8209.4, 'echo_m5': 2652.0}
+saved -> /Users/mac/code/Echo/scripts/eval/results/personamem_summary.json

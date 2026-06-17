@@ -1,0 +1,15 @@
+# cl_translate_keep
+# /Users/mac/.hermes/hermes-agent/venv/bin/python -m scripts.eval.exp_closedloop --personas translate_keep --seeds 3 --turns 10 --conditions A,B,echo --out /Users/mac/code/Echo/scripts/eval/results/shards/cl_translate_keep.jsonl --usage-out /Users/mac/code/Echo/scripts/eval/results/shards/usage_translate_keep.json
+
+[setup] isolated Echo DB at /var/folders/mb/b5mndrkj6n30p9w2wwl4w74h0000gn/T/echo_cl_7jtgewaa/state.db
+[1/9] translate_keep seed=0 cond=A (0s elapsed)
+[2/9] translate_keep seed=0 cond=B (181s elapsed)
+[3/9] translate_keep seed=0 cond=echo (347s elapsed)
+[4/9] translate_keep seed=1 cond=A (466s elapsed)
+[5/9] translate_keep seed=1 cond=B (609s elapsed)
+[6/9] translate_keep seed=1 cond=echo (822s elapsed)
+[7/9] translate_keep seed=2 cond=A (919s elapsed)
+[8/9] translate_keep seed=2 cond=B (1091s elapsed)
+[9/9] translate_keep seed=2 cond=echo (1275s elapsed)
+
+DONE in 1376s. usage -> {'agent': {'name': 'agent(mimo)', 'calls': 182, 'prompt_tokens': 33850, 'completion_tokens': 9564, 'total_tokens': 43414, 'errors': 0}, 'persona': {'name': 'persona(deepseek)', 'calls': 152, 'prompt_tokens': 39279, 'completion_tokens': 76978, 'total_tokens': 116257, 'errors': 0}, 'eval': {'name': 'evaluator(glm-5.2)', 'calls': 90, 'prompt_tokens': 17871, 'completion_tokens': 630, 'total_tokens': 18501, 'errors': 0}}

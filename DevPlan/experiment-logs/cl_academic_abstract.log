@@ -1,0 +1,15 @@
+# cl_academic_abstract
+# /Users/mac/.hermes/hermes-agent/venv/bin/python -m scripts.eval.exp_closedloop --personas academic_abstract --seeds 3 --turns 10 --conditions A,B,echo --out /Users/mac/code/Echo/scripts/eval/results/shards/cl_academic_abstract.jsonl --usage-out /Users/mac/code/Echo/scripts/eval/results/shards/usage_academic_abstract.json
+
+[setup] isolated Echo DB at /var/folders/mb/b5mndrkj6n30p9w2wwl4w74h0000gn/T/echo_cl_hkvob3kc/state.db
+[1/9] academic_abstract seed=0 cond=A (0s elapsed)
+[2/9] academic_abstract seed=0 cond=B (189s elapsed)
+[3/9] academic_abstract seed=0 cond=echo (369s elapsed)
+[4/9] academic_abstract seed=1 cond=A (481s elapsed)
+[5/9] academic_abstract seed=1 cond=B (659s elapsed)
+[6/9] academic_abstract seed=1 cond=echo (848s elapsed)
+[7/9] academic_abstract seed=2 cond=A (947s elapsed)
+[8/9] academic_abstract seed=2 cond=B (1146s elapsed)
+[9/9] academic_abstract seed=2 cond=echo (1349s elapsed)
+
+DONE in 1447s. usage -> {'agent': {'name': 'agent(mimo)', 'calls': 182, 'prompt_tokens': 54846, 'completion_tokens': 26996, 'total_tokens': 81842, 'errors': 0}, 'persona': {'name': 'persona(deepseek)', 'calls': 152, 'prompt_tokens': 56205, 'completion_tokens': 62636, 'total_tokens': 118841, 'errors': 0}, 'eval': {'name': 'evaluator(glm-5.2)', 'calls': 90, 'prompt_tokens': 32659, 'completion_tokens': 630, 'total_tokens': 33289, 'errors': 0}}
