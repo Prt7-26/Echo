@@ -2,9 +2,17 @@ import SwiftUI
 import Observation
 import EchoKit
 
-/// 轻量 UI 打点（写 stderr，终端可见）。交互频率低，常开无害；卡死时终端最后一行即定位入口。
+/// 轻量 UI 打点：写 stderr（终端可见）+ 追加到 /tmp/echo-ui.log（卡死后可直接读文件定位
+/// 最后触发的入口，无需手动复制终端）。交互频率低，常开无害。
 @inline(never) func uiLog(_ s: String) {
-    FileHandle.standardError.write(Data(("[echo-ui] " + s + "\n").utf8))
+    let line = "[echo-ui] " + s + "\n"
+    FileHandle.standardError.write(Data(line.utf8))
+    let path = "/tmp/echo-ui.log"
+    if let fh = FileHandle(forWritingAtPath: path) {
+        fh.seekToEndOfFile(); fh.write(Data(line.utf8)); try? fh.close()
+    } else {
+        try? line.data(using: .utf8)?.write(to: URL(fileURLWithPath: path))
+    }
 }
 
 /// 应用级状态。Phase 1 用 mock 填充；Phase 3 接 GatewayClient 事件流。
@@ -257,16 +265,19 @@ final class AppState {
     func handle(_ event: ParsedEvent) {
         switch event.event {
         case .ready:
+            uiLog("event ready → online")
             connection = .online
         case .sessionInfo:
             break // 可在此更新模型/技能元数据
         case .messageStart:
+            uiLog("event messageStart")
             beginAssistantTurn()
         case .messageDelta(let d):
             streamingText += d.text
             if !isResponding { isResponding = true }   // 避免每条 delta 都触发 observable 失效
             scheduleStreamFlush()          // 合批到 ~16ms 一刷，高频流式不抖
         case .messageComplete(let c):
+            uiLog("event messageComplete len=\(c.text.count)")
             completeAssistantTurn(text: c.text, usage: c.usage, reasoning: c.reasoning)
         case .statusUpdate(let s):
             statusLine = s.text
@@ -282,6 +293,7 @@ final class AppState {
             streamingReasoning += d.text
             scheduleStreamFlush()
         case .clarifyRequest(let c):
+            uiLog("event clarifyRequest")
             clarifyPrompt = .init(id: c.requestId, question: c.question, choices: c.choices)
         case .error(let e):
             statusLine = "⚠︎ \(e.displayText)"

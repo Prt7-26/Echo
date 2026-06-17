@@ -64,8 +64,7 @@ struct WindowVibrancyConfigurator: NSViewRepresentable {
                 window.hasShadow = true
             }
             coord.configured = true
-            FileHandle.standardError.write(Data(
-                "[echo-ui] window configured (glass=\(glass)): opaque=\(window.isOpaque) shadow=\(window.hasShadow) behavior=\(window.collectionBehavior.rawValue)\n".utf8))
+            uiLog("window configured (glass=\(glass)): opaque=\(window.isOpaque) shadow=\(window.hasShadow) behavior=\(window.collectionBehavior.rawValue)")
         }
     }
 }
