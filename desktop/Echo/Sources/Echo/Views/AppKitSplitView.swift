@@ -70,16 +70,37 @@ struct AppKitSplitView: NSViewControllerRepresentable {
             let names: [Notification.Name] = [
                 NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
                 NSWindow.didBecomeMainNotification, NSWindow.didResignMainNotification,
+                NSWindow.didResizeNotification, NSWindow.didMoveNotification,
             ]
             for name in names {
                 observers.append(nc.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
                     MainActor.assumeIsolated { DispatchQueue.main.async { self?.relock() } }
                 })
             }
+            // 启动后系统还会再布局几次标题栏 → 多补几拍红绿灯微移。
+            for delay in [0.1, 0.3, 0.6, 1.0, 1.5] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.nudgeTrafficLights() }
+            }
         }
 
         /// 把我的 vibrancy 锁回 .active（失焦也透）。
-        func relock() { effect?.state = .active }
+        func relock() { effect?.state = .active; nudgeTrafficLights() }
+
+        /// 红绿灯往右下微移，与顶栏按钮齐平。需多次重新应用（系统会在布局时弹回）。
+        func nudgeTrafficLights() {
+            guard let window = windowProvider?() else { return }
+            let env = ProcessInfo.processInfo.environment
+            let dx = CGFloat(Double(env["ECHO_TL_DX"] ?? "") ?? 8)     // 右移
+            let dyDown = CGFloat(Double(env["ECHO_TL_DY"] ?? "") ?? 6) // 下移
+            for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                guard let b = window.standardWindowButton(type), let sup = b.superview else { continue }
+                let flipped = sup.isFlipped
+                var o = b.frame.origin
+                o.x += dx
+                o.y += flipped ? dyDown : -dyDown   // 非翻转视图 y 减小=下移
+                b.setFrameOrigin(o)
+            }
+        }
     }
 }
 
