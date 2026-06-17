@@ -37,7 +37,9 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=100)
     ap.add_argument("--pool", type=int, default=200, help="preferences loaded into M5")
     ap.add_argument("--seed", type=int, default=11)
+    ap.add_argument("--tag", default="", help="suffix for output files (parallel seed shards)")
     args = ap.parse_args()
+    _sfx = ("_" + args.tag) if args.tag else ""
 
     L.load_env()
     RESULTS.mkdir(parents=True, exist_ok=True)
@@ -89,7 +91,7 @@ def main() -> int:
         except Exception:
             return 0
 
-    fout = open(RESULTS / "prefeval_runs.jsonl", "w")
+    fout = open(RESULTS / f"prefeval_runs{_sfx}.jsonl", "w")
     score = {"no_pref": 0, "echo_m5": 0, "oracle": 0}
     n = 0
     for c, i in enumerate(eval_idx, 1):
@@ -112,7 +114,7 @@ def main() -> int:
     fout.close()
     summary = {"n": n, "adherence": {k: round(v / n, 4) for k, v in score.items()},
                "agent_usage": agent.usage.as_dict()}
-    (RESULTS / "prefeval_summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2))
+    (RESULTS / f"prefeval_summary{_sfx}.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2))
     print("\n=== PrefEval ===\n", json.dumps(summary["adherence"], indent=2))
     return 0
 

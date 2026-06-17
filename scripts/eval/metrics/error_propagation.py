@@ -78,16 +78,33 @@ class ErrorPropagationResult:
         }
 
 
-def _build_scenario():
+def _build_scenario(n_bad: int, n_good: int, uses: int, seed: int, noise: float):
+    """Plant n_bad silently-wrong + n_good control skills.
+
+    Each bad skill is used ``uses`` times, normally producing a NEGATIVE
+    sentiment turn; each good skill normally POSITIVE. ``noise`` is the
+    per-turn probability the sentiment is flipped (a bad skill occasionally
+    "works", a good one occasionally disappoints) — driven by ``seed`` so
+    different seeds yield a real distribution of outcomes rather than five
+    identical deterministic runs.
+    """
+    import random as _random
     from scripts.eval.harness import (
         GroundTruth, Invocation, Scenario, Session, UserTurn,
     )
+    rng = _random.Random(seed)
 
     sessions: List = []
     truth: Dict[str, float] = {}
+    POS = "perfect, exactly what I needed, thank you"
+    NEG = "this output is wrong again, not what I wanted"
 
-    def _runs(skill_id: str, sentiment: str, text: str):
-        for i in range(USES_PER_SKILL):
+    def _runs(skill_id: str, base_sentiment: str):
+        for i in range(uses):
+            sentiment = base_sentiment
+            if rng.random() < noise:   # flip
+                sentiment = "positive" if base_sentiment == "negative" else "negative"
+            text = POS if sentiment == "positive" else NEG
             sessions.append(Session(
                 session_id=f"{skill_id}-{i}",
                 invocations=[Invocation(
@@ -96,15 +113,14 @@ def _build_scenario():
                 )],
             ))
 
-    for k in range(N_BAD_SKILLS):
+    for k in range(n_bad):
         sid = f"bad-skill-{k}"
         truth[sid] = BAD_USEFULNESS
-        _runs(sid, "negative", "this output is wrong again, not what I wanted")
-
-    for k in range(N_GOOD_SKILLS):
+        _runs(sid, "negative")
+    for k in range(n_good):
         sid = f"good-skill-{k}"
         truth[sid] = GOOD_USEFULNESS
-        _runs(sid, "positive", "perfect, exactly what I needed, thank you")
+        _runs(sid, "positive")
 
     return Scenario(
         name="error_propagation",
@@ -113,7 +129,9 @@ def _build_scenario():
     )
 
 
-def compute(*, home: Optional[Path] = None) -> ErrorPropagationResult:
+def compute(*, n_bad: int = N_BAD_SKILLS, n_good: int = N_GOOD_SKILLS,
+            uses: int = USES_PER_SKILL, seed: int = 0, noise: float = 0.0,
+            home: Optional[Path] = None) -> ErrorPropagationResult:
     from scripts.eval.harness import Harness
     from scripts.eval.metrics.common import load
 
@@ -122,7 +140,7 @@ def compute(*, home: Optional[Path] = None) -> ErrorPropagationResult:
     out = home / "run.jsonl"
     try:
         h = Harness(out_path=out, hermes_home=home / "hh")
-        h.add_scenario(_build_scenario())
+        h.add_scenario(_build_scenario(n_bad, n_good, uses, seed, noise))
         h.run()
         h.dump()
         art = load(out)
@@ -181,8 +199,15 @@ def compute(*, home: Optional[Path] = None) -> ErrorPropagationResult:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Metric 2 — error propagation")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--n-bad", type=int, default=N_BAD_SKILLS)
+    parser.add_argument("--n-good", type=int, default=N_GOOD_SKILLS)
+    parser.add_argument("--uses", type=int, default=USES_PER_SKILL)
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--noise", type=float, default=0.0,
+                        help="per-turn sentiment-flip probability (seeded)")
     args = parser.parse_args()
-    res = compute()
+    res = compute(n_bad=args.n_bad, n_good=args.n_good, uses=args.uses,
+                  seed=args.seed, noise=args.noise)
     if args.json:
         print(json.dumps(res.to_dict(), indent=2))
     else:

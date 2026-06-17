@@ -145,7 +145,9 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=120, help="probes to evaluate")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--personas", type=int, default=20, help="max personas to use")
+    ap.add_argument("--tag", default="", help="suffix for output files (parallel seed shards)")
     args = ap.parse_args()
+    _sfx = ("_" + args.tag) if args.tag else ""
 
     L.load_env()
     RESULTS.mkdir(parents=True, exist_ok=True)
@@ -183,7 +185,7 @@ def main() -> int:
 
     agent = L.make_agent()
     rows = []
-    run_path = RESULTS / "personamem_runs.jsonl"
+    run_path = RESULTS / f"personamem_runs{_sfx}.jsonl"
     fout = open(run_path, "w")
     correct = {"no_mem": 0, "full_hist": 0, "echo_m5": 0}
     inj_chars = {"no_mem": 0, "full_hist": 0, "echo_m5": 0}
@@ -255,7 +257,7 @@ def main() -> int:
         summary["by_type"][t] = {"n": tot[t],
                                  **{c: round(hit[c][t] / tot[t], 3) for c in correct}}
     summary["agent_usage"] = agent.usage.as_dict()
-    (RESULTS / "personamem_summary.json").write_text(
+    (RESULTS / f"personamem_summary{_sfx}.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2))
     print("\n=== PersonaMem result ===")
     print(json.dumps(summary["accuracy"], indent=2))

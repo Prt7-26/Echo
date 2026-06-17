@@ -365,7 +365,11 @@ def main() -> int:
     ap.add_argument("--seeds", type=int, default=2)
     ap.add_argument("--conditions", default="A,B,echo")
     ap.add_argument("--personas", default="")  # comma pids, empty=all
+    ap.add_argument("--out", default=None, help="runs JSONL path (default closedloop_runs.jsonl)")
+    ap.add_argument("--usage-out", default=None, help="usage JSON path")
     args = ap.parse_args()
+    runs_path = pathlib.Path(args.out) if args.out else RESULTS / "closedloop_runs.jsonl"
+    usage_path = pathlib.Path(args.usage_out) if args.usage_out else RESULTS / "closedloop_usage.json"
 
     L.load_env()
     RESULTS.mkdir(parents=True, exist_ok=True)
@@ -414,7 +418,8 @@ def main() -> int:
         personas = [p for p in personas if p.pid in want]
     conditions = args.conditions.split(",")
 
-    fout = open(RESULTS / "closedloop_runs.jsonl", "w")
+    runs_path.parent.mkdir(parents=True, exist_ok=True)
+    fout = open(runs_path, "w")
     per_run_usage = []
     t0 = time.time()
     total = len(conditions) * len(personas) * args.seeds
@@ -455,7 +460,7 @@ def main() -> int:
                 })
     fout.close()
     usage = {k: v.usage.as_dict() for k, v in clients.items()}
-    (RESULTS / "closedloop_usage.json").write_text(json.dumps(
+    usage_path.write_text(json.dumps(
         {"totals": usage, "per_run": per_run_usage}, indent=2, ensure_ascii=False))
     print(f"\nDONE in {time.time()-t0:.0f}s. usage -> {usage}")
     return 0

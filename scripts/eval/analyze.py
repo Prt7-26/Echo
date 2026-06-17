@@ -46,40 +46,48 @@ def cliffs_delta(a, b):
     return (gt - lt) / (len(a) * len(b))
 
 
+def _load_shards(prefix):
+    """Load all seed-shards <prefix>_s*.json; fall back to <prefix>.json."""
+    shards = []
+    for p in sorted(RES.glob(f"{prefix}_s*.json")):
+        try:
+            shards.append(json.loads(p.read_text()))
+        except Exception:
+            pass
+    if not shards:
+        single = RES / f"{prefix}.json"
+        if single.exists():
+            shards = [json.loads(single.read_text())]
+    return shards
+
+
 # ---------------------------------------------------------------- PersonaMem
 def fig_personamem(stats):
-    s = _load_json("personamem_summary.json")
-    if not s:
+    shards = _load_shards("personamem_summary")
+    if not shards:
         return
-    acc = s["accuracy"]; inj = s["avg_inject_chars"]
     conds = ["no_mem", "full_hist", "echo_m5"]
     labels = ["No memory\n(cold)", "Full history\n(naive RAG)", "Echo M5\n(retrieval)"]
-    vals = [acc[c] for c in conds]
+    # mean ± std across seed-shards
+    means = {c: float(np.mean([sh["accuracy"][c] for sh in shards])) for c in conds}
+    sds = {c: float(np.std([sh["accuracy"][c] for sh in shards])) for c in conds}
+    inj = {c: float(np.mean([sh["avg_inject_chars"][c] for sh in shards])) for c in conds}
+    n_total = int(sum(sh["n_probes"] for sh in shards))
+    vals = [means[c] for c in conds]; errs = [sds[c] for c in conds]
     fig, ax = plt.subplots(figsize=(6.2, 4.2))
-    bars = ax.bar(labels, vals, color=[GREY, AMBER, TEAL])
+    bars = ax.bar(labels, vals, yerr=errs, capsize=5, color=[GREY, AMBER, TEAL])
     for b, c in zip(bars, conds):
-        ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 0.01,
-                f"{acc[c]*100:.1f}%", ha="center", fontweight="bold")
+        ax.text(b.get_x() + b.get_width() / 2, b.get_height() + errs[conds.index(c)] + 0.015,
+                f"{means[c]*100:.1f}%", ha="center", fontweight="bold")
         if inj[c]:
             ax.text(b.get_x() + b.get_width() / 2, 0.03,
                     f"{int(inj[c])} chars\ninjected", ha="center", color="white", fontsize=8)
-    ax.set_ylim(0, max(vals) * 1.25); ax.set_ylabel("Preference-probe accuracy")
-    ax.set_title(f"PersonaMem (COLM'25): preference recall, n={s['n_probes']} probes\n"
-                 "Echo M5 beats naive full-history at ~1/3 the injected context")
+    ax.set_ylim(0, max(vals) * 1.3); ax.set_ylabel("Preference-probe accuracy")
+    ax.set_title(f"PersonaMem (COLM'25): preference recall\n"
+                 f"n={n_total} probes over {len(shards)} seeds (error bars = ±1 SD across seeds)")
     fig.tight_layout(); fig.savefig(FIG / "personamem_accuracy.png"); plt.close(fig)
-    stats["personamem"] = {"accuracy": acc, "avg_inject_chars": inj, "n": s["n_probes"]}
-
-    # per-type
-    bt = s.get("by_type", {})
-    if bt:
-        types = list(bt.keys())
-        x = np.arange(len(types)); w = 0.26
-        fig, ax = plt.subplots(figsize=(11, 4.6))
-        for i, (c, col) in enumerate(zip(conds, [GREY, AMBER, TEAL])):
-            ax.bar(x + (i - 1) * w, [bt[t][c] for t in types], w, label=c, color=col)
-        ax.set_xticks(x); ax.set_xticklabels([t.replace("_", "\n") for t in types], fontsize=7.5)
-        ax.set_ylabel("accuracy"); ax.legend(); ax.set_title("PersonaMem accuracy by question type")
-        fig.tight_layout(); fig.savefig(FIG / "personamem_by_type.png"); plt.close(fig)
+    stats["personamem"] = {"accuracy_mean": means, "accuracy_sd": sds,
+                           "avg_inject_chars": inj, "n_total": n_total, "seeds": len(shards)}
 
 
 # ------------------------------------------------- Metric 1: satisfaction curve
@@ -176,23 +184,35 @@ def fig_error_prop(stats):
         ax2.set_title("Bad-approach persistence (lower = better)")
         fig.tight_layout(); fig.savefig(FIG / "error_propagation.png"); plt.close(fig)
 
-    if "Metric2_error_propagation" in mm:
+    # Deterministic Metric 2 — prefer the new seeded sweep (n_bad 3 & 10, 5 seeds)
+    det = _load_json("metric2_deterministic.json")
+    if det:
+        out["deterministic"] = det
+        keys = [k for k in ("n_bad_3", "n_bad_10") if k in det]
+        fig, ax = plt.subplots(figsize=(6.4, 4.2))
+        x = np.arange(len(keys)); w = 0.36
+        echo_means = [det[k]["echo_caught_mean"] for k in keys]
+        echo_err = [[det[k]["echo_caught_mean"] - det[k]["echo_caught_min"] for k in keys],
+                    [det[k]["echo_caught_max"] - det[k]["echo_caught_mean"] for k in keys]]
+        b_means = [det[k]["baseline_b_caught_mean"] for k in keys]
+        ax.bar(x - w/2, echo_means, w, yerr=echo_err, capsize=5, color=TEAL, label="Echo")
+        ax.bar(x + w/2, b_means, w, color=AMBER, label="Baseline B")
+        for i, k in enumerate(keys):
+            ax.text(i - w/2, echo_means[i] + 0.2, f"{echo_means[i]:.1f}/{det[k]['n_bad']}",
+                    ha="center", fontweight="bold", fontsize=9)
+            ax.text(i + w/2, b_means[i] + 0.2, f"{b_means[i]:.0f}/{det[k]['n_bad']}",
+                    ha="center", fontweight="bold", fontsize=9)
+        ax.set_xticks(x); ax.set_xticklabels([f"{det[k]['n_bad']} planted bad skills" for k in keys])
+        ax.set_ylabel("bad skills caught (mean over 5 seeds)")
+        ax.legend(); ax.set_title("Metric 2 (deterministic, 5 seeds, 15% noise)\n"
+                                  "silently-wrong skills caught — Echo vs frequency-decay Baseline B")
+        fig.tight_layout(); fig.savefig(FIG / "error_propagation_deterministic.png"); plt.close(fig)
+    elif "Metric2_error_propagation" in mm:
         m = mm["Metric2_error_propagation"]
         out["deterministic"] = {
             "echo_caught": f"{m.get('echo_bad_caught')}/{m.get('n_bad')}",
             "baseline_b_caught": f"{m.get('baseline_b_bad_caught')}/{m.get('n_bad')}",
-            "echo_mean_conf_bad": m.get("echo_mean_conf_bad"),
         }
-        # bar chart
-        fig, ax = plt.subplots(figsize=(5.2, 4))
-        nb = m.get("n_bad", 3)
-        ax.bar(["Echo", "Baseline B"], [m.get("echo_bad_caught", 0), m.get("baseline_b_bad_caught", 0)],
-               color=[TEAL, AMBER])
-        ax.set_ylim(0, nb + 0.5); ax.set_ylabel(f"bad skills caught (of {nb})")
-        ax.set_title("Metric 2 (deterministic) — silently-wrong skills caught")
-        for i, v in enumerate([m.get("echo_bad_caught", 0), m.get("baseline_b_bad_caught", 0)]):
-            ax.text(i, v + 0.05, str(v), ha="center", fontweight="bold")
-        fig.tight_layout(); fig.savefig(FIG / "error_propagation_deterministic.png"); plt.close(fig)
     stats["metric2_error_propagation"] = out
 
 
@@ -201,51 +221,104 @@ def fig_overhead(stats):
     u = _load_json("closedloop_usage.json")
     if not u or "per_run" not in u:
         return
-    agg = defaultdict(lambda: {"agent": [], "signal": []})
-    for r in u["per_run"]:
-        agg[r["condition"]]["agent"].append(r["agent_tokens"])
-        agg[r["condition"]]["signal"].append(r["signal_tokens"])
+    pr = u["per_run"]
+    agg = defaultdict(lambda: defaultdict(list))
+    for r in pr:
+        c = r["condition"]
+        agg[c]["agent"].append(r["agent_tokens"])
+        agg[c]["lb"].append(r.get("layerB_tokens", 0))
+        agg[c]["lc"].append(r.get("layerC_tokens", 0))
+        agg[c]["firings"].append(r.get("layerC_firings", 0))
+        agg[c]["turns"].append(r.get("turns", 10))
     conds = [c for c in ["A", "B", "echo"] if c in agg]
-    agent_m = [np.mean(agg[c]["agent"]) for c in conds]
-    signal_m = [np.mean(agg[c]["signal"]) for c in conds]
     labels = {"A": "Baseline A", "B": "Baseline B", "echo": "Echo"}
-    fig, ax = plt.subplots(figsize=(6.4, 4.2))
+    agent_m = [np.mean(agg[c]["agent"]) for c in conds]
+    lb_m = [np.mean(agg[c]["lb"]) for c in conds]
+    lc_m = [np.mean(agg[c]["lc"]) for c in conds]
+
+    # ---- stacked overhead chart: agent / Layer B (steady) / Layer C (incident)
+    fig, ax = plt.subplots(figsize=(6.8, 4.4))
     x = np.arange(len(conds))
     ax.bar(x, agent_m, color=GREY, label="agent (mimo) tokens")
-    ax.bar(x, signal_m, bottom=agent_m, color=TEAL, label="Echo signal (Qwen) tokens")
+    ax.bar(x, lb_m, bottom=agent_m, color=TEAL, label="Echo Layer B (every turn)")
+    ax.bar(x, lc_m, bottom=np.array(agent_m) + np.array(lb_m), color=ROSE,
+           label="Echo Layer C (on alarm, rare)")
     ax.set_xticks(x); ax.set_xticklabels([labels[c] for c in conds])
-    ax.set_ylabel("mean tokens per run"); ax.legend()
-    base = agent_m[conds.index("A")] if "A" in conds else agent_m[0]
-    echo_total = (agent_m[conds.index("echo")] + signal_m[conds.index("echo")]) if "echo" in conds else 0
-    ovh = (echo_total / base - 1) * 100 if base else 0
-    ax.set_title(f"Metric 3 — token overhead\nEcho total ≈ {ovh:+.0f}% vs Baseline A")
+    ax.set_ylabel("mean tokens per 10-turn run"); ax.legend(fontsize=8)
+    ax.set_title("Metric 3 — token overhead (A also revises = fair baseline)\n"
+                 "Echo's steady-state add is Layer B only; Layer C is a rare event")
     fig.tight_layout(); fig.savefig(FIG / "overhead.png"); plt.close(fig)
+
+    # ---- steady vs incident decomposition (the fair framing)
+    echo_turns = sum(agg["echo"]["turns"]) or 1
+    lb_total = sum(agg["echo"]["lb"]); lc_total = sum(agg["echo"]["lc"])
+    firings_total = sum(agg["echo"]["firings"])
+    # per-turn fair agent cost: use mean over ALL conditions' agent tokens / turns
+    fair_agent_per_turn = np.mean([r["agent_tokens"] / r.get("turns", 10)
+                                   for r in pr if r["condition"] in ("A", "B", "echo")])
+    lb_per_turn = lb_total / echo_turns
+    steady_overhead_pct = (lb_per_turn / fair_agent_per_turn) * 100 if fair_agent_per_turn else 0
+    lc_per_firing = (lc_total / firings_total) if firings_total else 0
+    # split runs: judge-fired vs not (daily vs incident)
+    nojudge = [r for r in pr if r["condition"] == "echo" and r.get("layerC_firings", 0) == 0]
+    judged = [r for r in pr if r["condition"] == "echo" and r.get("layerC_firings", 0) > 0]
+
+    # fair agent comparison now that A revises
+    a_agent = np.mean(agg["A"]["agent"]) if "A" in agg else 0
+    echo_agent = np.mean(agg["echo"]["agent"]) if "echo" in agg else 0
+
     stats["metric3_overhead"] = {
         "mean_agent_tokens": {c: float(np.mean(agg[c]["agent"])) for c in conds},
-        "mean_signal_tokens": {c: float(np.mean(agg[c]["signal"])) for c in conds},
-        "echo_overhead_pct_vs_A": float(ovh),
+        "mean_layerB_tokens": {c: float(np.mean(agg[c]["lb"])) for c in conds},
+        "mean_layerC_tokens": {c: float(np.mean(agg[c]["lc"])) for c in conds},
+        "fair_agent_tokens_A_vs_echo": {"A": float(a_agent), "echo": float(echo_agent),
+                                        "echo_vs_A_pct": float((echo_agent/a_agent-1)*100) if a_agent else None},
+        "steady_state": {
+            "layerB_tokens_per_turn": float(lb_per_turn),
+            "fair_agent_tokens_per_turn": float(fair_agent_per_turn),
+            "steady_overhead_pct_per_turn": float(steady_overhead_pct),
+            "note": "daily conversation = Layer B only, no Layer C",
+        },
+        "layerC_incident": {
+            "total_firings": float(firings_total),
+            "total_echo_turns": int(echo_turns),
+            "firing_rate_per_turn": float(firings_total / echo_turns),
+            "tokens_per_firing": float(lc_per_firing),
+            "runs_with_no_judge": len(nojudge),
+            "runs_with_judge": len(judged),
+            "note": "every run had a PLANTED bad skill; normal use ~ 0 firings",
+        },
+        "mean_satisfaction_by_judge_presence": {
+            "no_judge_runs_overhead_tokens": float(np.mean([r["agent_tokens"]+r["layerB_tokens"]+r["layerC_tokens"] for r in nojudge])) if nojudge else None,
+            "judge_runs_overhead_tokens": float(np.mean([r["agent_tokens"]+r["layerB_tokens"]+r["layerC_tokens"] for r in judged])) if judged else None,
+        },
     }
 
 
 # ------------------------------------------------- PrefEval (2nd benchmark)
 def fig_prefeval(stats):
-    s = _load_json("prefeval_summary.json")
-    if not s:
+    shards = _load_shards("prefeval_summary")
+    if not shards:
         return
-    adh = s["adherence"]
-    conds = [c for c in ["no_pref", "echo_m5", "oracle"] if c in adh]
+    conds = ["no_pref", "echo_m5", "oracle"]
+    conds = [c for c in conds if c in shards[0]["adherence"]]
     labels = {"no_pref": "No memory", "echo_m5": "Echo M5", "oracle": "Oracle\n(pref given)"}
+    means = {c: float(np.mean([sh["adherence"][c] for sh in shards])) for c in conds}
+    sds = {c: float(np.std([sh["adherence"][c] for sh in shards])) for c in conds}
+    n_total = int(sum(sh["n"] for sh in shards))
     fig, ax = plt.subplots(figsize=(5.8, 4.2))
-    bars = ax.bar([labels[c] for c in conds], [adh[c] for c in conds],
+    bars = ax.bar([labels[c] for c in conds], [means[c] for c in conds],
+                  yerr=[sds[c] for c in conds], capsize=5,
                   color=[GREY, TEAL, "#2a7d76"][:len(conds)])
     for b, c in zip(bars, conds):
-        ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 0.01,
-                f"{adh[c]*100:.0f}%", ha="center", fontweight="bold")
-    ax.set_ylim(0, 1.05); ax.set_ylabel("preference adherence rate")
-    ax.set_title(f"PrefEval (ICLR'25): preference adherence, n={s['n']}\n"
-                 "Echo M5 retrieval recovers adherence a cold model loses")
+        ax.text(b.get_x() + b.get_width() / 2, b.get_height() + sds[c] + 0.02,
+                f"{means[c]*100:.0f}%", ha="center", fontweight="bold")
+    ax.set_ylim(0, 1.08); ax.set_ylabel("preference adherence rate")
+    ax.set_title(f"PrefEval (ICLR'25): preference adherence\n"
+                 f"n={n_total} over {len(shards)} seeds (error bars = ±1 SD across seeds)")
     fig.tight_layout(); fig.savefig(FIG / "prefeval_adherence.png"); plt.close(fig)
-    stats["prefeval"] = {"adherence": adh, "n": s["n"]}
+    stats["prefeval"] = {"adherence_mean": means, "adherence_sd": sds,
+                         "n_total": n_total, "seeds": len(shards)}
 
 
 # ------------------------------------------------- micro-metrics summary
