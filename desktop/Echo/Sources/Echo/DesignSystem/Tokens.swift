@@ -34,6 +34,15 @@ enum Tokens {
         static let cardThumbHeight: CGFloat = 120
     }
 
+    /// 顶栏整排上抬量（让 44pt 圆按钮的中心与红绿灯齐平）。红绿灯被 AppKit 锁死搬不动，
+    /// 故改抬顶栏。可用 ECHO_TOPBAR_DY 实时试，定下后焊死。
+    static var topBarRaise: CGFloat {
+        if let s = ProcessInfo.processInfo.environment["ECHO_TOPBAR_DY"], let v = Double(s) {
+            return CGFloat(v)
+        }
+        return 15
+    }
+
     // MARK: 时序
     enum Timing {
         /// 流式 message.delta 合批刷新间隔

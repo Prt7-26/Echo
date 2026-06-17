@@ -17,6 +17,7 @@ struct ConversationPane: View {
                         StatusStrip(text: status)
                     }
                 }
+                .offset(y: -Tokens.topBarRaise)   // 上抬与红绿灯齐平
                 .topBarScrim()
             }
             // 忽略顶部安全区 → 顶栏（标题+搜索/信号/溢出）升到标题栏区、与 traffic-light 齐平。

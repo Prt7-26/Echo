@@ -13,7 +13,7 @@ struct AppKitSplitView: NSViewControllerRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSViewController(context: Context) -> NSSplitViewController {
-        let split = EchoSplitViewController()
+        let split = NSSplitViewController()
         split.view.wantsLayer = true
 
         // 侧栏：普通 split item，面板底层是我自己的 vibrancy（不用系统 .sidebar 自动层）。
@@ -83,57 +83,6 @@ struct AppKitSplitView: NSViewControllerRepresentable {
     }
 }
 
-/// NSSplitViewController 子类：把红绿灯微移到位且**稳住**。
-///
-/// 诊断发现系统会在我之后的布局里把按钮弹回默认 (9,9)，而 viewDidLayout 触发太少 →
-/// 最终停在默认、看不出偏移。正解：监听每个按钮的 frameDidChange 通知——系统一弹回默认，
-/// 我就在同一轮立刻设回目标（绘制前完成 → 无可见跳动；不丢、不累加）。
-final class EchoSplitViewController: NSSplitViewController {
-    private var trafficButtons: [NSWindow.ButtonType: NSButton] = [:]
-    private var targets: [NSWindow.ButtonType: NSPoint] = [:]
-    private var observers: [NSObjectProtocol] = []
-    private var installed = false
-
-    override func viewDidLayout() {
-        super.viewDidLayout()
-        installTrafficLightLock()
-    }
-
-    private static let buttonTypes: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
-
-    private func installTrafficLightLock() {
-        guard !installed, let window = view.window else { return }
-        installed = true
-        let nc = NotificationCenter.default
-        for type in Self.buttonTypes {
-            guard let b = window.standardWindowButton(type) else { continue }
-            trafficButtons[type] = b
-            b.postsFrameChangedNotifications = true
-            observers.append(nc.addObserver(forName: NSView.frameDidChangeNotification, object: b, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.applyOffset(type) }
-            })
-            applyOffset(type)
-        }
-    }
-
-    /// 把某个按钮设回「默认+偏移」。系统弹回默认时由 frameDidChange 触发，立刻拉回。
-    private func applyOffset(_ type: NSWindow.ButtonType) {
-        guard let b = trafficButtons[type], let sup = b.superview else { return }
-        let env = ProcessInfo.processInfo.environment
-        let dx = CGFloat(Double(env["ECHO_TL_DX"] ?? "") ?? 3)     // 右移
-        let dyDown = CGFloat(Double(env["ECHO_TL_DY"] ?? "") ?? 3) // 下移
-        // 首次记录系统默认原点（尚未被我移动），之后始终「默认+偏移」。守卫无效原点。
-        if targets[type] == nil {
-            guard b.frame.origin.x > 0 else { return }
-            var t = b.frame.origin
-            t.x += dx
-            t.y += sup.isFlipped ? dyDown : -dyDown   // 非翻转视图 y 减小=下移
-            targets[type] = t
-        }
-        guard let t = targets[type] else { return }
-        if b.frame.origin != t { b.setFrameOrigin(t) }   // 仅在被弹回时才设 → 不死循环
-    }
-}
 
 /// 侧栏面板控制器：view = 我持有的 NSVisualEffectView（满铺、behindWindow、active），
 /// SwiftUI ConversationGallery（透明背景）作为子视图浮在其上。

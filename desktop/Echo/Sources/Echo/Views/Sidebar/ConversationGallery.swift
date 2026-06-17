@@ -22,6 +22,7 @@ struct ConversationGallery: View {
         .frame(maxHeight: .infinity)
         .safeAreaInset(edge: .top, spacing: 0) {
             SidebarToolbar(app: app)
+                .offset(y: -Tokens.topBarRaise)   // 上抬与红绿灯齐平
         }
         // 忽略顶部安全区 → 顶栏升到标题栏区、与 traffic-light 齐平（按钮已右对齐，不挡红绿灯）。
         .ignoresSafeArea(.container, edges: .top)
