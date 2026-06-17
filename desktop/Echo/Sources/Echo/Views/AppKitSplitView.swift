@@ -97,8 +97,8 @@ final class EchoSplitViewController: NSSplitViewController {
     private func nudgeTrafficLights() {
         guard let window = view.window else { return }
         let env = ProcessInfo.processInfo.environment
-        let dx = CGFloat(Double(env["ECHO_TL_DX"] ?? "") ?? 1)     // 右移
-        let dyDown = CGFloat(Double(env["ECHO_TL_DY"] ?? "") ?? 2) // 下移
+        let dx = CGFloat(Double(env["ECHO_TL_DX"] ?? "") ?? 3)     // 右移
+        let dyDown = CGFloat(Double(env["ECHO_TL_DY"] ?? "") ?? 3) // 下移
         for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
             guard let b = window.standardWindowButton(type), let sup = b.superview else { continue }
             // 首次记录系统默认原点（此时尚未被我移动过），之后始终「默认+偏移」。
