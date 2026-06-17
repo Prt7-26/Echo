@@ -21,11 +21,12 @@ struct ConversationGallery: View {
         .scrollContentBackground(.hidden)   // ScrollView 透明
         .frame(maxHeight: .infinity)
         .safeAreaInset(edge: .top, spacing: 0) {
-            SidebarToolbar(app: app).topBarScrim()
+            SidebarToolbar(app: app)
         }
-        // 侧栏不铺任何背景 → 透明 → 露出 NavigationSplitView 自带的系统 sidebar 材质（唯一
-        // 能真正透出桌面的层；自己造的 NSVisualEffectView 在 SwiftUI .background 里不透）。
-        // 卡片是实底 contentCard 浮在其上。失焦保活/去边框由 ActiveVibrancy 直接调这层系统材质。
+        // 忽略顶部安全区 → 顶栏升到标题栏区、与 traffic-light 齐平（按钮已右对齐，不挡红绿灯）。
+        .ignoresSafeArea(.container, edges: .top)
+        // 侧栏透明（背景由 SidebarVibrancyController 的 NSVisualEffectView 透出桌面）；
+        // 卡片是实底 contentCard 浮在其上。
     }
 
     /// 置顶优先，其余按时间倒序。

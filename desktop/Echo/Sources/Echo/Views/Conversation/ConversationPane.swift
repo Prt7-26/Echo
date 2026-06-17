@@ -19,6 +19,8 @@ struct ConversationPane: View {
                 }
                 .topBarScrim()
             }
+            // 忽略顶部安全区 → 顶栏（标题+搜索/信号/溢出）升到标题栏区、与 traffic-light 齐平。
+            .ignoresSafeArea(.container, edges: .top)
             .overlay(alignment: .bottom) {
                 // 浮起输入条 + 其上方的 Echo 信号卡
                 VStack(spacing: 8) {
