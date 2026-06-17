@@ -40,7 +40,7 @@ enum Tokens {
         if let s = ProcessInfo.processInfo.environment["ECHO_TOPBAR_DY"], let v = Double(s) {
             return CGFloat(v)
         }
-        return 15
+        return 5
     }
 
     // MARK: 时序
