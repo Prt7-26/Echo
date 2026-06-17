@@ -111,11 +111,16 @@ const TranscriptPane = memo(function TranscriptPane({
               )}
 
               {row.msg.kind === 'intro' ? (
-                <Box flexDirection="column" paddingTop={1}>
-                  <Banner t={ui.theme} />
+                // Hold the banner until the gateway skin is applied so a
+                // branded skin (Echo) never flashes the default Hermes banner
+                // for a frame before its own art loads.
+                ui.skinReady ? (
+                  <Box flexDirection="column" paddingTop={1}>
+                    <Banner t={ui.theme} />
 
-                  {row.msg.info && <SessionPanel info={row.msg.info} sid={ui.sid} t={ui.theme} />}
-                </Box>
+                    {row.msg.info && <SessionPanel info={row.msg.info} sid={ui.sid} t={ui.theme} />}
+                  </Box>
+                ) : null
               ) : row.msg.kind === 'panel' && row.msg.panelData ? (
                 <Panel sections={row.msg.panelData.sections} t={ui.theme} title={row.msg.panelData.title} />
               ) : (

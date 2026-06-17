@@ -100,19 +100,17 @@ banner_logo: |-
   [#4E8F87]   ·· ● ··  powered by Hermes  ·· ● ··[/]
 
 # Hero art — replaces the stock Hermes caduceus (HERMES_CADUCEUS).
-# Echo's identity is a *sonar bloom*: a single ping (◉) at the centre with
-# concentric return rings rippling outward. Brightness peaks at the centre
-# and fades through the teal luminance ladder to the outer dot ring, so it
-# reads as a live pulse rather than a static glyph. ~23 cols wide — sits in
-# the left third of the banner on both CLI (rich) and TUI (parseRichMarkup).
+# Echo's identity glyph is an ECG / heartbeat trace, traced from the lucide
+# "activity" icon: flat baseline → one sharp peak → a deep valley → back to
+# baseline. "every signal counts" made literal. Brightness ladders down the
+# teal luminance scale. ~23 cols wide — sits in the left third of the banner
+# on both CLI (rich) and TUI (parseRichMarkup).
 banner_hero: |-
-  [#0E6E66]       · · · · ·       [/]
-  [#128F84]    ·             ·    [/]
-  [#14B8A6]  ·     ╭─────╮     ·  [/]
-  [#2DD4BF] ·      ╱     ╲      · [/]
-  [#5EEAD4] ·      │  ◉  │      · [/]
-  [#2DD4BF] ·      ╲     ╱      · [/]
-  [#14B8A6]  ·     ╰─────╯     ·  [/]
-  [#128F84]    ·             ·    [/]
-  [#0E6E66]       · · · · ·       [/]
+  [bold #5EEAD4]        ╱╲             [/]
+  [#2DD4BF]       ╱  ╲            [/]
+  [#2DD4BF]      ╱    ╲           [/]
+  [#14B8A6]──────      ╲      ╱───[/]
+  [#14B8A6]             ╲    ╱    [/]
+  [#0FA396]              ╲  ╱     [/]
+  [#128F84]               ╲╱      [/]
   [dim #4E8F87]   every signal counts   [/]

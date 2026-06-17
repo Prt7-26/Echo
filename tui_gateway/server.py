@@ -1421,13 +1421,13 @@ def _session_info(agent) -> dict:
         "usage": _get_usage(agent),
         "profile_name": _current_profile_name(),
     }
-    try:
-        from hermes_cli import __version__, __release_date__
-
-        info["version"] = __version__
-        info["release_date"] = __release_date__
-    except Exception:
-        pass
+    # The Echo banner is branded "Echo" (skin brand name), so it must show
+    # Echo's OWN version — not the underlying Hermes release, which otherwise
+    # rendered as a confusing "Echo v0.14.0". The "powered by Hermes" line in
+    # the banner already credits the base. Keep this in sync with
+    # web/src/components/SidebarFooter.tsx (ECHO_VERSION).
+    info["version"] = "0.1.0-alpha"
+    info["release_date"] = ""  # blank → branding.tsx drops the "(date)" suffix
     try:
         from model_tools import get_toolset_for_tool
 

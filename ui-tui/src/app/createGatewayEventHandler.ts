@@ -27,6 +27,7 @@ const statusFromBusy = () => (getUiState().busy ? 'running…' : 'ready')
 
 const applySkin = (s: GatewaySkin) =>
   patchUiState({
+    skinReady: true,
     theme: fromSkin(
       s.colors ?? {},
       s.branding ?? {},

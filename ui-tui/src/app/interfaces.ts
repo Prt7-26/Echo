@@ -109,6 +109,10 @@ export interface UiState {
   showCost: boolean
   showReasoning: boolean
   indicatorStyle: IndicatorStyle
+  // False until the gateway's skin has been applied. The intro banner waits
+  // on this so a brand-specific skin (e.g. Echo) never flashes the default
+  // Hermes banner for a frame before its own art loads.
+  skinReady: boolean
   sid: null | string
   status: string
   statusBar: StatusBarMode
