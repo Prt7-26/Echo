@@ -41,15 +41,17 @@ struct AppKitWindowBackdrop: NSViewRepresentable {
         window.isMovableByWindowBackground = true
 
         // ② 背板玻璃只创建一次；之后只更新尺寸。
+        //    尺寸用 frameView.bounds（铺满整个窗口，含标题栏区与四周边缘），而非
+        //    contentView.frame（它没铺满 → 缝里露出窗口黑色 → 用户看到的黑边框）。
         if let existing = frameView.subviews.first(where: { $0.identifier == backdropID }) {
-            existing.frame = contentView.frame
+            existing.frame = frameView.bounds
         } else {
             let fx = NSVisualEffectView()
             fx.identifier = backdropID
             fx.material = material
             fx.blendingMode = .behindWindow      // 透出窗口背后的桌面/壁纸
             fx.state = .active                   // 常驻 active：失焦也不变暗
-            fx.frame = contentView.frame
+            fx.frame = frameView.bounds
             fx.autoresizingMask = [.width, .height]
             frameView.addSubview(fx, positioned: .below, relativeTo: contentView)
         }
