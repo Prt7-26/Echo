@@ -34,11 +34,6 @@ stop trusting the agent's opinion of its own work and use the user's reactions i
 | Skills are only created on a fixed "5+ tool calls" rule. | Echo also triggers on save-intent phrasing, how much you edited the output, and repeated requests — and asks before creating instead of doing it silently. |
 | Any skill, once made, is offered everywhere. | Echo asks where a skill applies, and the auditor can exclude it from the contexts where it does badly. |
 
-This started as a Hermes plugin. It isn't anymore — making the above work meant changing
-Hermes' core, not just hooking into it. Echo is now a standalone agent pinned to Hermes
-v0.14.0; it doesn't track upstream releases. The Hermes base it's built on (multi-platform
-gateway, terminal backends, MCP, cron, the skill and memory system) is still all there.
-
 ## How it works
 
 Echo hooks the agent loop and writes its own `echo_*` tables into the SQLite DB the agent
