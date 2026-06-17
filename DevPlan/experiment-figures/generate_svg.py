@@ -263,8 +263,8 @@ def satisfaction():
         # endpoint label
         lab = d["mean"][-1]
         s += T(sx(xmax) + 10, sy(lab) + 4, f"{lab:.1f}", "val", "start", extra=f' fill="{col}"')
-    # legend (right) — placed in the empty mid-band so Echo's top endpoint label can't collide
-    lx, ly = W - mR + 16, 156
+    # legend (right) — mid-band, clear of Echo's top endpoint label
+    lx, ly = W - mR + 16, 150
     for i, (key, name, col, hero) in enumerate(spec):
         yy = ly + i * 26
         s += L(lx, yy, lx + 22, yy, col, 3 if hero else 1.8)
@@ -273,14 +273,14 @@ def satisfaction():
         parts = name.split(" · ")
         s += T(lx + 30, yy - 2, parts[0], "lgd")
         s += T(lx + 30, yy + 12, parts[1] if len(parts) > 1 else "", "note")
-    # effect-size card
-    cardx, cardy = lx, ly + 3 * 26 + 18
-    cw, ch = 176, 96
+    # effect-size card — bottom kept clear of the 1.7 / 1.4 endpoint labels below
+    cardx, cardy = lx, ly + 3 * 26 + 14
+    cw, ch = 176, 80
     s += f'<rect x="{cardx}" y="{cardy}" width="{cw}" height="{ch}" rx="10" fill="#F2F9F8" stroke="{ECHO}" stroke-opacity="0.5"/>'
-    s += T(cardx + 14, cardy + 22, "Echo vs baselines", "lgd", extra=' font-weight="600"')
-    s += T(cardx + 14, cardy + 44, "Cliff's δ = 0.84 / 0.86", "note", extra=f' fill="{ECHO_DEEP}" font-size="12"')
-    s += T(cardx + 14, cardy + 62, "p < 10⁻⁷²  (large)", "note", extra=f' fill="{ECHO_DEEP}" font-size="12"')
-    s += T(cardx + 14, cardy + 82, "n = 450 paired", "note")
+    s += T(cardx + 14, cardy + 20, "Echo vs baselines", "lgd", extra=' font-weight="600"')
+    s += T(cardx + 14, cardy + 40, "Cliff's δ = 0.84 / 0.86", "note", extra=f' fill="{ECHO_DEEP}" font-size="12"')
+    s += T(cardx + 14, cardy + 57, "p < 10⁻⁷²  (large)", "note", extra=f' fill="{ECHO_DEEP}" font-size="12"')
+    s += T(cardx + 14, cardy + 73, "n = 450 paired", "note")
     (OUT / f"{NAME['satisfaction']}.svg").write_text(doc(W, H, s))
 
 
