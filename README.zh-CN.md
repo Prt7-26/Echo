@@ -110,7 +110,7 @@ Echo 构建于 [Nous Research](https://nousresearch.com) 的
 **[Hermes Agent](https://github.com/NousResearch/hermes-agent)** 之上。Hermes 的全部能力 ——
 多平台网关、终端后端、MCP、定时调度,以及 Echo 所扩展的技能/记忆系统 —— 均来自上游项目。
 
-Echo(技能生命周期层及其研究)由西湖大学 Lingchao Nie 及团队开发。
+Echo(技能生命周期层及其研究)由西湖大学 Lingchao Nie、Fanghui Xu、Yuing Zhou 开发。
 
 采用 **MIT 许可证** —— 见 [LICENSE](LICENSE)。
 版权所有 © 2025 Nous Research;修改及衍生作品 © 2026 Echo 作者。

@@ -119,8 +119,8 @@ Echo is built on **[Hermes Agent](https://github.com/NousResearch/hermes-agent)*
 gateway, terminal backends, MCP, cron, and the skill/memory system Echo extends — come from
 the upstream project.
 
-Echo (the skill-lifecycle layer and its research) is developed by Lingchao Nie and team at
-Westlake University.
+Echo (the skill-lifecycle layer and its research) is developed by Lingchao Nie, Fanghui Xu,
+and Yuing Zhou at Westlake University.
 
 Licensed under the **MIT License** — see [LICENSE](LICENSE).
 Copyright © 2025 Nous Research; modifications and derivative work © 2026 the Echo authors.
