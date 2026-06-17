@@ -18,15 +18,16 @@ struct ConversationGallery: View {
             .padding(.horizontal, Tokens.Spacing.cardPadding)
             .padding(.vertical, Tokens.Spacing.content)
         }
-        .scrollContentBackground(.hidden)   // 关键：让 ScrollView 透明，露出原生 sidebar 半透材质
+        .scrollContentBackground(.hidden)   // ScrollView 透明，露出下面的 vibrancy 大底
         .frame(maxHeight: .infinity)
         .safeAreaInset(edge: .top, spacing: 0) {
             SidebarToolbar(app: app).topBarScrim()
         }
-        // 不自铺任何 sidebar 大底。用 NavigationSplitView 的原生 sidebar 材质
-        // （系统 .behindWindow 半透玻璃，透出桌面）——这正是 WeChat/Finder/Siri 的
-        // 「透明大底 + 不透明内容层（卡片）」结构，且系统原生只让 sidebar 那块透、
-        // 不碰整窗合成，所以不会卡。卡片是实底 contentCard，盖在透明大底之上。
+        // 透明大底：一层 .behindWindow 的 vibrancy（透出桌面/壁纸），卡片是实底盖在上面
+        // ——WeChat/Siri 的「透明大底 + 不透明内容层」结构。关键：**不碰窗口 isOpaque**
+        // （那会么堵死透出桌面=黑、要么整窗合成=卡）。.behindWindow 只让 sidebar 这块透，
+        // 既透又不卡。.underWindowBackground 比 .sidebar 更见底（更透）。
+        .background(VisualEffectBackground(material: .underWindowBackground).ignoresSafeArea())
     }
 
     /// 置顶优先，其余按时间倒序。

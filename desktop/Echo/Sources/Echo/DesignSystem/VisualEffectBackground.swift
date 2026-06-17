@@ -11,7 +11,7 @@ struct VisualEffectBackground: NSViewRepresentable {
         let v = NSVisualEffectView()
         v.material = material
         v.blendingMode = blending
-        v.state = .followsWindowActiveState
+        v.state = .active   // 常驻 active：窗口激活/失活时不重渲染 vibrancy，减少激活时卡顿
         return v
     }
     func updateNSView(_ v: NSVisualEffectView, context: Context) {
