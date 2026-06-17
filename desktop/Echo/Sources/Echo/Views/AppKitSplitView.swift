@@ -90,8 +90,8 @@ struct AppKitSplitView: NSViewControllerRepresentable {
         func nudgeTrafficLights() {
             guard let window = windowProvider?() else { return }
             let env = ProcessInfo.processInfo.environment
-            let dx = CGFloat(Double(env["ECHO_TL_DX"] ?? "") ?? 8)     // 右移
-            let dyDown = CGFloat(Double(env["ECHO_TL_DY"] ?? "") ?? 6) // 下移
+            let dx = CGFloat(Double(env["ECHO_TL_DX"] ?? "") ?? 2)     // 右移
+            let dyDown = CGFloat(Double(env["ECHO_TL_DY"] ?? "") ?? 1) // 下移
             for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
                 guard let b = window.standardWindowButton(type), let sup = b.superview else { continue }
                 let flipped = sup.isFlipped
