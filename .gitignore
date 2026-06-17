@@ -106,6 +106,12 @@ scratch/
 tmp/
 .tmp/
 
+# Compiled report PDFs — kept locally as the maintainer's own artifacts, not
+# versioned (document.pdf rebuilds from document.tex; ProgressReport.pdf is a
+# personal progress doc).
+DevPlan/document.pdf
+DevPlan/ProgressReport.pdf
+
 # LaTeX build artifacts (DevPlan/document.tex sources stay; build outputs don't).
 DevPlan/*.aux
 DevPlan/*.out
