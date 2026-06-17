@@ -21,7 +21,8 @@ struct EchoApp: App {
                 }
         }
         .windowStyle(.hiddenTitleBar)
-        .windowToolbarStyle(.unified(showsTitle: false))
+        // 不用 .unified 工具栏：我们没有 toolbar item（按钮都在 SwiftUI 内容里），
+        // 而 unified 样式会在标题栏区画一条深色统一工具栏背景 → 盖住玻璃背板 = 顶部黑条。
         .commands { ConversationCommands(app: app) }
     }
 }

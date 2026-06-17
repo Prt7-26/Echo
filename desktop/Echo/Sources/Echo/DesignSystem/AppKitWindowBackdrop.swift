@@ -45,6 +45,15 @@ struct AppKitWindowBackdrop: NSViewRepresentable {
         //    contentView.frame（它没铺满 → 缝里露出窗口黑色 → 用户看到的黑边框）。
         if let existing = frameView.subviews.first(where: { $0.identifier == backdropID }) {
             existing.frame = frameView.bounds
+        } else if ProcessInfo.processInfo.environment["ECHO_BACKDROP_DEBUG"] == "1" {
+            // 诊断：背板换成亮品红实心。变品红处=背板在透；仍黑处=上面压着覆盖层。
+            let probe = NSView()
+            probe.identifier = backdropID
+            probe.wantsLayer = true
+            probe.layer?.backgroundColor = NSColor.magenta.cgColor
+            probe.frame = frameView.bounds
+            probe.autoresizingMask = [.width, .height]
+            frameView.addSubview(probe, positioned: .below, relativeTo: contentView)
         } else {
             let fx = NSVisualEffectView()
             fx.identifier = backdropID
@@ -61,10 +70,30 @@ struct AppKitWindowBackdrop: NSViewRepresentable {
         contentView.layer?.isOpaque = false
         contentView.layer?.backgroundColor = NSColor.clear.cgColor
 
+        // 临时诊断：递归 dump frameView 子树（找出顶部/底部黑边是哪个视图）。
+        if ProcessInfo.processInfo.environment["ECHO_DUMP_VIEWS"] == "1" {
+            uiLog("=== frameView \(frameView.frame) tree (back→front) ===")
+            dumpTree(frameView, depth: 0)
+        }
+
         // ④ NavigationSplitView 给 sidebar 列自带一层系统 vibrancy，默认 followsWindowActiveState
         //    → 窗口失焦时它变不透明、盖住背板（用户反馈「失焦就不透」）。把窗口里所有系统
         //    vibrancy（除我们的背板）设成常驻 .active：失焦不变暗，且与背板叠加更轻。
         forceActiveVibrancy(contentView)
+    }
+
+    /// 临时诊断：递归打印视图树（class/frame/opaque/layerBG），定位黑边视图。
+    private static func dumpTree(_ view: NSView, depth: Int) {
+        let pad = String(repeating: "  ", count: depth)
+        for sub in view.subviews {
+            let bg = (sub.layer?.backgroundColor).map { c -> String in
+                let comps = c.components ?? []
+                return "rgba(\(comps.map { String(format: "%.2f", $0) }.joined(separator: ",")))"
+            } ?? "nil"
+            let fxInfo = (sub as? NSVisualEffectView).map { " material=\($0.material.rawValue) state=\($0.state.rawValue)" } ?? ""
+            uiLog("\(pad)\(type(of: sub)) f=\(sub.frame) op=\(sub.isOpaque) bg=\(bg)\(fxInfo)")
+            if depth < 2 { dumpTree(sub, depth: depth + 1) }
+        }
     }
 
     /// 递归把所有系统 NSVisualEffectView（除背板）设为常驻 active，消除失焦变暗。
