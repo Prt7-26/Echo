@@ -45,15 +45,6 @@ struct AppKitWindowBackdrop: NSViewRepresentable {
         //    contentView.frame（它没铺满 → 缝里露出窗口黑色 → 用户看到的黑边框）。
         if let existing = frameView.subviews.first(where: { $0.identifier == backdropID }) {
             existing.frame = frameView.bounds
-        } else if ProcessInfo.processInfo.environment["ECHO_BACKDROP_DEBUG"] == "1" {
-            // 诊断：背板换成亮品红实心。变品红处=背板在透；仍黑处=上面压着覆盖层。
-            let probe = NSView()
-            probe.identifier = backdropID
-            probe.wantsLayer = true
-            probe.layer?.backgroundColor = NSColor.magenta.cgColor
-            probe.frame = frameView.bounds
-            probe.autoresizingMask = [.width, .height]
-            frameView.addSubview(probe, positioned: .below, relativeTo: contentView)
         } else {
             let fx = NSVisualEffectView()
             fx.identifier = backdropID

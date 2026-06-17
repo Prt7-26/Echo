@@ -12,22 +12,7 @@ extension View {
 }
 
 private struct TopBarScrimModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content.background(alignment: .top) {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .black, location: 0.0),          // 顶：满磨砂（仍半透）
-                            .init(color: .black.opacity(0.92), location: 0.5),
-                            .init(color: .black.opacity(0.0), location: 1.0), // 底：完全透明
-                        ],
-                        startPoint: .top, endPoint: .bottom
-                    )
-                )
-                .ignoresSafeArea(edges: .top)   // 溢出到窗口顶边
-                .allowsHitTesting(false)
-        }
-    }
+    // 顶栏按钮直接浮在透明玻璃上（WeChat/Siri 同款），不再铺深色磨砂带——
+    // 那条 .ultraThinMaterial 在深色模式下发黑、盖住玻璃背板（用户反馈的顶部黑条）。
+    func body(content: Content) -> some View { content }
 }
