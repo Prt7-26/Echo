@@ -126,3 +126,9 @@ DevPlan/*.synctex.gz
 # Echo eval — downloaded benchmark data + experiment artifacts (not versioned)
 scripts/eval/data/
 scripts/eval/results/
+
+# Presentation artifacts — kept local, never committed (maintainer instruction)
+DevPlan/presentation/
+
+# Exported README PDFs — rebuilt locally, not versioned
+/README*.pdf
