@@ -448,14 +448,18 @@ def submit_feedback(payload: FeedbackPayload):
     # not wait on the LLM. Gated on result.applied so we don't spend credit on
     # locked / unknown skills (where confidence wouldn't move anyway).
     # M5 consolidated profile: a thumbs-DOWN reason is the user stating, in their
-    # own words, what they want changed — merge it into the skill's standing
-    # preference profile so it's injected on every future turn (not just when
-    # top-k retrieval happens to surface it). Skill-scoped (conservative); the
-    # eval harness uses the global variant for user-wide style quirks.
+    # own words, what they want changed — merge it into the standing preference
+    # profile so it's injected on every future turn (not just when top-k
+    # retrieval happens to surface it). Stored GLOBAL (skill_id=None): a
+    # skill-scoped clause is only injected once that skill is active, but the
+    # injection point (pre_llm_call) runs BEFORE the skill is bumped, so on the
+    # first turn of a new conversation active_skill is None and a scoped clause
+    # never reaches the agent — exactly the "teach it once, apply next time"
+    # case. Global makes the taught rule apply from the very first turn.
     if result.applied and payload.rating == -1 and payload.reason and payload.reason.strip():
         try:
             from plugins.echo_signals.preference_rag import add_preference_clauses
-            add_preference_clauses(payload.reason, skill_id=payload.skill_id)
+            add_preference_clauses(payload.reason, skill_id=None)
         except Exception:
             pass
 

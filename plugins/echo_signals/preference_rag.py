@@ -79,7 +79,11 @@ def _split_clauses(text: str) -> list[str]:
 
 
 def _clause_key(c: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", c.lower())[:64]
+    # Keep word chars INCLUDING non-ASCII (CJK etc.). The old [^a-z0-9] stripped
+    # every character of a pure-Chinese clause, yielding an empty key that
+    # add_preference_clauses then skipped — so Chinese preferences were never
+    # stored. \w is Unicode-aware in Python 3, so it keeps CJK.
+    return re.sub(r"\W", "", c.lower(), flags=re.UNICODE)[:64]
 
 
 def add_preference_clauses(text: str, skill_id: Optional[str] = None) -> int:
