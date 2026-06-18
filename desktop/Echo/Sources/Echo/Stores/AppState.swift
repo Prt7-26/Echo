@@ -248,8 +248,8 @@ final class AppState {
             transcript = []
             Task { await coordinator.openConversation(id) }
         } else {
-            transcript = (id == "c2") ? MockData.sampleTranscript : []
-            ratingQueue = (id == "c2") ? MockData.sampleRatings : []
+            transcript = MockData.transcript(for: id)
+            ratingQueue = MockData.ratings(for: id)
         }
     }
 
