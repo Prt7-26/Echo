@@ -7,14 +7,12 @@ struct EchoSignalOverlay: View {
 
     var body: some View {
         Group {
+            // 点赞/点踩已移到每条 agent 回复末尾（内联，见 AssistantResponse）；
+            // 这里只留对话内的 clarify(M1) / scope(M2) 卡。
             if let clarify = app.clarifyPrompt {
                 ClarifyCard(prompt: clarify) { answer in app.answerClarify(answer) }
             } else if let scope = app.scopeQuestion {
                 ScopeQuestionCard(question: scope) { level in app.chooseScope(level) }
-            } else if let rating = app.ratingQueue.first {
-                RatingWidget(item: rating,
-                             onState: { app.setRatingState($0) },
-                             onCommit: { thumb, reason in app.commitRating(thumb: thumb, reason: reason) })
             }
         }
         .padding(.horizontal, Tokens.Spacing.loose)

@@ -4,6 +4,7 @@ import AppKit   // NSPasteboard（代码块复制）
 /// 助手回复（线框图 W3）：左对齐、无气泡、富文本块流式渲染。
 struct AssistantResponse: View {
     let message: AssistantMessage
+    var app: AppState? = nil   // 内联点赞用；预览可省
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -32,9 +33,31 @@ struct AssistantResponse: View {
             if let usage = message.usage {
                 UsageMetaRow(usage: usage)
             }
+            // 内联操作行：回复末尾的 👍/👎（流式结束后才显示，对齐 Claude）。
+            if !message.streaming, app != nil {
+                HStack(spacing: 2) {
+                    inlineThumb("hand.thumbsup", value: 1)
+                    inlineThumb("hand.thumbsdown", value: -1)
+                }
+                .padding(.top, 2)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.trailing, 60)   // 与右对齐用户气泡呼应留白
+    }
+
+    private func inlineThumb(_ base: String, value: Int) -> some View {
+        let selected = message.rating == value
+        let tint: Color = value > 0 ? Theme.Signal.positive : Theme.Signal.negative
+        return Button { app?.rateMessage(message.id, thumb: value) } label: {
+            Image(systemName: selected ? "\(base).fill" : base)
+                .font(.system(size: 12))
+                .foregroundStyle(selected ? tint : Theme.secondaryText)
+                .frame(width: 28, height: 24)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help(value > 0 ? "有用" : "没用")
     }
 
     @ViewBuilder

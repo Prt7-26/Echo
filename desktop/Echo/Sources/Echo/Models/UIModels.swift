@@ -48,6 +48,8 @@ struct AssistantMessage: Identifiable {
     /// 这一轮关联的 Echo invocation（评分用）。
     var invocationId: Int? = nil
     var skillName: String? = nil
+    /// 内联点赞态：nil 未评 / +1 赞 / -1 踩。
+    var rating: Int? = nil
 }
 
 /// 富文本块（对照线框图 W3）。

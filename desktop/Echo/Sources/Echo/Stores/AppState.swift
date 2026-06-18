@@ -291,6 +291,28 @@ final class AppState {
         }
     }
 
+    /// 内联点赞（每条 agent 回复末尾的 👍/👎）：设该消息评分态 + 提交反馈（用其关联 invocation）。
+    func rateMessage(_ messageId: String, thumb: Int) {
+        for (i, item) in transcript.enumerated() {
+            guard case .assistant(var m) = item, m.id == messageId else { continue }
+            m.rating = (m.rating == thumb) ? nil : thumb   // 再点同一个 = 取消
+            transcript[i] = .assistant(m)
+            if let inv = m.invocationId, let r = m.rating {
+                coordinator?.sendFeedback(invocationId: inv, rating: r, reason: nil)
+            }
+            return
+        }
+    }
+
+    /// 回复完成后把最近一次 invocation 关联到最后一条助手消息（供内联点赞提交）。
+    func attachInvocationToLastMessage(_ invId: Int) {
+        for i in transcript.indices.reversed() {
+            guard case .assistant(var m) = transcript[i] else { continue }
+            if m.invocationId == nil { m.invocationId = invId; transcript[i] = .assistant(m) }
+            return
+        }
+    }
+
     /// 提交队首评分并出队：POST /feedback（thumb + 可选 reason，带 invocation_id 精确归属）。
     /// 触发点 = 60s 撤销窗到期，或用户在「补充理由」里点提交。撤销不会走到这里 → 真取消、不发反馈。
     func commitRating(thumb: Int, reason: String?) {

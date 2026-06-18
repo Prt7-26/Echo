@@ -109,7 +109,7 @@ struct TranscriptScroll: View {
                     ForEach(app.transcript) { item in
                         switch item {
                         case .user(let m): UserBubble(message: m).id(item.id)
-                        case .assistant(let m): AssistantResponse(message: m).id(item.id)
+                        case .assistant(let m): AssistantResponse(message: m, app: app).id(item.id)
                         }
                     }
                     // 给浮起输入条 + 信号卡留底部空间

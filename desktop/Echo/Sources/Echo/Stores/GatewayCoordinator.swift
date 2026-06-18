@@ -126,18 +126,15 @@ final class GatewayCoordinator {
 
     // MARK: Echo 信号（dashboard REST）
 
+    /// 回复完成后拉最近 invocation，关联到最后一条助手消息（供内联 👍/👎 提交）。
     func refreshRatingQueue() {
         guard let key = sessionKey else { return }
         Task { [weak self] in
             guard let self else { return }
-            if let invs = try? await self.echo.recentInvocations(sessionId: key) {
-                let items = invs.filter { !($0.rated ?? false) }
-                    .map { RatingItem(id: $0.id, skillName: $0.skillName ?? "skill") }
-                self.app?.ratingQueue = items
+            if let invs = try? await self.echo.recentInvocations(sessionId: key),
+               let inv = invs.first(where: { !($0.rated ?? false) }) ?? invs.first {
+                self.app?.attachInvocationToLastMessage(inv.id)
             }
-            // M2 scope 不再走 /scope/pending 二元小卡：Step 27 起 scope 由 agent
-            // 在对话内通过 clarify 工具询问（带 2-4 个技能特定选项），原生侧统一渲染为
-            // ClarifyCard（与 M1 提名同一通道），避免与 clarify 重复提示。
         }
     }
 
