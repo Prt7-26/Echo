@@ -304,6 +304,32 @@ final class AppState {
         }
     }
 
+    /// 点赞/点踩后补充理由：带 reason 再提交一次（后端 reason_score LLM 校准置信度）。
+    func submitRatingReason(_ messageId: String, reason: String) {
+        let cleaned = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return }
+        for item in transcript {
+            guard case .assistant(let m) = item, m.id == messageId else { continue }
+            if let inv = m.invocationId, let r = m.rating {
+                coordinator?.sendFeedback(invocationId: inv, rating: r, reason: cleaned)
+            }
+            return
+        }
+    }
+
+    /// 重试：去掉这条助手回复，用它前面那条用户消息重新发一遍（重新生成）。
+    func retry(_ messageId: String) {
+        guard let i = transcript.firstIndex(where: {
+            if case .assistant(let m) = $0 { return m.id == messageId }; return false
+        }) else { return }
+        let userText = transcript[..<i].reversed().compactMap { item -> String? in
+            if case .user(let u) = item { return u.text } else { return nil }
+        }.first
+        guard let text = userText else { return }
+        transcript.remove(at: i)
+        if let coordinator { Task { await coordinator.submit(text) } }
+    }
+
     /// 回复完成后把最近一次 invocation 关联到最后一条助手消息（供内联点赞提交）。
     func attachInvocationToLastMessage(_ invId: Int) {
         for i in transcript.indices.reversed() {

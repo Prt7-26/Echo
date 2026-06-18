@@ -126,14 +126,20 @@ final class GatewayCoordinator {
 
     // MARK: Echo 信号（dashboard REST）
 
-    /// 回复完成后拉最近 invocation，关联到最后一条助手消息（供内联 👍/👎 提交）。
+    /// 已关联过的最大 invocation id。只把「比它更新」的 invocation 关联到回复 →
+    /// 即本轮真的调用了技能才显示点赞（没调技能时最近 invocation 还是旧的，不显示）——与 TUI 一致。
+    private var lastInvocationId = 0
+
+    /// 回复完成后拉最近 invocation；若本轮产生了新 invocation，关联到最后一条助手消息。
     func refreshRatingQueue() {
         guard let key = sessionKey else { return }
         Task { [weak self] in
             guard let self else { return }
-            if let invs = try? await self.echo.recentInvocations(sessionId: key),
-               let inv = invs.first(where: { !($0.rated ?? false) }) ?? invs.first {
-                self.app?.attachInvocationToLastMessage(inv.id)
+            guard let invs = try? await self.echo.recentInvocations(sessionId: key),
+                  let newest = invs.map(\.id).max() else { return }
+            if newest > self.lastInvocationId {
+                self.lastInvocationId = newest
+                self.app?.attachInvocationToLastMessage(newest)
             }
         }
     }
