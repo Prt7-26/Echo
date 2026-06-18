@@ -118,8 +118,14 @@ struct TranscriptScroll: View {
                 .padding(.horizontal, Tokens.Spacing.loose)
                 .padding(.top, Tokens.Spacing.content)
             }
-            .onChange(of: app.transcript.count) {
-                withAnimation(.smooth) { proxy.scrollTo("bottom-spacer", anchor: .bottom) }
+            .onChange(of: app.transcript.count) { old, new in
+                // 批量载入历史（0→N，或一次跳多条）时「不要」动画滚动：动画会让
+                // LazyVStack 逐帧重排到底部之间的全部行，长会话 = 卡顿。仅增量追加才动画。
+                if old == 0 || new > old + 1 {
+                    proxy.scrollTo("bottom-spacer", anchor: .bottom)
+                } else {
+                    withAnimation(.smooth) { proxy.scrollTo("bottom-spacer", anchor: .bottom) }
+                }
             }
             // 流式增长时跟随到底部：transcript 条数不变，靠 streamTick 触发（即时、不加动画，避免逐刷排队）。
             .onChange(of: app.streamTick) {

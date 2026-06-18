@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import Observation
 import EchoKit
 
@@ -76,9 +77,7 @@ final class AppState {
         transcript = []
         selectedConversationId = nil   // 清掉 mock 残留 "c2"，进来是干净空态
         Task { await coord.start() }
-        if ProcessInfo.processInfo.environment["ECHO_APP_HEARTBEAT"] == "1" {
-            startHeartbeat()
-        }
+        startHeartbeat()   // 常开：仅在主线程卡顿 >700ms 时写一行，平时零噪音——抓难复现的卡死
         if ProcessInfo.processInfo.environment["ECHO_APP_SELFTEST"] == "1" {
             Task { await runSelfTest() }
         }
@@ -91,28 +90,58 @@ final class AppState {
         conversations = [ConversationSummary(id: "big", title: "Big session", preview: "synthetic",
                                              timestamp: Date(timeIntervalSince1970: 0), pinned: false)]
         selectedConversationId = "big"
-        let big = String(repeating: "这是一段很长的助手回复，用来逼近真实 31KB 单条消息的渲染成本。", count: 700)
-        let code = "```swift\n" + String(repeating: "let x = compute(value: 42)  // 一行代码\n", count: 120) + "```"
+        // 用真实「NLP 广告」会话里 emoji 最密的那条回复（含 ZWJ 序列 🧑‍💻🏃‍♂️ + 变体选择符 ❗️✈️）
+        // 复刻——这是怀疑卡顿的真凶（emoji 簇 + textSelection 的布局开销）。
+        let emojiHeavy = """
+        ---
+
+        **标题：**
+        别再卷传统开发了❗NLP才是AI时代的薪资天花板💰🔥
+
+        **正文：**
+
+        家人们听我说🗣️ 大模型时代，会调API的人满大街都是，但真正懂NLP底层的人，才是企业抢着要的稀缺人才啊❗️❗️
+
+        ✅ 这门课到底有多香？
+        🔹 Transformer原理 → 不只会调包，直接降维打击😎
+        🔹 RAG/Agent实战 → 大厂最🔥技术栈
+        🔹 企业级项目带你做 → 简历直接起飞✈️
+
+        💡 适合谁？
+        · 想转行AI的程序员/产品经理🧑‍💻
+        · 在校生想拿大厂实习🎯
+        · 在职想涨薪30%+的打工人💸
+
+        🎁 现在冲还有早鸟专属价‼️ 名额有限先到先得🏃‍♂️💨
+        """
         var items: [PreparedHistoryItem] = []
-        for i in 0..<15 {
-            items.append(.user("用户第 \(i) 轮提问，请详细解释。"))
-            let body = (i == 7) ? big : "助手第 \(i) 轮回复。\n\n## 小标题\n\n- 要点一\n- 要点二\n\n\(code)"
-            items.append(.assistant(MarkdownParser.parse(body)))
+        for i in 0..<8 {
+            items.append(.user("第 \(i) 轮：再活泼一点🎉"))
+            items.append(.assistant(MarkdownParser.parse(emojiHeavy)))
         }
-        uiLog("loadFakeBig: feeding \(items.count) prepared items")
+        uiLog("loadFakeBig: feeding \(items.count) emoji-heavy items (NOSEL=\(ProcessInfo.processInfo.environment["ECHO_APP_NOSEL"] ?? "0"))")
         applyPreparedHistory(items)
+        // 强制窗口前置——后台启动的窗口若不是 key，SwiftUI 会推迟布局，测不到真实卡顿。
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.windows.first?.makeKeyAndOrderFront(nil)
+        }
     }
 
-    /// 主线程卡顿探针：每 100ms 在 MainActor 上打一拍，迟到 >400ms 即记一次卡顿
-    /// （定位 beachball 出现在哪条 uiLog 之后）。仅 ECHO_APP_HEARTBEAT=1 时跑。
+    private var heartbeatRunning = false
+    /// 主线程卡顿探针：每 100ms 在 MainActor 上打一拍，迟到 >700ms（真 beachball 量级）才记一行。
+    /// 常开、近乎零成本——用来抓难复现的卡死：卡顿时 /tmp/echo-ui.log 里 STALL 上一行即现场。
     func startHeartbeat() {
+        guard !heartbeatRunning else { return }
+        heartbeatRunning = true
         Task { @MainActor in
             var last = DispatchTime.now().uptimeNanoseconds
             while true {
                 try? await Task.sleep(nanoseconds: 100_000_000)
                 let now = DispatchTime.now().uptimeNanoseconds
                 let gapMs = Double(now - last) / 1_000_000
-                if gapMs > 400 { uiLog(String(format: "⚠️ MAIN STALL %.0fms", gapMs)) }
+                if gapMs > 700 { uiLog(String(format: "⚠️ MAIN STALL %.0fms（主线程卡住了）", gapMs)) }
                 last = now
             }
         }
@@ -125,6 +154,23 @@ final class AppState {
         for _ in 0..<1200 where connection != .online { try? await Task.sleep(nanoseconds: 100_000_000) }
         uiLog("selftest: connection=\(connection) sessions=\(conversations.count)")
         try? await Task.sleep(nanoseconds: 800_000_000)
+
+        // 定向复现：只打开某一个会话并强制前置，盯它是否卡。ECHO_APP_OPENONE=<sid 前缀>
+        if let want = ProcessInfo.processInfo.environment["ECHO_APP_OPENONE"], !want.isEmpty {
+            guard let id = conversations.first(where: { $0.id.hasPrefix(want) })?.id else {
+                uiLog("selftest: OPENONE no match for \(want)"); return
+            }
+            NSApp.activate(ignoringOtherApps: true)
+            if let w = NSApp.windows.first {
+                w.setFrame(NSRect(x: 80, y: 80, width: 1400, height: 1000), display: true)
+                w.makeKeyAndOrderFront(nil)
+            }
+            uiLog("selftest: OPENONE open \(id)")
+            selectConversation(id)
+            for _ in 0..<60 { try? await Task.sleep(nanoseconds: 200_000_000) }
+            uiLog("selftest: OPENONE done transcript=\(transcript.count)")
+            return
+        }
 
         // 1) resume 历史会话——优先消息最多的（最复杂渲染路径）。
         let ids = conversations
@@ -283,6 +329,11 @@ final class AppState {
     /// 回放 session.resume 的历史消息到 transcript。
     /// Markdown 解析（长会话可能几十条）放到后台执行器，主线程只做轻量映射+赋值，避免打开会话卡顿。
     func loadHistory(_ messages: [TranscriptMessage]) {
+        if ProcessInfo.processInfo.environment["ECHO_APP_DUMPHIST"] == "1" {
+            for (i, m) in messages.enumerated() {
+                uiLog("HIST[\(i)] \(m.role) textLen=\(m.text?.count ?? -1) maxline=\(m.text?.split(separator: "\n").map(\.count).max() ?? 0)")
+            }
+        }
         // 先抽成 Sendable 的 (role,text)，再 detach 解析。
         let raw: [(isUser: Bool, text: String)] = messages.compactMap { m in
             switch m.role {

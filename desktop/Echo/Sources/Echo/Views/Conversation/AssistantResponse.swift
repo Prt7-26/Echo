@@ -121,7 +121,7 @@ struct AssistantResponse: View {
             Text(text)
                 .font(Tokens.Typeface.body)
                 .foregroundStyle(.primary)
-                .textSelection(.enabled)
+                .modifier(MaybeSelectable())
                 .fixedSize(horizontal: false, vertical: true)
         case .heading(let text):
             Text(text)
@@ -143,6 +143,14 @@ struct AssistantResponse: View {
         case .code(let language, let text):
             CodeBlockView(language: language, text: text)
         }
+    }
+}
+
+/// 诊断开关：ECHO_APP_NOSEL=1 时关掉 textSelection，用来 A/B 验证「emoji + 文本选中」是否卡顿真凶。
+private struct MaybeSelectable: ViewModifier {
+    static let disabled = ProcessInfo.processInfo.environment["ECHO_APP_NOSEL"] == "1"
+    func body(content: Content) -> some View {
+        if Self.disabled { content } else { content.textSelection(.enabled) }
     }
 }
 
