@@ -61,13 +61,18 @@ public final class StdioSubprocessTransport: GatewayTransport, @unchecked Sendab
             }
         }
 
-        if let onStderrLine {
-            errPipe.fileHandleForReading.readabilityHandler = { handle in
-                let d = handle.availableData
-                guard !d.isEmpty else { handle.readabilityHandler = nil; return }
+        // stderr 必须始终被抽干：子进程（真 Hermes gateway）启动期会往 stderr 写大量日志，
+        // 管道缓冲（~64KB）一满，子进程的下一次 stderr 写就阻塞 → gateway 卡死、永不发
+        // gateway.ready → 应用一直停在「连接中」。即使调用方没给 onStderrLine，也要 drain。
+        errPipe.fileHandleForReading.readabilityHandler = { handle in
+            let d = handle.availableData
+            guard !d.isEmpty else { handle.readabilityHandler = nil; return }
+            if let onStderrLine {
                 for line in String(decoding: d, as: UTF8.self).split(separator: "\n") {
                     onStderrLine(String(line))
                 }
+            } else if Self.traceOn {
+                Self.trace("[stderr] " + String(decoding: d, as: UTF8.self).prefix(200))
             }
         }
 

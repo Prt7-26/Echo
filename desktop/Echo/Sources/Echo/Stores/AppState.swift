@@ -63,6 +63,8 @@ final class AppState {
     private var streamingReasoning = ""
     /// 合批刷新：delta 高频到达时，最多每 ~16ms 才把累积态写进 transcript（避免逐字 diff 抖动）。
     private var flushScheduled = false
+    /// 会话切换计数：每次 selectConversation +1。迟到的 resume/历史解析用它判断是否已过期。
+    private(set) var historyEpoch = 0
 
     init() {}
 
@@ -74,24 +76,64 @@ final class AppState {
         transcript = []
         selectedConversationId = nil   // 清掉 mock 残留 "c2"，进来是干净空态
         Task { await coord.start() }
+        if ProcessInfo.processInfo.environment["ECHO_APP_HEARTBEAT"] == "1" {
+            startHeartbeat()
+        }
         if ProcessInfo.processInfo.environment["ECHO_APP_SELFTEST"] == "1" {
             Task { await runSelfTest() }
+        }
+    }
+
+    /// 诊断：合成一个与最大真实会话同量级的历史（30 条，含一条 ~30KB 长消息 + 代码块），
+    /// 直接灌进 transcript 并选中 → 复现「打开长会话卡顿」，不依赖 gateway。ECHO_APP_FAKEBIG=1。
+    func loadFakeBig() {
+        startHeartbeat()
+        conversations = [ConversationSummary(id: "big", title: "Big session", preview: "synthetic",
+                                             timestamp: Date(timeIntervalSince1970: 0), pinned: false)]
+        selectedConversationId = "big"
+        let big = String(repeating: "这是一段很长的助手回复，用来逼近真实 31KB 单条消息的渲染成本。", count: 700)
+        let code = "```swift\n" + String(repeating: "let x = compute(value: 42)  // 一行代码\n", count: 120) + "```"
+        var items: [PreparedHistoryItem] = []
+        for i in 0..<15 {
+            items.append(.user("用户第 \(i) 轮提问，请详细解释。"))
+            let body = (i == 7) ? big : "助手第 \(i) 轮回复。\n\n## 小标题\n\n- 要点一\n- 要点二\n\n\(code)"
+            items.append(.assistant(MarkdownParser.parse(body)))
+        }
+        uiLog("loadFakeBig: feeding \(items.count) prepared items")
+        applyPreparedHistory(items)
+    }
+
+    /// 主线程卡顿探针：每 100ms 在 MainActor 上打一拍，迟到 >400ms 即记一次卡顿
+    /// （定位 beachball 出现在哪条 uiLog 之后）。仅 ECHO_APP_HEARTBEAT=1 时跑。
+    func startHeartbeat() {
+        Task { @MainActor in
+            var last = DispatchTime.now().uptimeNanoseconds
+            while true {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                let now = DispatchTime.now().uptimeNanoseconds
+                let gapMs = Double(now - last) / 1_000_000
+                if gapMs > 400 { uiLog(String(format: "⚠️ MAIN STALL %.0fms", gapMs)) }
+                last = now
+            }
         }
     }
 
     /// 无头压力自测：连上 → 反复 resume 历史会话 / 开关面板 / 发送 —— 触发潜在崩溃。
     /// 仅 ECHO_APP_SELFTEST=1 时跑。结果写 /tmp/echo-ui.log（uiLog）。
     func runSelfTest() async {
-        for _ in 0..<300 where connection != .online { try? await Task.sleep(nanoseconds: 100_000_000) }
+        // 给真 gateway 充足冷启动时间（重型 import + update-check 可达 1-2 分钟）。
+        for _ in 0..<1200 where connection != .online { try? await Task.sleep(nanoseconds: 100_000_000) }
         uiLog("selftest: connection=\(connection) sessions=\(conversations.count)")
         try? await Task.sleep(nanoseconds: 800_000_000)
 
-        // 1) 逐个 resume 前几个历史会话（最复杂路径：loadHistory + 后台 markdown 解析）。
-        let ids = conversations.prefix(5).map(\.id)
+        // 1) resume 历史会话——优先消息最多的（最复杂渲染路径）。
+        let ids = conversations
+            .sorted { $0.timestamp > $1.timestamp }
+            .prefix(8).map(\.id)
         for id in ids {
             uiLog("selftest: open \(id)")
             selectConversation(id)
-            try? await Task.sleep(nanoseconds: 700_000_000)
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
             uiLog("selftest:   transcript=\(transcript.count)")
         }
         // 2) 开关 Echo 面板。
@@ -154,6 +196,7 @@ final class AppState {
     func selectConversation(_ id: String) {
         uiLog("selectConversation \(id)")
         selectedConversationId = id
+        historyEpoch &+= 1   // 作废上一会话尚未落地的历史（迟到的 resume 不许灌进新会话）
         clarifyPrompt = nil; scopeQuestion = nil
         if let coordinator {
             transcript = []
@@ -248,16 +291,27 @@ final class AppState {
             case .system, .tool: return nil
             }
         }
+        let epoch = historyEpoch   // 解析期间用户若切走，落地时丢弃
         Task.detached(priority: .userInitiated) { [weak self] in
             let prepared: [PreparedHistoryItem] = raw.map {
                 $0.isUser ? .user($0.text) : .assistant(MarkdownParser.parse($0.text))
             }
-            await self?.applyPreparedHistory(prepared)
+            await self?.applyPreparedHistory(prepared, epoch: epoch)
         }
     }
 
     /// 在主线程把解析好的历史落成 transcript（轻量映射）。
-    func applyPreparedHistory(_ items: [PreparedHistoryItem]) {
+    /// epoch 不匹配 = 用户已切到别的会话，迟到的历史直接丢弃，避免灌错会话。
+    func applyPreparedHistory(_ items: [PreparedHistoryItem], epoch: Int? = nil) {
+        if let epoch, epoch != historyEpoch {
+            uiLog("applyPreparedHistory: stale epoch \(epoch)≠\(historyEpoch), dropped")
+            return
+        }
+        let t0 = DispatchTime.now().uptimeNanoseconds
+        defer {
+            let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000
+            if ms > 50 { uiLog(String(format: "⚠️ applyPreparedHistory items=%d slow %.0fms", items.count, ms)) }
+        }
         transcript = items.map { item in
             switch item {
             case .user(let t):

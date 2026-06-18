@@ -18,6 +18,9 @@ struct EchoApp: App {
                     if ProcessInfo.processInfo.environment["ECHO_APP_CONNECT"] == "1" {
                         app.connectLive()
                     }
+                    if ProcessInfo.processInfo.environment["ECHO_APP_FAKEBIG"] == "1" {
+                        app.loadFakeBig()
+                    }
                 }
         }
         .windowStyle(.hiddenTitleBar)

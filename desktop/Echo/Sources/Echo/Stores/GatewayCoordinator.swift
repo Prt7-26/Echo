@@ -18,6 +18,10 @@ final class GatewayCoordinator {
     private var resolved: BackendLocator.Resolved?
     private var supervisor: Task<Void, Never>?
     private var backoff = ExponentialBackoff(base: 1, factor: 2, cap: 30)
+    /// 当前子进程 transport，重连前先关掉它（否则每次重连泄漏一个 python 进程）。
+    private var transport: StdioSubprocessTransport?
+    /// 子进程最近的 stderr 尾巴——启动失败时用来给用户一句人话的原因。
+    private let stderrTail = StderrTail()
 
     init(app: AppState, dashboardBase: URL = BackendLocator.dashboardBase()) {
         self.app = app
@@ -46,11 +50,22 @@ final class GatewayCoordinator {
     private func connectOnce() async {
         guard let r = resolved else { return }
         app?.connection = .connecting
+        // 先关掉上一个子进程（重连场景），否则 python 进程 + 接收循环会逐次泄漏。
+        if let old = transport { await old.close(); transport = nil }
         do {
-            let transport = try StdioSubprocessTransport(pythonPath: r.python, repoRoot: r.repoRoot)
-            await client.connect(transport)
+            // 关键：spawn（Process.run + 建管道）是阻塞调用。GatewayCoordinator 是 @MainActor，
+            // 若直接在这里 new，fork/exec 会卡在主线程——重连风暴时表现为沙滩球。挪到后台执行器。
+            let tail = stderrTail
+            let t = try await Task.detached(priority: .userInitiated) {
+                try StdioSubprocessTransport(
+                    pythonPath: r.python, repoRoot: r.repoRoot,
+                    onStderrLine: { line in tail.append(line) })
+            }.value
+            transport = t
+            await client.connect(t)
             await client.setCallTimeout(12)   // 调用卡住时 12s 即失败，UI 不至于死等 30s
-            backoff.reset()
+            // 注意：不在此 reset backoff——只有真正收到 gateway.ready（route 里）才算连上，
+            // 否则子进程立刻崩溃（如缺依赖）时 backoff 永远归零 → 疯狂重启风暴。
             await loadSessions()
         } catch {
             app?.statusLine = "后端启动失败：\(error)"
@@ -59,6 +74,7 @@ final class GatewayCoordinator {
     }
 
     /// 监督：transport 断开（state==.failed）时指数退避后重连。
+    /// backoff 仅在 route 收到 .ready 时复位，所以崩溃循环会被退避到 30s 间隔，不再风暴。
     private func superviseReconnect() {
         supervisor = Task { [weak self] in
             while !Task.isCancelled {
@@ -66,7 +82,9 @@ final class GatewayCoordinator {
                 guard let self else { return }
                 if await self.client.state == .failed {
                     let delay = self.backoff.next() ?? 30
-                    self.app?.statusLine = "连接断开，\(Int(delay))s 后重连…"
+                    let why = self.stderrTail.lastMeaningful()
+                    self.app?.statusLine = why.map { "后端退出（\($0)），\(Int(delay))s 后重连…" }
+                        ?? "连接断开，\(Int(delay))s 后重连…"
                     self.app?.connection = .connecting
                     try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                     await self.connectOnce()
@@ -79,6 +97,7 @@ final class GatewayCoordinator {
 
     private func route(_ ev: ParsedEvent) async {
         if let key = ev.sessionKey { sessionKey = key }
+        if case .ready = ev.event { backoff.reset() }   // 真连上才复位退避
         app?.handle(ev)
     }
 
@@ -93,7 +112,10 @@ final class GatewayCoordinator {
 
     func openConversation(_ id: String) async {
         currentSessionId = id
-        if let resumed = try? await client.resumeSession(id) {
+        let resumed = try? await client.resumeSession(id)
+        // resume 往返期间用户可能已切到别的会话——丢弃迟到的响应，别把 sessionKey/历史串台。
+        guard currentSessionId == id else { return }
+        if let resumed {
             sessionKey = resumed.info.flatMap { _ in resumed.sessionId } ?? id
             app?.loadHistory(resumed.messages)
         }
@@ -198,6 +220,32 @@ final class GatewayCoordinator {
         supervisor?.cancel()
         monitors?.stop()
         pump?.cancel()
+        if let t = transport { await t.close(); transport = nil }
         await client.disconnect()
+    }
+}
+
+/// 子进程 stderr 的线程安全环形尾巴：启动失败时给用户一句人话的原因
+/// （如「No module named 'dotenv'」），而不是干等「连接中」。
+final class StderrTail: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lines: [String] = []
+
+    func append(_ line: String) {
+        let s = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return }
+        lock.lock(); defer { lock.unlock() }
+        lines.append(s)
+        if lines.count > 12 { lines.removeFirst(lines.count - 12) }
+    }
+
+    /// 最有信息量的一行：优先 Error/Exception，否则最后一行非堆栈帧。
+    func lastMeaningful() -> String? {
+        lock.lock(); defer { lock.unlock() }
+        if let err = lines.last(where: {
+            $0.contains("Error") || $0.contains("Exception") || $0.hasPrefix("ModuleNotFound")
+        }) { return String(err.prefix(120)) }
+        return lines.last(where: { !$0.hasPrefix("File \"") && !$0.hasPrefix("Traceback") })
+            .map { String($0.prefix(120)) }
     }
 }
