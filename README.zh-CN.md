@@ -60,7 +60,23 @@ Echo 支持与 Hermes 相同的几种界面，外加一个原生 App：
 
 ## 快速上手
 
-所有操作都通过仓库根目录的一个启动器完成：
+**前置依赖：** `git` 和 [`uv`](https://docs.astral.sh/uv/)（安装脚本会通过 `uv`
+自动装好 Python 3.11，无需系统自带 Python）。支持 macOS / Linux（Termux 亦可）。
+原生 macOS 应用额外需要 Xcode Command Line Tools；其余功能不需要它。
+
+**首次安装（一次性）：**
+
+```bash
+git clone https://github.com/Prt7-26/Echo.git && cd Echo
+./setup-hermes.sh        # 创建 ./venv、装依赖、同步内置技能、跑配置向导
+```
+
+`setup-hermes.sh` 会把依赖装进本地 `venv/`，并运行配置向导——先选你的模型 /
+供应商，再走 Echo 自己那一步配置可选的审计员模型。这一步同时会启用内置的
+`echo_signals` 插件（插件没启用时 Echo 什么都不收集）。之后任何时候都能用
+`hermes setup` 重跑向导。
+
+之后所有操作都通过仓库根目录的一个启动器完成：
 
 ```bash
 ./echo chat      # CLI 对话 —— 信号后台采集

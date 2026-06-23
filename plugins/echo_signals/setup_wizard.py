@@ -54,6 +54,33 @@ def _ensure_aux_section(config: Dict[str, Any], task: str) -> Dict[str, Any]:
     return config["auxiliary"][task]
 
 
+def _ensure_plugin_enabled(config: Dict[str, Any]) -> bool:
+    """Make sure ``echo_signals`` appears in ``plugins.enabled``.
+
+    Echo ships as a *bundled standalone* plugin, and Hermes loads bundled
+    standalone plugins ONLY when they are listed in ``plugins.enabled``.
+    Config migration deliberately does NOT grandfather bundled plugins
+    (see hermes_cli/config.py, v20→v21), so on a fresh install nothing
+    would enable Echo: the wizard could configure the aux model yet the
+    plugin's ``register()`` would never run — no hooks, no signals.
+
+    Enabling it here (during ``hermes setup``) is the canonical moment.
+    Idempotent; returns True only when it actually added the entry.
+    """
+    plugins = config.setdefault("plugins", {})
+    if not isinstance(plugins, dict):
+        plugins = {}
+        config["plugins"] = plugins
+    enabled = plugins.get("enabled")
+    if not isinstance(enabled, list):
+        enabled = []
+        plugins["enabled"] = enabled
+    if "echo_signals" not in enabled:
+        enabled.append("echo_signals")
+        return True
+    return False
+
+
 def _ask_separate_endpoint(p, task_label: str) -> Dict[str, str]:
     """Collect base_url, api_key, model for an OpenAI-compatible endpoint."""
     p["print_info"](f"   Configure {task_label}:")
@@ -79,6 +106,15 @@ def run_aux_provider_setup(config: Dict[str, Any]) -> None:
     persists it via save_config()."""
     p = _prompt_helpers()
     p["print_header"]("Echo Auxiliary Model (Layer B + Layer C)")
+
+    # Enable the plugin itself BEFORE asking about the aux model. This runs
+    # for every mode (separate / shared / off): even with Layer B/C off, the
+    # explicit-feedback, drift, and M5 features need the plugin loaded.
+    if _ensure_plugin_enabled(config):
+        p["print_success"](
+            "Enabled the echo_signals plugin (added to plugins.enabled)."
+        )
+
     p["print_info"](
         "Echo's background sentiment classifier (Layer B) and judge (Layer C) "
         "are designed to call an LLM that is INDEPENDENT of the main agent. "

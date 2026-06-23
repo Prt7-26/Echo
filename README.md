@@ -70,7 +70,24 @@ Echo runs on the same surfaces as Hermes, plus a native app:
 
 ## Quick start
 
-Everything goes through one launcher at the repo root:
+**Prerequisites:** `git` and [`uv`](https://docs.astral.sh/uv/) (the installer
+provisions Python 3.11 through `uv`, so you don't need a system Python). macOS or
+Linux (Termux is also supported). The native macOS app additionally needs the Xcode
+Command Line Tools; everything else runs without it.
+
+**First time (one-time install):**
+
+```bash
+git clone https://github.com/Prt7-26/Echo.git && cd Echo
+./setup-hermes.sh        # creates ./venv, installs deps, seeds skills, runs setup
+```
+
+`setup-hermes.sh` installs everything into a local `venv/` and runs the setup
+wizard — pick your model/provider, then Echo's own step for the optional auditor
+model. That step also enables the bundled `echo_signals` plugin (Echo collects
+nothing until it's enabled). Re-run the wizard any time with `hermes setup`.
+
+After that, everything goes through one launcher at the repo root:
 
 ```bash
 ./echo chat      # CLI chat — signals collected in the background

@@ -307,12 +307,15 @@ try:
         r2.applied and abs(r2.new_confidence - 0.7) < 1e-9,
     )
 
-    # Apply a strong drift signal that should push us below c_min.
+    # Apply sustained drift to push below c_min. With BETA_DRIFT=0.10 a single
+    # drift from c=0.7 lands at 0.35 (still above C_MIN=0.30); a second crosses
+    # the threshold — that active→pending_review transition is what we exercise.
+    conf_mod.update_confidence("verify-skill", "drift_detected", severity=5.0)
     r3 = conf_mod.update_confidence(
         "verify-skill", "drift_detected", severity=5.0
     )
     expect(
-        "drift_detected with severity=5.0 transitions to pending_review",
+        "sustained drift_detected transitions to pending_review",
         r3.applied
         and r3.new_status == conf_mod.STATUS_PENDING_REVIEW,
         detail=f"new c={r3.new_confidence:.3f}, status={r3.new_status}",

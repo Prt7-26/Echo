@@ -84,6 +84,27 @@ def test_separate_same_endpoint_writes_both_tasks():
     assert captured["successes"]  # success printed
 
 
+@pytest.mark.parametrize("choice,mode", [(0, "separate"), (1, "shared"), (2, "off")])
+def test_wizard_enables_plugin_in_every_mode(choice, mode):
+    """The plugin must be added to plugins.enabled regardless of aux mode —
+    Echo is a bundled standalone plugin and Hermes won't load it otherwise."""
+    helpers, _ = _stub_helpers(choice=choice)
+    with patch.object(setup_wizard, "_prompt_helpers", return_value=helpers):
+        config = {}
+        setup_wizard.run_aux_provider_setup(config)
+    assert config["echo"]["aux_mode"] == mode
+    assert "echo_signals" in config["plugins"]["enabled"]
+
+
+def test_wizard_enable_is_idempotent_and_preserves_others():
+    """Re-running must not duplicate, and must keep pre-existing entries."""
+    helpers, _ = _stub_helpers(choice=1)
+    config = {"plugins": {"enabled": ["some_other_plugin", "echo_signals"]}}
+    with patch.object(setup_wizard, "_prompt_helpers", return_value=helpers):
+        setup_wizard.run_aux_provider_setup(config)
+    assert config["plugins"]["enabled"] == ["some_other_plugin", "echo_signals"]
+
+
 def test_separate_distinct_endpoints_writes_each():
     # Stub returns different endpoints per call. We track which task is being
     # set up via the print_info message.

@@ -88,6 +88,31 @@ def get_echo_conn() -> sqlite3.Connection:
         return _conn
 
 
+def open_standalone_conn() -> sqlite3.Connection:
+    """Open a NEW connection that the CALLER owns and must ``close()``.
+
+    Background daemon threads (periodic GC, the skill-edit lock scan) must
+    NOT touch the module-level cached connection: concurrent use of a single
+    sqlite3.Connection object from two threads is undefined behaviour, and
+    ``reset_for_tests()`` closes the cached handle — which, if such a thread
+    is mid-statement on it, corrupts memory and crashes the interpreter
+    (SIGSEGV at shutdown). Each background thread takes its own short-lived
+    connection instead, with the same pragmas/schema as the shared one.
+    """
+    path = _resolve_db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(
+        str(path),
+        check_same_thread=False,
+        timeout=1.0,
+        isolation_level=None,
+    )
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    ensure_echo_schema(conn)
+    return conn
+
+
 def reset_for_tests() -> None:
     """Drop the cached connection so the next get_echo_conn() rebuilds.
 

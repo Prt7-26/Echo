@@ -34,11 +34,28 @@ c_err()  { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 # so Echo's hermes_cli wins and get_bundled_plugins_dir() points at
 # ./plugins/ (which contains echo_signals).
 resolve_python() {
+  local probe sys_py3
+  sys_py3="$(command -v python3 2>/dev/null || true)"
+  # Candidate order, highest priority first:
+  #   ECHO_PYTHON        explicit override
+  #   $VIRTUAL_ENV       a venv the user activated in this shell
+  #   $REPO_ROOT/.venv   the venv scripts/run_tests.sh expects
+  #   $REPO_ROOT/venv    the venv ./setup-hermes.sh creates on a fresh clone
+  #   ~/.hermes/...      a side-by-side upstream Hermes install's venv
+  #   python3            system fallback (likely missing the web deps)
+  #
+  # The two $REPO_ROOT entries matter for a fresh install: ./setup-hermes.sh
+  # installs every dep into ./venv but does NOT activate it, and a teammate
+  # following the README runs ./echo without `source venv/bin/activate`.
+  # Without these we'd fall through to a deps-poor system python3 and crash
+  # on `import openai`.
   local probe candidates=(
     "${ECHO_PYTHON:-}"
     "${VIRTUAL_ENV:+$VIRTUAL_ENV/bin/python}"
+    "$REPO_ROOT/.venv/bin/python"
+    "$REPO_ROOT/venv/bin/python"
     "$HOME/.hermes/hermes-agent/venv/bin/python"
-    "$(command -v python3 2>/dev/null || true)"
+    "$sys_py3"
   )
   for probe in "${candidates[@]}"; do
     [[ -z "$probe" || ! -x "$probe" ]] && continue
@@ -47,7 +64,7 @@ resolve_python() {
   # Fall back to plain python3 even without fastapi — `chat`/`tui` don't
   # need it, only the dashboard does.  We'll print a warning if dashboard
   # is requested with a deps-poor interpreter.
-  [[ -n "${candidates[3]:-}" ]] && { echo "${candidates[3]}"; return 0; }
+  [[ -n "$sys_py3" && -x "$sys_py3" ]] && { echo "$sys_py3"; return 0; }
   return 1
 }
 
@@ -160,13 +177,22 @@ stop_dashboard_bg() {
 }
 
 
-# Install Echo's skin into <hermes_home>/skins/ and make it the default —
-# but only when display.skin is still "default" (i.e. the user never chose
-# a skin). A user who explicitly picked another skin (/skin ares etc.) is
-# left alone. Caveat: `/skin default` reads as "never chose", so the next
-# ./echo launch flips back to echo — use any other skin or launch bare
-# `hermes` to keep the stock look. Idempotent + best-effort: a failure
-# here must never block startup.
+# Make Echo the default experience for `./echo` launches.  Two idempotent,
+# best-effort steps (a failure here must never block startup):
+#
+#  1. Install Echo's skins into <hermes_home>/skins/ and default to `echo`,
+#     but only when display.skin is still "default" (the user never chose a
+#     skin).  A user who explicitly picked another skin (/skin ares etc.) is
+#     left alone.  Caveat: `/skin default` reads as "never chose", so the
+#     next ./echo launch flips back to echo — use any other skin or launch
+#     bare `hermes` to keep the stock look.
+#
+#  2. Enable the bundled `echo_signals` plugin (plugins.enabled).  This is
+#     CRITICAL: Hermes loads bundled *standalone* plugins ONLY when they
+#     appear in plugins.enabled, and config migration deliberately does NOT
+#     grandfather bundled plugins (hermes_cli/config.py, v20→v21).  Without
+#     this, a fresh install would start fine but Echo's register() never
+#     runs — no hooks, no bump_use patch, no signals, an empty /echo page.
 install_echo_skin() {
   "$PYBIN" - <<'PY' 2>/dev/null || true
 import shutil, sys
@@ -190,9 +216,25 @@ for stem in ("echo", "echo-light"):
 from hermes_cli.config import load_config, save_config
 
 cfg = load_config()
+changed = False
+
 display = cfg.setdefault("display", {})
 if display.get("skin", "default") == "default":
     display["skin"] = "echo"
+    changed = True
+
+# Ensure the echo_signals plugin is enabled (see header comment).
+plugins = cfg.setdefault("plugins", {})
+if isinstance(plugins, dict):
+    enabled = plugins.get("enabled")
+    if not isinstance(enabled, list):
+        enabled = []
+        plugins["enabled"] = enabled
+    if "echo_signals" not in enabled:
+        enabled.append("echo_signals")
+        changed = True
+
+if changed:
     save_config(cfg)
 PY
 }
@@ -260,9 +302,12 @@ case "$cmd" in
     exec swift run echo-check
     ;;
   verify)
-    python3 -m pytest tests/plugins/echo_signals/ -o addopts="" -q
+    # Use $PYBIN (the resolved deps-rich interpreter), NOT bare python3 —
+    # the echo_signals + dashboard tests and verify_echo.py import fastapi /
+    # httpx / openai, which a fresh machine's system python3 won't have.
+    "$PYBIN" -m pytest tests/plugins/echo_signals/ -o addopts="" -q
     echo
-    python3 scripts/verify_echo.py
+    "$PYBIN" scripts/verify_echo.py
     ;;
   status)
     if dash_is_up; then

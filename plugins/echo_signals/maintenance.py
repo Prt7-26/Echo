@@ -58,32 +58,50 @@ def maybe_run_gc() -> bool:
 
 
 def _run_gc_tasks() -> None:
-    """Run all maintenance tasks. Errors are logged and swallowed."""
-    # 1. M1 user_request_log — drops rows past the recurrence retention.
+    """Run all maintenance tasks on a DEDICATED connection.
+
+    This runs in a daemon thread, so it must NOT share the module-level
+    cached connection: concurrent use of one sqlite3.Connection across
+    threads is undefined behaviour, and tests close that handle via
+    reset_for_tests() out from under us → SIGSEGV. We open our own
+    connection and close it when done. Errors are logged and swallowed.
+    """
+    from .db import open_standalone_conn
+
     try:
-        from . import m1_trigger
-
-        deleted = m1_trigger.gc_old_requests()
-        if deleted:
-            logger.info("Echo GC: removed %d old user_request_log rows", deleted)
+        conn = open_standalone_conn()
     except Exception as exc:
-        logger.debug("Echo GC m1 step failed: %s", exc, exc_info=True)
+        logger.debug("Echo GC: could not open connection: %s", exc, exc_info=True)
+        return
 
-    # 2. echo_turn_cache — drops rows older than the cache retention.
     try:
-        from .db import get_echo_conn
+        # 1. M1 user_request_log — drops rows past the recurrence retention.
+        try:
+            from . import m1_trigger
 
-        cutoff = time.time() - TURN_CACHE_RETENTION_SECONDS
-        conn = get_echo_conn()
-        cur = conn.execute(
-            "DELETE FROM echo_turn_cache WHERE updated_at < ?",
-            (cutoff,),
-        )
-        conn.commit()
-        if cur.rowcount:
-            logger.info("Echo GC: removed %d old turn_cache rows", cur.rowcount)
-    except Exception as exc:
-        logger.debug("Echo GC turn_cache step failed: %s", exc, exc_info=True)
+            deleted = m1_trigger.gc_old_requests(conn=conn)
+            if deleted:
+                logger.info("Echo GC: removed %d old user_request_log rows", deleted)
+        except Exception as exc:
+            logger.debug("Echo GC m1 step failed: %s", exc, exc_info=True)
+
+        # 2. echo_turn_cache — drops rows older than the cache retention.
+        try:
+            cutoff = time.time() - TURN_CACHE_RETENTION_SECONDS
+            cur = conn.execute(
+                "DELETE FROM echo_turn_cache WHERE updated_at < ?",
+                (cutoff,),
+            )
+            conn.commit()
+            if cur.rowcount:
+                logger.info("Echo GC: removed %d old turn_cache rows", cur.rowcount)
+        except Exception as exc:
+            logger.debug("Echo GC turn_cache step failed: %s", exc, exc_info=True)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def _reset_for_tests() -> None:

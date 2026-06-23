@@ -332,15 +332,21 @@ def set_session_tool_count(session_id: Optional[str], count: int) -> None:
         logger.debug("set_session_tool_count failed: %s", exc, exc_info=True)
 
 
-def gc_old_requests(retention_days: float = RECURRENCE_LOOKBACK_DAYS * 2) -> int:
+def gc_old_requests(retention_days: float = RECURRENCE_LOOKBACK_DAYS * 2,
+                    conn=None) -> int:
     """Delete user_request_log rows older than ``retention_days``.
 
     Default retention is twice the recurrence lookback so we never lose
     rows that could still match. Caller (e.g. cron, plugin lifecycle)
     decides when to invoke. Returns row-delete count.
+
+    ``conn``: pass a caller-owned connection when running off a background
+    thread (the GC daemon does) so we never share the module-level cached
+    connection across threads. Defaults to the shared connection.
     """
     try:
-        conn = get_echo_conn()
+        if conn is None:
+            conn = get_echo_conn()
         cutoff = time.time() - (retention_days * 86400.0)
         cur = conn.execute(
             "DELETE FROM echo_user_request_log WHERE ts < ?",
